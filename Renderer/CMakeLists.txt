@@ -1,9 +1,9 @@
 cmake_minimum_required (VERSION 3.8)
 
-add_library(Renderer SHARED RendererMain.cpp)
+add_library(Renderer SHARED RendererMain.cpp "../External/volk/volk.c")
 target_sources(Renderer PUBLIC FILE_SET CXX_MODULES FILES "Renderer.ixx")
 target_include_directories(Renderer PUBLIC ${PROJECT_SOURCE_DIR})
-target_link_libraries(Renderer PRIVATE Core volk)
+target_link_libraries(Renderer PRIVATE Core)
 target_include_directories(Renderer PUBLIC ${PROJECT_SOURCE_DIR}/External)
 target_include_directories(Renderer PUBLIC ${PROJECT_SOURCE_DIR}/External/VulkanSDK/Include)
 target_compile_definitions(Renderer PRIVATE VK_NO_PROTOTYPES)
@@ -67,3 +67,11 @@ set_target_properties(RendererMain PROPERTIES
 	LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib 
 	ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
 )
+
+if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+    target_compile_definitions(Renderer PRIVATE CGS_RELEASE)
+    target_compile_definitions(RendererMain PRIVATE CGS_DEBUG)
+elseif(${CMAKE_BUILD_TYPE} STREQUAL "Release")
+    target_compile_definitions(Renderer PRIVATE CGS_RELEASE)
+    target_compile_definitions(RendererMain PRIVATE CGS_RELEASE)
+endif()

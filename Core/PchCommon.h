@@ -8,10 +8,16 @@
 #define MAKE_API_VERSION(variant, major, minor, patch) \
     ((((uint32_t)(variant)) << 29U) | (((uint32_t)(major)) << 22U) | (((uint32_t)(minor)) << 12U) | ((uint32_t)(patch)))
 
+#if defined(CGS_WIN32)
+#define DEBUG_BREAK()	__debugbreak()
+#else	// NOT defined(CGS_WIN32)
+#define DEBUG_BREAK()	raise(SIGTRAP)
+#endif
+
 #if defined(Core_EXPORTS)
 #define CORE_API __declspec(dllexport)
 #else	// NOT defined(Renderer_EXPORTS)
-#define CORE_API __declspec(dllimport)
+#define CORE_API /*__declspec(dllimport)*/
 #endif	// NOT defined(Renderer_EXPORTS)
 
 namespace cgs

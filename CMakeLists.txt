@@ -11,29 +11,8 @@ endif()
 
 project ("ComputerGraphicsStudies")
 
-set(PREBUILT_MODULE_DIR ${CMAKE_BINARY_DIR}/modules)
-
-function(add_module name)
-    file(MAKE_DIRECTORY ${PREBUILT_MODULE_DIR})
-    add_custom_target(${name}.ifc
-            COMMAND
-                ${CMAKE_CXX_COMPILER}
-                /std:c++latest
-                /experimental:module
-                /c
-                /EHsc
-                /MD
-                ${CMAKE_CURRENT_SOURCE_DIR}/${ARGN}
-                /module:export
-                /ifcOutput
-                ${PREBUILT_MODULE_DIR}/${name}.ifc
-                /Fo${PREBUILT_MODULE_DIR}/${name}.obj
-            )
-endfunction()
-
 add_subdirectory(Core)
 add_subdirectory(Renderer)
-add_subdirectory(External)
 
 #if (CMAKE_VERSION VERSION_GREATER 3.12)
 #  set_property(TARGET ComputerGraphicsStudies PROPERTY CXX_STANDARD 20)
