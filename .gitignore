@@ -1,4 +1,4 @@
-﻿################################################################################
+################################################################################
 # This .gitignore file was automatically created by Microsoft(R) Visual Studio.
 ################################################################################
 
@@ -6,3 +6,26 @@
 /.vs
 *.pdb
 *.idb
+*.exe
+External/VulkanRT/
+External/VulkanSDK/Bin/
+External/VulkanSDK/Config/vk_layer_settings.txt
+External/VulkanSDK/Config/
+External/VulkanSDK/Lib/
+External/VulkanSDK/installerResources/
+External/VulkanSDK/share/
+External/VulkanSDK/Source/
+External/VulkanSDK/Templates/
+External/VulkanSDK/Include/dxc/
+External/VulkanSDK/Include/glslang/
+External/VulkanSDK/Include/shaderc/
+External/VulkanSDK/Include/slang/
+External/VulkanSDK/Include/spirv_cross/
+External/VulkanSDK/Include/spirv-headers/
+External/VulkanSDK/Include/spirv-tools/
+External/VulkanSDK/Include/vk_video/
+External/VulkanSDK/components.xml
+External/VulkanSDK/InstallationLog.txt
+*.dat
+External/VulkanSDK/maintenancetool.ini
+External/VulkanSDK/network.xml

@@ -1,9 +1,12 @@
 #pragma once
 
-#if defined(RENDERER_EXPORTS)
-#define RENDERER_API __declspec(dllexport)
-#else	// NOT defined(RENDERER_EXPORTS)
-#define RENDERER_API __declspec(dllimport)
-#endif	// NOT defined(RENDERER_EXPORTS)
+#include "Core/PchCommon.h"
 
-extern "C" RENDERER_API int RendererMain() noexcept;
+#if defined(Renderer_EXPORTS)
+#define RENDERER_API __declspec(dllexport)
+#else	// NOT defined(Renderer_EXPORTS)
+#define RENDERER_API __declspec(dllimport)
+#endif	// NOT defined(Renderer_EXPORTS)
+
+
+extern "C" RENDERER_API int RendererMain(const cgs::core::ProjectInfo& applicationInfo) noexcept;

@@ -13,7 +13,7 @@ namespace cgs
 namespace core
 {
 	export template<CArithmeticType ArithmeticType = float, uint16_t ROW_SIZE = 4, uint16_t COLUMN_SIZE = 4, eMatrixMajorType MATRIX_MAJOR_TYPE = eMatrixMajorType::COLUMN>
-	class Matrix
+	class CORE_API Matrix
 	{
 		static_assert(ROW_SIZE > 0);
 		static_assert(COLUMN_SIZE > 0);
@@ -71,7 +71,7 @@ namespace core
 	};
 
 	export template<CArithmeticType ArithmeticType, uint16_t ROW_SIZE, uint16_t COLUMN_SIZE, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -97,7 +97,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = lhs.At(0, 0) + rhs.At(0, 0);
@@ -105,7 +105,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = lhs.At(0, 0) + rhs.At(0, 0);
@@ -115,7 +115,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = lhs.At(0, 0) + rhs.At(0, 0);
@@ -125,7 +125,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = lhs.At(0, 0) + rhs.At(0, 0);
@@ -136,7 +136,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = lhs.At(0, 0) + rhs.At(0, 0);
@@ -145,7 +145,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -169,7 +169,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -197,7 +197,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -230,7 +230,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = lhs.At(0, 0) + rhs.At(0, 0);
@@ -240,7 +240,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -269,7 +269,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -304,7 +304,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -346,7 +346,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = lhs.At(0, 0) + rhs.At(0, 0);
@@ -357,7 +357,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -391,7 +391,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -433,7 +433,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE> operator+(const Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -484,7 +484,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, uint16_t ROW_SIZE, uint16_t COLUMN_SIZE, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE> difference;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -510,7 +510,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = lhs.At(0, 0) - rhs.At(0, 0);
@@ -518,7 +518,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = lhs.At(0, 0) - rhs.At(0, 0);
@@ -528,7 +528,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = lhs.At(0, 0) - rhs.At(0, 0);
@@ -538,7 +538,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = lhs.At(0, 0) - rhs.At(0, 0);
@@ -549,7 +549,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = lhs.At(0, 0) - rhs.At(0, 0);
@@ -558,7 +558,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -582,7 +582,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -610,7 +610,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -643,7 +643,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = lhs.At(0, 0) - rhs.At(0, 0);
@@ -653,7 +653,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -682,7 +682,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -717,7 +717,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -759,7 +759,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = lhs.At(0, 0) - rhs.At(0, 0);
@@ -770,7 +770,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -804,7 +804,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -846,7 +846,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE> operator-(const Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE>& lhs, const Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -897,7 +897,7 @@ namespace core
 	}
 	
 	export template<CArithmeticType ArithmeticType, uint16_t ROW_SIZE, uint16_t COLUMN_SIZE, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -923,7 +923,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 1, 1, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = s * rhs.At(0, 0);
@@ -931,7 +931,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 1, 2, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = s * rhs.At(0, 0);
@@ -941,7 +941,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 1, 3, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = s * rhs.At(0, 0);
@@ -951,7 +951,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 1, 4, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = s * rhs.At(0, 0);
@@ -962,7 +962,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 2, 1, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = s * rhs.At(0, 0);
@@ -971,7 +971,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 2, 2, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -995,7 +995,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 2, 3, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -1023,7 +1023,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 2, 4, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -1056,7 +1056,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 3, 1, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = s * rhs.At(0, 0);
@@ -1066,7 +1066,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 3, 2, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -1095,7 +1095,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 3, 3, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -1130,7 +1130,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 3, 4, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -1172,7 +1172,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 4, 1, MATRIX_MAJOR_TYPE> sum;
 		sum.mData[0] = s * rhs.At(0, 0);
@@ -1183,7 +1183,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 4, 2, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -1217,7 +1217,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 4, 3, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)
@@ -1259,7 +1259,7 @@ namespace core
 	}
 
 	export template<CArithmeticType ArithmeticType, eMatrixMajorType MATRIX_MAJOR_TYPE>
-	CGS_INLINE constexpr Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
+	CORE_API CGS_INLINE constexpr Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE> operator*(const float s, const Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE>& rhs) noexcept
 	{
 		Matrix<ArithmeticType, 4, 4, MATRIX_MAJOR_TYPE> sum;
 		if constexpr (MATRIX_MAJOR_TYPE == eMatrixMajorType::COLUMN)

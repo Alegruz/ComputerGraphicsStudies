@@ -62,7 +62,7 @@ namespace core
 	CGS_CORE_VECTOR3_SWIZZLE_METHOD_DEFINITION_HELPER(Vector3<ArithmeticType>, Component2, Component2, Component2)
 
 	export template<CArithmeticType ArithmeticType>
-	struct Vector2
+	struct CORE_API Vector2
 	{
 	public:
 		CGS_INLINE explicit constexpr Vector2(const ArithmeticType x, const ArithmeticType y) noexcept
@@ -117,31 +117,31 @@ namespace core
 	};
 
 	export template<CArithmeticType ArithmeticType>
-	CGS_INLINE constexpr Vector2<ArithmeticType> operator*(const ArithmeticType s, const Vector2<ArithmeticType>& other) noexcept
+	CORE_API CGS_INLINE constexpr Vector2<ArithmeticType> operator*(const ArithmeticType s, const Vector2<ArithmeticType>& other) noexcept
 	{
 		return Vector2<ArithmeticType>(s * other.X, s * other.Y);
 	}
 
 	export template<CArithmeticType ArithmeticType>
-	CGS_INLINE constexpr Vector2<ArithmeticType> operator*(const Vector2<ArithmeticType>& other, const ArithmeticType s) noexcept
+	CORE_API CGS_INLINE constexpr Vector2<ArithmeticType> operator*(const Vector2<ArithmeticType>& other, const ArithmeticType s) noexcept
 	{
 		return s * other;
 	}
 
 	export template<CArithmeticType ArithmeticType>
-	CGS_INLINE constexpr Vector2<ArithmeticType> operator/(const ArithmeticType s, const Vector2<ArithmeticType>& other) noexcept
+	CORE_API CGS_INLINE constexpr Vector2<ArithmeticType> operator/(const ArithmeticType s, const Vector2<ArithmeticType>& other) noexcept
 	{
 		return Vector2<ArithmeticType>(s / other.X, s / other.Y);
 	}
 
 	export template<CArithmeticType ArithmeticType>
-	CGS_INLINE constexpr Vector2<ArithmeticType> operator/(const Vector2<ArithmeticType>& other, const ArithmeticType s) noexcept
+	CORE_API CGS_INLINE constexpr Vector2<ArithmeticType> operator/(const Vector2<ArithmeticType>& other, const ArithmeticType s) noexcept
 	{
 		return Vector2<ArithmeticType>(other.X / s, other.Y / s);
 	}
 
 	export template<CArithmeticType ArithmeticType>
-	struct Vector3
+	struct CORE_API Vector3
 	{
 	public:
 		CGS_INLINE explicit constexpr Vector3(const ArithmeticType x, const ArithmeticType y, const ArithmeticType z) noexcept
@@ -211,31 +211,31 @@ namespace core
 	};
 
 	export template<CArithmeticType ArithmeticType>
-	CGS_INLINE constexpr Vector3<ArithmeticType> operator*(const ArithmeticType s, const Vector3<ArithmeticType>& other) noexcept
+	CORE_API CGS_INLINE constexpr Vector3<ArithmeticType> operator*(const ArithmeticType s, const Vector3<ArithmeticType>& other) noexcept
 	{
 		return Vector3<ArithmeticType>(s * other.X, s * other.Y, s * other.Z);
 	}
 
 	export template<CArithmeticType ArithmeticType>
-	CGS_INLINE constexpr Vector3<ArithmeticType> operator*(const Vector3<ArithmeticType>& other, const ArithmeticType s) noexcept
+	CORE_API CGS_INLINE constexpr Vector3<ArithmeticType> operator*(const Vector3<ArithmeticType>& other, const ArithmeticType s) noexcept
 	{
 		return s * other;
 	}
 
 	export template<CArithmeticType ArithmeticType>
-	CGS_INLINE constexpr Vector3<ArithmeticType> operator/(const ArithmeticType s, const Vector3<ArithmeticType>& other) noexcept
+	CORE_API CGS_INLINE constexpr Vector3<ArithmeticType> operator/(const ArithmeticType s, const Vector3<ArithmeticType>& other) noexcept
 	{
 		return Vector3<ArithmeticType>(s / other.X, s / other.Y, s / other.Z);
 	}
 
 	export template<CArithmeticType ArithmeticType>
-	CGS_INLINE constexpr Vector3<ArithmeticType> operator/(const Vector3<ArithmeticType>& other, const ArithmeticType s) noexcept
+	CORE_API CGS_INLINE constexpr Vector3<ArithmeticType> operator/(const Vector3<ArithmeticType>& other, const ArithmeticType s) noexcept
 	{
 		return Vector3<ArithmeticType>(other.X / s, other.Y / s, other.Z / s);
 	}
 
 	export template<CArithmeticType ArithmeticType>
-	struct Vector4
+	struct CORE_API Vector4
 	{
 	public:
 		CGS_INLINE explicit constexpr Vector4(const ArithmeticType x, const ArithmeticType y, const ArithmeticType z, const ArithmeticType w) noexcept
@@ -290,25 +290,25 @@ namespace core
 	};
 
 	export template<CArithmeticType ArithmeticType>
-	CGS_INLINE constexpr Vector4<ArithmeticType> operator*(const ArithmeticType s, const Vector4<ArithmeticType>& other) noexcept
+	CORE_API CGS_INLINE constexpr Vector4<ArithmeticType> operator*(const ArithmeticType s, const Vector4<ArithmeticType>& other) noexcept
 	{
 		return Vector4<ArithmeticType>(s * other.X, s * other.Y, s * other.Z, s * other.W);
 	}
 
 	export template<CArithmeticType ArithmeticType>
-	CGS_INLINE constexpr Vector4<ArithmeticType> operator*(const Vector4<ArithmeticType>& other, const ArithmeticType s) noexcept
+	CORE_API CGS_INLINE constexpr Vector4<ArithmeticType> operator*(const Vector4<ArithmeticType>& other, const ArithmeticType s) noexcept
 	{
 		return s * other;
 	}
 
 	export template<CArithmeticType ArithmeticType>
-	CGS_INLINE constexpr Vector4<ArithmeticType> operator/(const ArithmeticType s, const Vector4<ArithmeticType>& other) noexcept
+	CORE_API CGS_INLINE constexpr Vector4<ArithmeticType> operator/(const ArithmeticType s, const Vector4<ArithmeticType>& other) noexcept
 	{
 		return Vector4<ArithmeticType>(s / other.X, s / other.Y, s / other.Z, s / other.W);
 	}
 
 	export template<CArithmeticType ArithmeticType>
-	CGS_INLINE constexpr Vector4<ArithmeticType> operator/(const Vector4<ArithmeticType>& other, const ArithmeticType s) noexcept
+	CORE_API CGS_INLINE constexpr Vector4<ArithmeticType> operator/(const Vector4<ArithmeticType>& other, const ArithmeticType s) noexcept
 	{
 		return Vector4<ArithmeticType>(other.X / s, other.Y / s, other.Z / s, other.W / s);
 	}
