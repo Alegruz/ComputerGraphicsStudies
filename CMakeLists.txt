@@ -11,8 +11,10 @@ endif()
 
 project ("ComputerGraphicsStudies")
 
-add_subdirectory(Core)
-add_subdirectory(Renderer)
+#add_subdirectory(Core)
+#add_subdirectory(Renderer)
+
+add_subdirectory(Application)
 
 #if (CMAKE_VERSION VERSION_GREATER 3.12)
 #  set_property(TARGET ComputerGraphicsStudies PROPERTY CXX_STANDARD 20)
