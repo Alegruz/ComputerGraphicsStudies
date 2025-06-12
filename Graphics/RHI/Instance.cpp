@@ -81,6 +81,8 @@ namespace cgs::graphics::rhi
 			break;
 		}
 
+        FilterMessages(bPrintMessage, pCallbackData->pMessage);
+
 		switch (messageTypes)
 		{
 		case VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT:
@@ -189,6 +191,27 @@ namespace cgs::graphics::rhi
 		return VK_TRUE;
 	}
 
+	constexpr void Instance::FilterMessages(bool& bInoutPrintMessage, const char* message) noexcept
+	{
+		if (bInoutPrintMessage == true)
+		{
+			if (strstr(message, "#LLP_LAYER_3") != nullptr)
+			{
+				if (strstr(message, "GalaxyOverlayVkLayer") != nullptr)
+				{
+					bInoutPrintMessage = false;
+				}
+			}
+
+			if (strstr(message, "uses API version") != nullptr 
+			&& strstr(message, "which is older than the application specified API version of ") != nullptr 
+			&& strstr(message, "May cause issues.") != nullptr)
+			{
+				bInoutPrintMessage = false;
+			}
+		}
+	}
+    
 	Instance::Instance(const InstanceCreateInfo& createInfo) noexcept
 		: mInstance(VK_NULL_HANDLE)
 	{
