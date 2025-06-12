@@ -208,20 +208,22 @@ namespace cgs
 					VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
 				};
 
+				void* pNext = nullptr;
 				//VkValidationFeaturesEXT validationFeatures =
 				//{
 				//	.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
-				//	.pNext = nullptr,
+				//	.pNext = pNext,
 				//	.enabledValidationFeatureCount = static_cast<uint32_t>(validationFeaturesToEnable.size()),
 				//	.pEnabledValidationFeatures = validationFeaturesToEnable.data(),
 				//	.disabledValidationFeatureCount = 0,
 				//	.pDisabledValidationFeatures = nullptr,
 				//};
+				//pNext = &validationFeatures;
 
 				VkDebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfo
 				{
 					.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-					//.pNext = &validationFeatures,
+					.pNext = pNext,
 					.pNext = nullptr,
 					.flags = 0,
 					.messageSeverity = (VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT),
@@ -229,19 +231,23 @@ namespace cgs
 					.pfnUserCallback = DebugUtilsMessengerCallback,
 					.pUserData = nullptr,
 				};
+				pNext = &debugUtilsMessengerCreateInfo;
 
-				VkDebugReportCallbackCreateInfoEXT debugReportCallbackCreateInfo
-				{
-					.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT,
-					.pNext = &debugUtilsMessengerCreateInfo,
-					.flags = (VK_DEBUG_REPORT_INFORMATION_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT | VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_DEBUG_BIT_EXT),
-					.pfnCallback = DebugReportCallback,
-					.pUserData = nullptr,
-				};
+				// Not using VK_EXT_debug_report because it is deprecated in favor of VK_EXT_debug_utils.
+				// Reference: https://github.com/KhronosGroup/Vulkan-Samples/issues/47
+				// VkDebugReportCallbackCreateInfoEXT debugReportCallbackCreateInfo
+				// {
+				// 	.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT,
+				// 	.pNext = pNext,
+				// 	.flags = (VK_DEBUG_REPORT_INFORMATION_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT | VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_DEBUG_BIT_EXT),
+				// 	.pfnCallback = DebugReportCallback,
+				// 	.pUserData = nullptr,
+				// };
+				// pNext = &debugReportCallbackCreateInfo;
 
 				std::vector<const char*> extensionNamesToEnable =
 				{
-					VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
+					// VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
 					VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 					//VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME,
 					//VK_EXT_VALIDATION_FLAGS_EXTENSION_NAME,
@@ -250,7 +256,7 @@ namespace cgs
 				VkInstanceCreateInfo instanceCreateInfo =
 				{
 					.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-					.pNext = &debugReportCallbackCreateInfo,
+					.pNext = pNext,
 					.flags = 0,
 					.pApplicationInfo = &applicationInfo,
 					.enabledLayerCount = 0,
