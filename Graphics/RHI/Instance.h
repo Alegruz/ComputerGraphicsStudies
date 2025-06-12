@@ -6,6 +6,8 @@
 
 namespace cgs::graphics::rhi
 {
+    class PhysicalDevice;
+
     struct InstanceCreateInfo;
 
 	class Instance final
@@ -18,23 +20,10 @@ namespace cgs::graphics::rhi
 	public:
 		Instance() = delete;
 		explicit Instance(const InstanceCreateInfo& createInfo) noexcept;
-		constexpr ~Instance() noexcept;
+		~Instance() noexcept;
 
 	private:
 		VkInstance	mInstance;
+        std::vector<std::unique_ptr<PhysicalDevice>> mPhysicalDevices;
 	};
-
-	CGS_INLINE constexpr Instance::~Instance() noexcept
-	{
-		// Destroy the debug utils messenger if it was created.
-		// vkDestroyDebugUtilsMessengerEXT(mInstance, mDebugUtilsMessenger, nullptr);
-		// mDebugUtilsMessenger = VK_NULL_HANDLE;
-
-		// Destroy the instance.
-		if(mInstance != VK_NULL_HANDLE)
-		{
-			vkDestroyInstance(mInstance, nullptr);
-			mInstance = VK_NULL_HANDLE;
-		}
-	}
 }

@@ -2,7 +2,10 @@
 
 #include <cassert>
 #include <cstdint>
+#include <memory>
+#include <queue>
 #include <string>
+#include <vector>
 
 #define CGS_INLINE __forceinline
 #define MAKE_API_VERSION(variant, major, minor, patch) \

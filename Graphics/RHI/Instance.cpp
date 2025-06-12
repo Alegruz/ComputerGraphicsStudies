@@ -10,6 +10,8 @@
 
 #include "Graphics/Common.h"
 
+#include "Graphics/RHI/PhysicalDevice.h"
+
 namespace cgs::graphics::rhi
 {
 	VkBool32 Instance::DebugReportCallback(VkDebugReportFlagsEXT flags, [[maybe_unused]] VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage, [[maybe_unused]] void* pUserData) noexcept
@@ -303,5 +305,58 @@ namespace cgs::graphics::rhi
 		assert(vr == VK_SUCCESS);
 
 		volkLoadInstance(mInstance);
+
+		uint32_t physicalDeviceCount = 0;
+		vr = vkEnumeratePhysicalDevices(mInstance, &physicalDeviceCount, nullptr);
+		assert(vr == VK_SUCCESS && physicalDeviceCount > 0);
+
+		std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
+		vr = vkEnumeratePhysicalDevices(mInstance, &physicalDeviceCount, physicalDevices.data());
+		assert(vr == VK_SUCCESS && physicalDeviceCount > 0);
+
+		struct PhysicalDeviceComparator final
+		{
+			CGS_INLINE bool operator()(const std::unique_ptr<PhysicalDevice>& lhs, const std::unique_ptr<PhysicalDevice>& rhs) const noexcept
+			{
+				return ( lhs == nullptr || rhs == nullptr ) || ( lhs->EvaluateScore() < rhs->EvaluateScore() );
+			}
+		};
+
+		std::priority_queue<std::unique_ptr<PhysicalDevice>, std::vector<std::unique_ptr<PhysicalDevice>>, PhysicalDeviceComparator> physicalDevicesToCreate;
+		for (uint32_t i = 0; i < physicalDeviceCount; ++i)
+		{
+			PhysicalDevice::CreateInfo physicalDeviceCreateInfo =
+			{
+				.Instance = *this,
+				.PhysicalDevice = physicalDevices[i],
+			};
+			std::unique_ptr<PhysicalDevice> physicalDevice = std::make_unique<PhysicalDevice>(physicalDeviceCreateInfo);
+			assert(physicalDevice->mPhysicalDevice != VK_NULL_HANDLE);
+			physicalDevicesToCreate.push(std::move(physicalDevice));
+		}
+		
+		mPhysicalDevices.reserve(physicalDeviceCount);
+		while (!physicalDevicesToCreate.empty())
+		{
+			auto device = std::move(const_cast<std::unique_ptr<PhysicalDevice>&>(physicalDevicesToCreate.top()));
+			mPhysicalDevices.push_back(std::move(device));
+			physicalDevicesToCreate.pop();
+		}
+	}
+
+	Instance::~Instance() noexcept
+	{
+		mPhysicalDevices.clear();
+
+		// Destroy the debug utils messenger if it was created.
+		// vkDestroyDebugUtilsMessengerEXT(mInstance, mDebugUtilsMessenger, nullptr);
+		// mDebugUtilsMessenger = VK_NULL_HANDLE;
+
+		// Destroy the instance.
+		if(mInstance != VK_NULL_HANDLE)
+		{
+			vkDestroyInstance(mInstance, nullptr);
+			mInstance = VK_NULL_HANDLE;
+		}
 	}
 }
