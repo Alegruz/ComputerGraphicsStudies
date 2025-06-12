@@ -1,0 +1,16 @@
+project(Core LANGUAGES CXX)
+
+add_library(Core STATIC)
+
+target_sources(Core
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/pch.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Log.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Window.cpp"
+)
+
+target_include_directories(Core PUBLIC ${CMAKE_SOURCE_DIR})
+
+target_compile_definitions(Core PRIVATE Core_EXPORTS)
+
+target_precompile_headers(Core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/pch.h")

@@ -20,6 +20,8 @@
 #define CORE_API /*__declspec(dllimport)*/
 #endif	// NOT defined(Renderer_EXPORTS)
 
+#include "Core/Log.h"
+
 namespace cgs
 {
 	namespace core

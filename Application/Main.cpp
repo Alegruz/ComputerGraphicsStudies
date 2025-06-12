@@ -1,12 +1,12 @@
 #include <iostream>
 
-#include "Core/PchCommon.h"
+#include "Core/pch.h"
+#include "Graphics/Common.h"
 
-#include "volk/volk.h"
+#include "Core/Math/Matrix.hpp"
+#include "Core/Math/Vector.hpp"
 
-import Core.Math.Matrix;
-import Core.Math.Vector;
-import Renderer;
+#include "Graphics/Renderer.h"
 
 int main()
 {
@@ -16,22 +16,25 @@ int main()
 		.Version = MAKE_API_VERSION(0, 0, 0, 1),
 	};
 
-	const cgs::core::Vector2 vec2(10.0f, 2.0f);
-	const cgs::core::Vector3 vec3(2.5f, 5.0f, 7.5f);
+	const cgs::core::math::Vector2 vec2(10.0f, 2.0f);
+	const cgs::core::math::Vector3 vec3(2.5f, 5.0f, 7.5f);
 
-	cgs::core::Matrix mat;
+	cgs::core::math::Matrix mat;
 
-	cgs::renderer::RendererCreateInfo rendererCreateInfo =
+	cgs::graphics::RendererCreateInfo rendererCreateInfo =
 	{
-		.ApplicationInfo = applicationInfo,
-		.EngineInfo =
+		.InstanceCreateInfo =
 		{
-			.Name = "Renderer",
-			.Version = MAKE_API_VERSION(0, 0, 0, 1),
+			.ApplicationInfo = applicationInfo,
+			.EngineInfo =
+			{
+				.Name = "Renderer",
+				.Version = MAKE_API_VERSION(0, 0, 0, 1),
+			},
 		},
 	};
 
-	cgs::renderer::Renderer renderer(rendererCreateInfo);
+	cgs::graphics::Renderer renderer(rendererCreateInfo);
 
 	const int32_t result = static_cast<int>((vec2.X * vec2.Y) + (vec3.X * vec3.Y * vec3.Z)) * static_cast<int>(mat.At(0, 0));
 

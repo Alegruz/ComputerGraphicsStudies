@@ -1,0 +1,23 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "cppvsdbg",
+            "request": "launch",
+            "name": "Debug RendererMain (Debug)",
+            "program": "${workspaceFolder}/out/build/x64-debug/Application/RendererMain.exe",
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": true,
+            "preLaunchTask": "CMake Build (x64-Debug)"
+        },
+        {
+            "type": "cppvsdbg",
+            "request": "launch",
+            "name": "Debug RendererMain (Release)",
+            "program": "${workspaceFolder}/out/build/x64-release/Application/RendererMain.exe",
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": true,
+            "preLaunchTask": "CMake Build (x64-Release)"
+        }
+    ]
+}
