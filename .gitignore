@@ -23,7 +23,6 @@ External/VulkanSDK/Include/slang/
 External/VulkanSDK/Include/spirv_cross/
 External/VulkanSDK/Include/spirv-headers/
 External/VulkanSDK/Include/spirv-tools/
-External/VulkanSDK/Include/vk_video/
 External/VulkanSDK/components.xml
 External/VulkanSDK/InstallationLog.txt
 *.dat
