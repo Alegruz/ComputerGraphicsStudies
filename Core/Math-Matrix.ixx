@@ -328,17 +328,17 @@ namespace core
 		else
 		{
 			sum.mData[ 0] = lhs.At(0, 0) + rhs.At(0, 0);
-			sum.mData[ 1] = lhs.At(0, 1) + rhs.At(1, 1);
-			sum.mData[ 2] = lhs.At(0, 2) + rhs.At(2, 2);
-			sum.mData[ 3] = lhs.At(0, 3) + rhs.At(2, 3);
+			sum.mData[ 1] = lhs.At(0, 1) + rhs.At(0, 1);
+			sum.mData[ 2] = lhs.At(0, 2) + rhs.At(0, 2);
+			sum.mData[ 3] = lhs.At(0, 3) + rhs.At(0, 3);
 
-			sum.mData[ 4] = lhs.At(1, 0) + rhs.At(0, 0);
+			sum.mData[ 4] = lhs.At(1, 0) + rhs.At(1, 0);
 			sum.mData[ 5] = lhs.At(1, 1) + rhs.At(1, 1);
-			sum.mData[ 6] = lhs.At(1, 2) + rhs.At(2, 2);
-			sum.mData[ 7] = lhs.At(1, 3) + rhs.At(2, 3);
+			sum.mData[ 6] = lhs.At(1, 2) + rhs.At(1, 2);
+			sum.mData[ 7] = lhs.At(1, 3) + rhs.At(1, 3);
 
-			sum.mData[ 8] = lhs.At(2, 0) + rhs.At(0, 0);
-			sum.mData[ 9] = lhs.At(2, 1) + rhs.At(1, 1);
+			sum.mData[ 8] = lhs.At(2, 0) + rhs.At(2, 0);
+			sum.mData[ 9] = lhs.At(2, 1) + rhs.At(2, 1);
 			sum.mData[10] = lhs.At(2, 2) + rhs.At(2, 2);
 			sum.mData[11] = lhs.At(2, 3) + rhs.At(2, 3);
 		}
@@ -383,8 +383,8 @@ namespace core
 			sum.mData[4] = lhs.At(2, 0) + rhs.At(2, 0);
 			sum.mData[5] = lhs.At(2, 1) + rhs.At(2, 1);
 
-			sum.mData[5] = lhs.At(3, 0) + rhs.At(3, 0);
-			sum.mData[6] = lhs.At(3, 1) + rhs.At(3, 1);
+			sum.mData[6] = lhs.At(3, 0) + rhs.At(3, 0);
+			sum.mData[7] = lhs.At(3, 1) + rhs.At(3, 1);
 		}
 
 		return sum;
@@ -465,12 +465,12 @@ namespace core
 			sum.mData[ 2] = lhs.At(0, 2) + rhs.At(0, 2);
 			sum.mData[ 3] = lhs.At(0, 3) + rhs.At(0, 3);
 
-			sum.mData[ 4] = lhs.At(1, 0) + rhs.At(0, 0);
+			sum.mData[ 4] = lhs.At(1, 0) + rhs.At(1, 0);
 			sum.mData[ 5] = lhs.At(1, 1) + rhs.At(1, 1);
 			sum.mData[ 6] = lhs.At(1, 2) + rhs.At(1, 2);
 			sum.mData[ 7] = lhs.At(1, 3) + rhs.At(1, 3);
 
-			sum.mData[ 8] = lhs.At(2, 0) + rhs.At(0, 0);
+			sum.mData[ 8] = lhs.At(2, 0) + rhs.At(2, 0);
 			sum.mData[ 9] = lhs.At(2, 1) + rhs.At(2, 1);
 			sum.mData[10] = lhs.At(2, 2) + rhs.At(2, 2);
 			sum.mData[11] = lhs.At(2, 3) + rhs.At(2, 3);

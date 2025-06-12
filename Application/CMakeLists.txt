@@ -57,10 +57,8 @@ else()
     message(WARNING "Unknown platform detected")
 endif()
 
-message(STATUS hiiiiiiiiiiii)
-
-if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(RendererMain PRIVATE CGS_DEBUG)
-elseif(${CMAKE_BUILD_TYPE} STREQUAL "Release")
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(RendererMain PRIVATE CGS_RELEASE)
 endif()
