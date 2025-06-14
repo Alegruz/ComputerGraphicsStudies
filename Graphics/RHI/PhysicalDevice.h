@@ -52,6 +52,8 @@ namespace cgs::graphics::rhi
 		float EvaluateScore() const noexcept;
 		void PrintProperties() const noexcept;
 
+		constexpr const char* GetName() const noexcept;
+
 	private:
 		static void printDeviceProperties(const Properties &properties) noexcept;
 		static constexpr const char* getVendorIdName(const VkVendorId vendorId) noexcept;
@@ -65,6 +67,11 @@ namespace cgs::graphics::rhi
 		std::vector<VkQueueFamilyProperties2>	mQueueFamilyPropertiesList; // List of queue family properties
 		std::unique_ptr<Device>	mLogicalDevice; // Logical device created from this physical device, if any
 	};
+
+	CGS_INLINE constexpr const char* PhysicalDevice::GetName() const noexcept
+	{
+		return mProperties.PhysicalDeviceProperties.properties.deviceName;
+	}
 
 	CGS_INLINE constexpr const char* PhysicalDevice::getVendorIdName(const VkVendorId vendorId) noexcept
 	{

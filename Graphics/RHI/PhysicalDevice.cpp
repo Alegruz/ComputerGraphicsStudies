@@ -20,7 +20,7 @@ namespace cgs::graphics::rhi
         vkGetPhysicalDeviceQueueFamilyProperties2(mPhysicalDevice, &queueFamilyCount, nullptr);
         mQueueFamilyPropertiesList.resize(queueFamilyCount);
         vkGetPhysicalDeviceQueueFamilyProperties2(mPhysicalDevice, &queueFamilyCount, mQueueFamilyPropertiesList.data());
-        CGS_LOG_INFO("Physical device has %u queue families.", queueFamilyCount);
+        CGS_LOG_INFO("Physical device %s has %u queue families.", GetName(), queueFamilyCount);
     }
 
     PhysicalDevice::~PhysicalDevice() noexcept
