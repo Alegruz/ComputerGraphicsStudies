@@ -6,7 +6,7 @@
 
 namespace cgs::core
 {
-    void Log::Print(const eLogLevel logLevel, const char* fileName, const uint32_t lineNumber, const char* functionName, const char* message) const noexcept
+    void Log::Print(const eLogLevel logLevel, const char* fileName, const uint32_t lineNumber, const char* functionName, const char* format, ...) const noexcept
     {
         if (logLevel < mCurrentLogLevel)
         {
@@ -35,6 +35,12 @@ namespace cgs::core
             return;
         }
 
-        std::cout << fileName << ":" << lineNumber << " (" << functionName << "): " << message << '\n';
+        char buffer[1024];
+        va_list args;
+        va_start(args, format);
+        vsnprintf(buffer, sizeof(buffer), format, args);
+        va_end(args);
+
+        std::cout << fileName << ":" << lineNumber << " (" << functionName << "): " << buffer << '\n';
     }
 } // namespace cgs::core
