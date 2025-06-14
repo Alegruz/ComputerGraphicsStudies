@@ -16,7 +16,7 @@ namespace cgs::graphics::rhi
 	public:
 		struct CreateInfo final
 		{
-			Instance&				Instance;
+			Instance&				RhiInstance;
 			VkPhysicalDevice		PhysicalDevice;
 		};
 

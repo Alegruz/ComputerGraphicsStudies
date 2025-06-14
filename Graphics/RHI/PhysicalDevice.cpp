@@ -5,7 +5,7 @@
 namespace cgs::graphics::rhi
 {
     PhysicalDevice::PhysicalDevice(const CreateInfo& createInfo) noexcept
-        : mInstance(createInfo.Instance)
+        : mInstance(createInfo.RhiInstance)
         , mPhysicalDevice(createInfo.PhysicalDevice)
     {
         assert(mPhysicalDevice != VK_NULL_HANDLE);

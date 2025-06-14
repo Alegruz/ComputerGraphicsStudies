@@ -327,7 +327,7 @@ namespace cgs::graphics::rhi
 		{
 			PhysicalDevice::CreateInfo physicalDeviceCreateInfo =
 			{
-				.Instance = *this,
+				.RhiInstance = *this,
 				.PhysicalDevice = physicalDevices[i],
 			};
 			std::unique_ptr<PhysicalDevice> physicalDevice = std::make_unique<PhysicalDevice>(physicalDeviceCreateInfo);
