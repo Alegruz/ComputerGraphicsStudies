@@ -54,7 +54,7 @@ namespace cgs::graphics
 		}
 		mConfig.SetSetting("VersionPatch", projectVersionPatch);
 
-		rhi::InstanceCreateInfo instanceCreateInfo =
+		rhi::Instance::CreateInfo instanceCreateInfo =
 		{
 			.Config = mConfig,
 			.ApplicationInfo = createInfo.ApplicationInfo,

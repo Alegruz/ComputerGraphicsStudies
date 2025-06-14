@@ -8,15 +8,20 @@ namespace cgs::graphics::rhi
 {
     class PhysicalDevice;
 
-	struct InstanceCreateInfo
-	{
-		cgs::core::Config& Config; // Reference to the configuration object
-		cgs::core::ProjectInfo ApplicationInfo; // Information about the application
-		cgs::core::ProjectInfo EngineInfo;
-	};
-
 	class Instance final
 	{
+	public:
+		struct CreateInfo final
+		{
+			friend class Instance;
+
+			cgs::core::Config& Config; // Reference to the configuration object
+			cgs::core::ProjectInfo ApplicationInfo; // Information about the application
+			cgs::core::ProjectInfo EngineInfo;
+			uint32_t ApiVersion = VK_API_VERSION_1_3; // Vulkan API version to use, default is 1.3
+			VkDebugUtilsMessengerCreateInfoEXT DebugUtilsMessengerCreateInfo = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT, .pNext = nullptr };
+		};
+
 	public:
 		static VkBool32 DebugReportCallback(VkDebugReportFlagsEXT flags, [[maybe_unused]] VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage, [[maybe_unused]] void* pUserData) noexcept;
 		static VkBool32 DebugUtilsMessengerCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageTypes, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, [[maybe_unused]] void* pUserData) noexcept;
@@ -24,8 +29,13 @@ namespace cgs::graphics::rhi
 	
 	public:
 		Instance() = delete;
-		explicit Instance(const InstanceCreateInfo& createInfo) noexcept;
+		explicit Instance(CreateInfo& createInfo) noexcept;
 		~Instance() noexcept;
+
+	private:
+		void createInstance(CreateInfo& createInfo) noexcept;
+		void createDebugUtilsMessenger(CreateInfo& createInfo) noexcept;
+		void createPhysicalDevices() noexcept;
 
 	private:
 		[[maybe_unused]] cgs::core::Config& mConfig;

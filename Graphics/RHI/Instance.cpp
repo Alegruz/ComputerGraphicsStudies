@@ -212,7 +212,7 @@ namespace cgs::graphics::rhi
 		}
 	}
     
-	Instance::Instance(const InstanceCreateInfo& createInfo) noexcept
+	Instance::Instance(CreateInfo& createInfo) noexcept
 		: mConfig(createInfo.Config)
 		, mInstance(VK_NULL_HANDLE)
 		, mPhysicalDevices()
@@ -220,12 +220,44 @@ namespace cgs::graphics::rhi
 	{
 		VkResult vr = volkInitialize();
 		assert(vr == VK_SUCCESS);
-
+		
 		uint32_t apiVersion = 0;
 		vr = vkEnumerateInstanceVersion(&apiVersion);
 		assert(vr == VK_SUCCESS);
 		std::cout << "Vulkan Instance Version: " << VK_API_VERSION_VARIANT(apiVersion) << '.' << VK_API_VERSION_MAJOR(apiVersion) << '.' << VK_API_VERSION_MINOR(apiVersion) << '.' << VK_API_VERSION_PATCH(apiVersion) << '\n';
-		assert(apiVersion >= VK_API_VERSION_1_3);
+		assert(apiVersion >= createInfo.ApiVersion);
+		createInfo.ApiVersion = apiVersion;
+
+		createInstance(createInfo);
+		createDebugUtilsMessenger(createInfo);
+		createPhysicalDevices();
+	}
+
+	Instance::~Instance() noexcept
+	{
+		mPhysicalDevices.clear();
+
+		// Destroy the debug utils messenger if it was created.
+		// vkDestroyDebugUtilsMessengerEXT(mInstance, mDebugUtilsMessenger, nullptr);
+		// mDebugUtilsMessenger = VK_NULL_HANDLE;
+
+		if (mDebugUtilsMessenger != VK_NULL_HANDLE)
+		{
+			vkDestroyDebugUtilsMessengerEXT(mInstance, mDebugUtilsMessenger, nullptr);
+			mDebugUtilsMessenger = VK_NULL_HANDLE;
+		}
+
+		// Destroy the instance.
+		if(mInstance != VK_NULL_HANDLE)
+		{
+			vkDestroyInstance(mInstance, nullptr);
+			mInstance = VK_NULL_HANDLE;
+		}
+	}
+
+	void Instance::createInstance(CreateInfo& createInfo) noexcept
+	{
+		VkResult vr = VK_SUCCESS;
 
 		VkApplicationInfo applicationInfo =
 		{
@@ -235,7 +267,7 @@ namespace cgs::graphics::rhi
 			.applicationVersion = createInfo.ApplicationInfo.Version,
 			.pEngineName = createInfo.EngineInfo.Name.c_str(),
 			.engineVersion = createInfo.EngineInfo.Version,
-			.apiVersion = apiVersion,
+			.apiVersion = createInfo.ApiVersion,
 		};
 
 		std::vector<VkValidationFeatureEnableEXT> validationFeaturesToEnable =
@@ -247,8 +279,8 @@ namespace cgs::graphics::rhi
 			VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
 		};
 
-		void* pNext = nullptr;
-		//VkValidationFeaturesEXT validationFeatures =
+		void *pNext = nullptr;
+		// VkValidationFeaturesEXT validationFeatures =
 		//{
 		//	.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
 		//	.pNext = pNext,
@@ -256,10 +288,10 @@ namespace cgs::graphics::rhi
 		//	.pEnabledValidationFeatures = validationFeaturesToEnable.data(),
 		//	.disabledValidationFeatureCount = 0,
 		//	.pDisabledValidationFeatures = nullptr,
-		//};
-		//pNext = &validationFeatures;
+		// };
+		// pNext = &validationFeatures;
 
-		VkDebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfo
+		createInfo.DebugUtilsMessengerCreateInfo =
 		{
 			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
 			.pNext = pNext,
@@ -269,7 +301,7 @@ namespace cgs::graphics::rhi
 			.pfnUserCallback = DebugUtilsMessengerCallback,
 			.pUserData = nullptr,
 		};
-		pNext = &debugUtilsMessengerCreateInfo;
+		pNext = &createInfo.DebugUtilsMessengerCreateInfo;
 
 		// Not using VK_EXT_debug_report because it is deprecated in favor of VK_EXT_debug_utils.
 		// Reference: https://github.com/KhronosGroup/Vulkan-Samples/issues/47
@@ -283,12 +315,12 @@ namespace cgs::graphics::rhi
 		// };
 		// pNext = &debugReportCallbackCreateInfo;
 
-		std::vector<const char*> extensionNamesToEnable =
+		std::vector<const char *> extensionNamesToEnable =
 		{
 			// VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
 			VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-			//VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME,
-			//VK_EXT_VALIDATION_FLAGS_EXTENSION_NAME,
+			// VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME,
+			// VK_EXT_VALIDATION_FLAGS_EXTENSION_NAME,
 		};
 
 		VkInstanceCreateInfo instanceCreateInfo =
@@ -307,6 +339,11 @@ namespace cgs::graphics::rhi
 		assert(vr == VK_SUCCESS);
 
 		volkLoadInstance(mInstance);
+	}
+
+	void Instance::createDebugUtilsMessenger(CreateInfo& createInfo) noexcept
+	{
+		VkResult vr = VK_SUCCESS;
 
 		bool bIsDebugLayerEnabled = false;
 #if defined(CGS_DEBUG)
@@ -322,9 +359,15 @@ namespace cgs::graphics::rhi
 
 		if (bIsDebugLayerEnabled)
 		{
-			vr = vkCreateDebugUtilsMessengerEXT(mInstance, &debugUtilsMessengerCreateInfo, nullptr, &mDebugUtilsMessenger);
+			createInfo.DebugUtilsMessengerCreateInfo.pNext = nullptr;
+			vr = vkCreateDebugUtilsMessengerEXT(mInstance, &createInfo.DebugUtilsMessengerCreateInfo, nullptr, &mDebugUtilsMessenger);
 			assert(vr == VK_SUCCESS && mDebugUtilsMessenger != VK_NULL_HANDLE);
 		}
+	}
+
+	void Instance::createPhysicalDevices() noexcept
+	{
+		VkResult vr = VK_SUCCESS;
 
 		uint32_t physicalDeviceCount = 0;
 		vr = vkEnumeratePhysicalDevices(mInstance, &physicalDeviceCount, nullptr);
@@ -361,28 +404,6 @@ namespace cgs::graphics::rhi
 			auto device = std::move(const_cast<std::unique_ptr<PhysicalDevice>&>(physicalDevicesToCreate.top()));
 			mPhysicalDevices.push_back(std::move(device));
 			physicalDevicesToCreate.pop();
-		}
-	}
-
-	Instance::~Instance() noexcept
-	{
-		mPhysicalDevices.clear();
-
-		// Destroy the debug utils messenger if it was created.
-		// vkDestroyDebugUtilsMessengerEXT(mInstance, mDebugUtilsMessenger, nullptr);
-		// mDebugUtilsMessenger = VK_NULL_HANDLE;
-
-		if (mDebugUtilsMessenger != VK_NULL_HANDLE)
-		{
-			vkDestroyDebugUtilsMessengerEXT(mInstance, mDebugUtilsMessenger, nullptr);
-			mDebugUtilsMessenger = VK_NULL_HANDLE;
-		}
-
-		// Destroy the instance.
-		if(mInstance != VK_NULL_HANDLE)
-		{
-			vkDestroyInstance(mInstance, nullptr);
-			mInstance = VK_NULL_HANDLE;
 		}
 	}
 }
