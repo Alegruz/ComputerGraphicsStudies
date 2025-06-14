@@ -1,7 +1,9 @@
 #include "Graphics/pch.h" 
 
-#include "Graphics/RHI/PhysicalDevice.h"
 #include "Graphics/RHI/QueueFamily.h"
+
+#include "Graphics/RHI/PhysicalDevice.h"
+#include "Graphics/RHI/Queue.h"
 
 namespace cgs::graphics::rhi
 {
@@ -11,6 +13,37 @@ namespace cgs::graphics::rhi
     {
         assert(mQueueFamilyProperties.sType == VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2);
 
+        PrintProperties();
+    }
+
+    QueueFamily::~QueueFamily() noexcept
+    {
+        // No specific cleanup needed for the queue family itself.
+        // The device and queues will handle their own cleanup.
+    }
+
+    float QueueFamily::EvaluateScore() const noexcept
+    {
+        float score = 0.0f;
+
+        if (mQueueFamilyProperties.queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        {
+            score += 1.0f; // Graphics queue is highly desirable.
+        }
+        if (mQueueFamilyProperties.queueFamilyProperties.queueFlags & VK_QUEUE_COMPUTE_BIT)
+        {
+            score += 0.5f; // Compute queue is also desirable.
+        }
+        if (mQueueFamilyProperties.queueFamilyProperties.queueFlags & VK_QUEUE_TRANSFER_BIT)
+        {
+            score += 0.2f; // Transfer queue is useful but less critical.
+        }
+
+        return score;
+    }
+
+    void QueueFamily::PrintProperties() const noexcept
+    {
         CGS_LOG_INFO(
             "Queue Family %u Properties:"
             "\n\tQueue Flags:"

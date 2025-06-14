@@ -2,6 +2,8 @@
 
 #include "Graphics/RHI/Device.h"
 
+#include "Graphics/RHI/PhysicalDevice.h"
+
 namespace cgs::graphics::rhi
 {
     Device::Device(const CreateInfo& createInfo) noexcept
@@ -13,5 +15,6 @@ namespace cgs::graphics::rhi
 
     Device::~Device() noexcept
     {
+        mPhysicalDevice.DestroyLogicalDevice(mDevice);
     }
 }

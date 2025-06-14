@@ -390,6 +390,7 @@ namespace cgs::graphics::rhi
 			PhysicalDeviceGroup::CreateInfo createInfo =
 			{
 				.RhiInstance = *this,
+				.Index = i,
 				.PhysicalDeviceGroupProperties = groupProperties,
 			};
 			mPhysicalDeviceGroups.emplace_back(std::make_unique<PhysicalDeviceGroup>(createInfo));

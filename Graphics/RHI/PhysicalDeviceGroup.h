@@ -13,8 +13,12 @@ namespace cgs::graphics::rhi
         struct CreateInfo final
         {
             Instance& RhiInstance; // Reference to the RHI instance
+            uint32_t Index; // Index of the physical device group
             VkPhysicalDeviceGroupProperties PhysicalDeviceGroupProperties; // Properties of the physical device group
         };
+
+    public:
+        static constexpr const uint32_t DEFAULT_INDEX = 0; // Default index for the physical device group
 
     public:
         PhysicalDeviceGroup() = delete;
@@ -23,11 +27,14 @@ namespace cgs::graphics::rhi
 
         void PrintProperties() const noexcept;
 
+        CGS_INLINE constexpr uint32_t GetIndex() const noexcept { return mIndex; }
+
     private:
         void createPhysicalDevices() noexcept;
 
     private:
         Instance& mInstance; // Reference to the RHI instance
+        uint32_t mIndex;
         VkPhysicalDeviceGroupProperties mPhysicalDeviceGroupProperties; // Properties of the physical device group
         std::vector<std::unique_ptr<PhysicalDevice>> mPhysicalDevices; // List of physical devices in the group
     };

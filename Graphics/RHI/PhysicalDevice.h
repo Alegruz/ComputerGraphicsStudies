@@ -4,6 +4,7 @@ namespace cgs::graphics::rhi
 {
 	class Device;
 	class Instance;
+	class PhysicalDeviceGroup;
 	class QueueFamily;
 
 	class PhysicalDevice final
@@ -15,6 +16,7 @@ namespace cgs::graphics::rhi
 		struct CreateInfo final
 		{
 			Instance&				RhiInstance;
+			PhysicalDeviceGroup&	RhiPhysicalDeviceGroup;
 			VkPhysicalDevice		PhysicalDevice;
 		};
 
@@ -45,7 +47,8 @@ namespace cgs::graphics::rhi
 
 		PhysicalDevice& operator=(const PhysicalDevice&) = delete;
 		PhysicalDevice& operator=(PhysicalDevice&&) noexcept = delete;
-		
+
+		void DestroyLogicalDevice(VkDevice &inoutDevice) const noexcept;
 		float EvaluateScore() const noexcept;
 		void PrintProperties() const noexcept;
 
@@ -58,7 +61,12 @@ namespace cgs::graphics::rhi
 		static constexpr const char* getDriverIdName(const VkDriverId driverId) noexcept;
 
 	private:
+		void createQueueFamilies() noexcept;
+		void createLogicalDevice() noexcept;
+
+	private:
 		Instance&				mInstance;
+		PhysicalDeviceGroup&	mPhysicalDeviceGroup; // Reference to the physical device group this physical device belongs to
 		VkPhysicalDevice		mPhysicalDevice;
 		Properties				mProperties; // Properties of the physical device
 

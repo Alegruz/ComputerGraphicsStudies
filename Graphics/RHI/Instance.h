@@ -28,6 +28,8 @@ namespace cgs::graphics::rhi
 		explicit Instance(CreateInfo& createInfo) noexcept;
 		~Instance() noexcept;
 
+		CGS_INLINE constexpr const cgs::core::Config& GetConfig() const noexcept { return mConfig; } // Accessor for the configuration object
+
 	private:
 		void createInstance(CreateInfo& createInfo) noexcept;
 		void createDebugUtilsMessenger(CreateInfo& createInfo) noexcept;

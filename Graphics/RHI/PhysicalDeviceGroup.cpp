@@ -59,6 +59,7 @@ namespace cgs::graphics::rhi
             PhysicalDevice::CreateInfo physicalDeviceCreateInfo =
             {
                 .RhiInstance = mInstance,
+                .RhiPhysicalDeviceGroup = *this,
                 .PhysicalDevice = mPhysicalDeviceGroupProperties.physicalDevices[i],
             };
             std::unique_ptr<PhysicalDevice> physicalDevice = std::make_unique<PhysicalDevice>(physicalDeviceCreateInfo);
@@ -69,7 +70,7 @@ namespace cgs::graphics::rhi
         mPhysicalDevices.reserve(physicalDeviceCount);
         while (!physicalDevicesToCreate.empty())
         {
-            auto device = std::move(const_cast<std::unique_ptr<PhysicalDevice> &>(physicalDevicesToCreate.top()));
+            auto device = std::move(const_cast<std::unique_ptr<PhysicalDevice>&>(physicalDevicesToCreate.top()));
             mPhysicalDevices.push_back(std::move(device));
             physicalDevicesToCreate.pop();
         }
