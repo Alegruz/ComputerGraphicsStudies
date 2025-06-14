@@ -1,6 +1,6 @@
-#include "Graphics/RHI/Device.h"
+#include "Graphics/pch.h"
 
-#include "Core/pch.h"
+#include "Graphics/RHI/Device.h"
 
 namespace cgs::graphics::rhi
 {

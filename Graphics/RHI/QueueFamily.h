@@ -1,7 +1,5 @@
 #pragma once
 
-#include "volk/volk.h"
-
 namespace cgs::graphics::rhi
 {
     class PhysicalDevice;

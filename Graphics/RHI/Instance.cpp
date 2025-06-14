@@ -1,14 +1,12 @@
+#include "Graphics/pch.h"
+
 #include "Graphics/RHI/Instance.h"
 
 #include <iostream>
 #include <string>
 #include <vector>
 
-#include "volk/volk.h"
-
-#include "Core/pch.h"
-
-#include "Graphics/RHI/PhysicalDevice.h"
+#include "Graphics/RHI/PhysicalDeviceGroup.h"
 
 namespace cgs::graphics::rhi
 {
@@ -31,7 +29,6 @@ namespace cgs::graphics::rhi
 		if (pMessage)
 			logMsg += pMessage;
 		logMsg += '\n';
-		std::cout << logMsg;
 
 		switch (flags)
 		{
@@ -211,11 +208,11 @@ namespace cgs::graphics::rhi
 			}
 		}
 	}
-    
+
 	Instance::Instance(CreateInfo& createInfo) noexcept
 		: mConfig(createInfo.Config)
 		, mInstance(VK_NULL_HANDLE)
-		, mPhysicalDevices()
+		, mPhysicalDeviceGroups()
 		, mDebugUtilsMessenger(VK_NULL_HANDLE)
 	{
 		VkResult vr = volkInitialize();
@@ -224,18 +221,18 @@ namespace cgs::graphics::rhi
 		uint32_t apiVersion = 0;
 		vr = vkEnumerateInstanceVersion(&apiVersion);
 		assert(vr == VK_SUCCESS);
-		std::cout << "Vulkan Instance Version: " << VK_API_VERSION_VARIANT(apiVersion) << '.' << VK_API_VERSION_MAJOR(apiVersion) << '.' << VK_API_VERSION_MINOR(apiVersion) << '.' << VK_API_VERSION_PATCH(apiVersion) << '\n';
+		CGS_LOG_INFO("Enumerated Vulkan Instance Version: %u.%u.%u.%u", VK_API_VERSION_VARIANT(apiVersion), VK_API_VERSION_MAJOR(apiVersion), VK_API_VERSION_MINOR(apiVersion), VK_API_VERSION_PATCH(apiVersion));
 		assert(apiVersion >= createInfo.ApiVersion);
 		createInfo.ApiVersion = apiVersion;
 
 		createInstance(createInfo);
 		createDebugUtilsMessenger(createInfo);
-		createPhysicalDevices();
+		createPhysicalDeviceGroups();
 	}
 
 	Instance::~Instance() noexcept
 	{
-		mPhysicalDevices.clear();
+		mPhysicalDeviceGroups.clear();
 
 		// Destroy the debug utils messenger if it was created.
 		// vkDestroyDebugUtilsMessengerEXT(mInstance, mDebugUtilsMessenger, nullptr);
@@ -365,45 +362,38 @@ namespace cgs::graphics::rhi
 		}
 	}
 
-	void Instance::createPhysicalDevices() noexcept
+	void Instance::createPhysicalDeviceGroups() noexcept
 	{
 		VkResult vr = VK_SUCCESS;
 
-		uint32_t physicalDeviceCount = 0;
-		vr = vkEnumeratePhysicalDevices(mInstance, &physicalDeviceCount, nullptr);
-		assert(vr == VK_SUCCESS && physicalDeviceCount > 0);
-
-		std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
-		vr = vkEnumeratePhysicalDevices(mInstance, &physicalDeviceCount, physicalDevices.data());
-		assert(vr == VK_SUCCESS && physicalDeviceCount > 0);
-
-		struct PhysicalDeviceComparator final
+		uint32_t physicalDeviceGroupCount = 0;
+		vr = vkEnumeratePhysicalDeviceGroups(mInstance, &physicalDeviceGroupCount, nullptr);
+		assert(vr == VK_SUCCESS);
+		assert(physicalDeviceGroupCount > 0);
+		CGS_LOG_INFO("Enumerated Physical Device Group Count: %u", physicalDeviceGroupCount);
+		if (physicalDeviceGroupCount == 0)
 		{
-			CGS_INLINE bool operator()(const std::unique_ptr<PhysicalDevice>& lhs, const std::unique_ptr<PhysicalDevice>& rhs) const noexcept
-			{
-				return ( lhs == nullptr || rhs == nullptr ) || ( lhs->EvaluateScore() < rhs->EvaluateScore() );
-			}
-		};
+			CGS_LOG_ERROR("No physical devices found.");
+			return;
+		}
+		CGS_LOG_INFO("Enumerating Physical Devices...");
+		std::vector<VkPhysicalDeviceGroupProperties> physicalDeviceGroupProperties(physicalDeviceGroupCount);
+		vr = vkEnumeratePhysicalDeviceGroups(mInstance, &physicalDeviceGroupCount, physicalDeviceGroupProperties.data());
+		assert(vr == VK_SUCCESS);
 
-		std::priority_queue<std::unique_ptr<PhysicalDevice>, std::vector<std::unique_ptr<PhysicalDevice>>, PhysicalDeviceComparator> physicalDevicesToCreate;
-		for (uint32_t i = 0; i < physicalDeviceCount; ++i)
+		for (uint32_t i = 0; i < physicalDeviceGroupCount; ++i)
 		{
-			PhysicalDevice::CreateInfo physicalDeviceCreateInfo =
+			const auto& groupProperties = physicalDeviceGroupProperties[i];
+			assert(groupProperties.sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES);
+			CGS_LOG_INFO("Physical Device Group %u contains %u physical devices.", i, groupProperties.physicalDeviceCount);
+
+			PhysicalDeviceGroup::CreateInfo createInfo =
 			{
 				.RhiInstance = *this,
-				.PhysicalDevice = physicalDevices[i],
+				.PhysicalDeviceGroupProperties = groupProperties,
 			};
-			std::unique_ptr<PhysicalDevice> physicalDevice = std::make_unique<PhysicalDevice>(physicalDeviceCreateInfo);
-			assert(physicalDevice->mPhysicalDevice != VK_NULL_HANDLE);
-			physicalDevicesToCreate.push(std::move(physicalDevice));
+			mPhysicalDeviceGroups.emplace_back(std::make_unique<PhysicalDeviceGroup>(createInfo));
 		}
 		
-		mPhysicalDevices.reserve(physicalDeviceCount);
-		while (!physicalDevicesToCreate.empty())
-		{
-			auto device = std::move(const_cast<std::unique_ptr<PhysicalDevice>&>(physicalDevicesToCreate.top()));
-			mPhysicalDevices.push_back(std::move(device));
-			physicalDevicesToCreate.pop();
-		}
 	}
 }

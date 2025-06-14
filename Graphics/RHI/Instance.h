@@ -1,12 +1,8 @@
 #pragma once
 
-#include "volk/volk.h"
-
-#include "Core/pch.h"
-
 namespace cgs::graphics::rhi
 {
-    class PhysicalDevice;
+    class PhysicalDeviceGroup;
 
 	class Instance final
 	{
@@ -35,12 +31,12 @@ namespace cgs::graphics::rhi
 	private:
 		void createInstance(CreateInfo& createInfo) noexcept;
 		void createDebugUtilsMessenger(CreateInfo& createInfo) noexcept;
-		void createPhysicalDevices() noexcept;
+		void createPhysicalDeviceGroups() noexcept;
 
 	private:
 		[[maybe_unused]] cgs::core::Config& mConfig;
 		VkInstance mInstance;
-		std::vector<std::unique_ptr<PhysicalDevice>> mPhysicalDevices;
+		std::vector<std::unique_ptr<PhysicalDeviceGroup>> mPhysicalDeviceGroups;
 		VkDebugUtilsMessengerEXT mDebugUtilsMessenger; // Debug messenger for Vulkan validation layers
 	};
 }

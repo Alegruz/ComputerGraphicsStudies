@@ -1,20 +1,24 @@
 #pragma once
 
-#include "Graphics/RHI/Instance.h"
-
 namespace cgs::graphics
 {
-    struct RendererCreateInfo
-    {
-        cgs::core::Config::CreateInfo   ConfigCreateInfo; // Configuration for the renderer
-        cgs::core::ProjectInfo          ApplicationInfo;
-    };
-    
-	class Renderer
+	namespace rhi
+	{
+		class Instance;
+	}
+
+	class Renderer final
 	{
 	public:
+		struct CreateInfo final
+		{
+			cgs::core::Config::CreateInfo   ConfigCreateInfo; // Configuration for the renderer
+			cgs::core::ProjectInfo          ApplicationInfo;
+		};
+
+	public:
 		Renderer() = delete;
-		explicit Renderer(const RendererCreateInfo& createInfo) noexcept;
+		explicit Renderer(const CreateInfo& createInfo) noexcept;
 		~Renderer() noexcept;
 
 	private:

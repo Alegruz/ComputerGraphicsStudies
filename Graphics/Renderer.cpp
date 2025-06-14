@@ -1,10 +1,12 @@
+#include "Graphics/pch.h"
+
 #include "Graphics/Renderer.h"
 
 #include "Graphics/RHI/Instance.h"
 
 namespace cgs::graphics
 {
-	Renderer::Renderer(const RendererCreateInfo& createInfo) noexcept
+	Renderer::Renderer(const CreateInfo& createInfo) noexcept
 		: mConfig(createInfo.ConfigCreateInfo)
 		, mInstance()
 	{

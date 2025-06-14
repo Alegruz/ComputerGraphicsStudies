@@ -1,9 +1,5 @@
 #pragma once
 
-#include "volk/volk.h"
-
-#include "Core/pch.h"
-
 namespace cgs::graphics::rhi
 {
 	class Device;
@@ -13,7 +9,7 @@ namespace cgs::graphics::rhi
 	class PhysicalDevice final
 	{
 	public:
-		friend class Instance;
+		friend class PhysicalDeviceGroup;
 
 	public:
 		struct CreateInfo final

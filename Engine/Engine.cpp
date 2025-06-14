@@ -76,7 +76,7 @@ namespace cgs
             CGS_LOG_INFO("Using renderer configuration file: %s", rendererConfigFilePath.string().c_str());
         }
 
-        graphics::RendererCreateInfo rendererCreateInfo =
+        graphics::Renderer::CreateInfo rendererCreateInfo =
         {
             .ConfigCreateInfo = core::Config::CreateInfo
             {
