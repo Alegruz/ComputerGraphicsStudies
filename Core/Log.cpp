@@ -12,23 +12,38 @@ namespace cgs::core
         {
             return;
         }
+        // ANSI color codes
+        constexpr const char* RESET   = "\033[0m";
+        constexpr const char* INFO    = "\033[36m";  // Cyan
+        constexpr const char* WARNING = "\033[33m";  // Yellow
+        constexpr const char* ERROR   = "\033[31m";  // Red
+        constexpr const char* DEBUG   = "\033[35m";  // Magenta
+        constexpr const char* CRITICAL= "\033[41;97m"; // White on Red background
+
+        const char* color = RESET;
+        const char* prefix = "";
 
         switch (logLevel)
         {
         case eLogLevel::Info:
-            std::cout << "[INFO] ";
+            color = INFO;
+            prefix = "[I]";
             break;
         case eLogLevel::Warning:
-            std::cout << "[WARNING] ";
+            color = WARNING;
+            prefix = "[W]";
             break;
         case eLogLevel::Error:
-            std::cout << "[ERROR] ";
+            color = ERROR;
+            prefix = "[E]";
             break;
         case eLogLevel::Debug:
-            std::cout << "[DEBUG] ";
+            color = DEBUG;
+            prefix = "[D]";
             break;
         case eLogLevel::Critical:
-            std::cout << "[CRITICAL] ";
+            color = CRITICAL;
+            prefix = "[C]";
             break;
         default:
             DEBUG_BREAK();
@@ -41,6 +56,6 @@ namespace cgs::core
         vsnprintf(buffer, sizeof(buffer), format, args);
         va_end(args);
 
-        std::cout << fileName << ":" << lineNumber << " (" << functionName << "): " << buffer << '\n';
+        std::cout << color << prefix << " " << fileName << ":" << lineNumber << " (" << functionName << "): " << buffer << RESET << '\n';
     }
 } // namespace cgs::core
