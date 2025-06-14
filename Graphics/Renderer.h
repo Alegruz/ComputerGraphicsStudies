@@ -11,7 +11,7 @@ namespace cgs::graphics
 	public:
 		Renderer() = delete;
 		explicit Renderer(const RendererCreateInfo& createInfo) noexcept;
-		CGS_INLINE constexpr ~Renderer() noexcept = default;
+		CGS_INLINE ~Renderer() noexcept = default;
 
 	private:
 		rhi::Instance mInstance;

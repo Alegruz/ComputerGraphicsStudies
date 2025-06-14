@@ -1,5 +1,6 @@
 #include "Core/Window.h"
 
+#if defined(CGS_WIN32)
 #include <iostream>
 
 namespace cgs::core
@@ -132,3 +133,4 @@ namespace cgs::core
         }
     }
 }
+#endif // defined(CGS_WIN32)

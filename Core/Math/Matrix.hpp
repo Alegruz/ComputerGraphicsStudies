@@ -10,13 +10,13 @@
 
 namespace cgs::core::math
 {
-	template<CArithmeticType ArithmeticType = float, uint16_t ROW_SIZE = 4, uint16_t COLUMN_SIZE = 4, eMatrixMajorType MATRIX_MAJOR_TYPE = eMatrixMajorType::COLUMN>
+	template<CArithmeticType ArithmeticType, uint16_t ROW_SIZE, uint16_t COLUMN_SIZE, eMatrixMajorType MATRIX_MAJOR_TYPE>
     CGS_INLINE constexpr Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE>::Matrix() noexcept
         : mData{ 0, }
     {
     }
 
-	template<CArithmeticType ArithmeticType = float, uint16_t ROW_SIZE = 4, uint16_t COLUMN_SIZE = 4, eMatrixMajorType MATRIX_MAJOR_TYPE = eMatrixMajorType::COLUMN>
+	template<CArithmeticType ArithmeticType, uint16_t ROW_SIZE, uint16_t COLUMN_SIZE, eMatrixMajorType MATRIX_MAJOR_TYPE>
     CGS_INLINE constexpr const ArithmeticType& Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE>::At(const uint16_t rowIndex, const uint16_t columnIndex) const noexcept
     {
         assert(rowIndex < ROW_SIZE);
@@ -31,7 +31,7 @@ namespace cgs::core::math
         }
     }
 
-	template<CArithmeticType ArithmeticType = float, uint16_t ROW_SIZE = 4, uint16_t COLUMN_SIZE = 4, eMatrixMajorType MATRIX_MAJOR_TYPE = eMatrixMajorType::COLUMN>
+	template<CArithmeticType ArithmeticType, uint16_t ROW_SIZE, uint16_t COLUMN_SIZE, eMatrixMajorType MATRIX_MAJOR_TYPE>
     CGS_INLINE constexpr ArithmeticType& Matrix<ArithmeticType, ROW_SIZE, COLUMN_SIZE, MATRIX_MAJOR_TYPE>::At(const uint16_t rowIndex, const uint16_t columnIndex) noexcept
     {
         assert(rowIndex < ROW_SIZE);

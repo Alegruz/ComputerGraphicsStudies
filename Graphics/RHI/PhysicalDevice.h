@@ -28,7 +28,7 @@ namespace cgs::graphics::rhi
 		~PhysicalDevice() noexcept;
 
 		PhysicalDevice& operator=(const PhysicalDevice&) = delete;
-		PhysicalDevice& operator=(PhysicalDevice&&) noexcept = default;
+		PhysicalDevice& operator=(PhysicalDevice&&) noexcept = delete;
 
 		float EvaluateScore() const noexcept;
 

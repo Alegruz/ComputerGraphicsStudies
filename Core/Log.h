@@ -40,10 +40,10 @@ namespace cgs::core
     };
 
 #define CGS_LOG(level, message) \
-    cgs::core::Log::GetInstance().Print(cgs::core::Log::eLogLevel::##level, __FILE__, __LINE__, __FUNCTION__, message)
-#define CGS_LOG_INFO(message) CGS_LOG(Info, message)
-#define CGS_LOG_WARNING(message) CGS_LOG(Warning, message); DEBUG_BREAK()
-#define CGS_LOG_ERROR(message) CGS_LOG(Error, message); DEBUG_BREAK()
-#define CGS_LOG_DEBUG(message) CGS_LOG(Debug, message)
-#define CGS_LOG_CRITICAL(message) CGS_LOG(Critical, message);   DEBUG_BREAK()
+    cgs::core::Log::GetInstance().Print(level, __FILE__, __LINE__, __FUNCTION__, message)
+#define CGS_LOG_INFO(message) CGS_LOG(cgs::core::Log::eLogLevel::Info, message)
+#define CGS_LOG_WARNING(message) CGS_LOG(cgs::core::Log::eLogLevel::Warning, message); DEBUG_BREAK()
+#define CGS_LOG_ERROR(message) CGS_LOG(cgs::core::Log::eLogLevel::Error, message); DEBUG_BREAK()
+#define CGS_LOG_DEBUG(message) CGS_LOG(cgs::core::Log::eLogLevel::Debug, message)
+#define CGS_LOG_CRITICAL(message) CGS_LOG(cgs::core::Log::eLogLevel::Critical, message);   DEBUG_BREAK()
 }

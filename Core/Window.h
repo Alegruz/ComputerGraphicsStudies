@@ -1,12 +1,16 @@
 #pragma once
 
+#if defined(CGS_WIN32)
 #define UNICODE
 #include <windows.h>
+#elif defined(CGS_UNIX)
+#endif // defined(CGS_WIN32)
 
 #include "Core/pch.h"
 
 namespace cgs::core
 {
+#if defined(CGS_WIN32)
 	class WindowWin32
 	{
     public:
@@ -27,4 +31,26 @@ namespace cgs::core
         HMENU           mhMenu;
         RECT            mRect;
 	};
+#elif defined(CGS_UNIX)
+    // Placeholder for Unix implementation
+    class WindowUnix
+    {
+    public:
+        WindowUnix() = delete;
+        explicit WindowUnix(const ProjectInfo& projectInfo) noexcept;
+
+        CGS_INLINE constexpr void* GetDisplay() const noexcept { return nullptr; } // Placeholder
+        CGS_INLINE constexpr void* GetWindow() const noexcept { return nullptr; } // Placeholder
+    };
+#else
+#error "Unsupported platform for Window implementation"
+#endif // defined(CGS_WIN32)
+
+#if defined(CGS_WIN32)
+    using Window = WindowWin32;
+#elif defined(CGS_UNIX)
+    using Window = WindowUnix;
+#else
+#error "Unsupported platform for Window implementation"
+#endif // defined(CGS_WIN32)
 }
