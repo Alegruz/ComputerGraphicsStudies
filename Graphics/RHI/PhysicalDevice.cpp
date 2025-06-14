@@ -11,7 +11,7 @@ namespace cgs::graphics::rhi
     {
         assert(mPhysicalDevice != VK_NULL_HANDLE);
 
-        
+        PrintProperties();
     }
 
     PhysicalDevice::~PhysicalDevice() noexcept
@@ -55,22 +55,22 @@ namespace cgs::graphics::rhi
 
     void PhysicalDevice::PrintProperties() const noexcept
     {
-        VkPhysicalDeviceProperties properties;
-        vkGetPhysicalDeviceProperties(mPhysicalDevice, &properties);
+        VkPhysicalDeviceProperties2 properties;
+        vkGetPhysicalDeviceProperties2(mPhysicalDevice, &properties);
         printDeviceProperties(properties);
     }
 
-    void PhysicalDevice::printDeviceProperties(const VkPhysicalDeviceProperties& properties) noexcept
+    void PhysicalDevice::printDeviceProperties(const VkPhysicalDeviceProperties2& properties) noexcept
     {
         CGS_LOG_INFO("Physical Device Properties:");
-        CGS_LOG_INFO("\tAPI Version: %u.%u.%u.%u", VK_API_VERSION_VARIANT(properties.apiVersion),
-                     VK_API_VERSION_MAJOR(properties.apiVersion),
-                     VK_API_VERSION_MINOR(properties.apiVersion),
-                     VK_API_VERSION_PATCH(properties.apiVersion));
-        CGS_LOG_INFO("\tDriver Version: %u", properties.driverVersion);
-        CGS_LOG_INFO("\tVendor ID: %u", properties.vendorID);
-        CGS_LOG_INFO("\tDevice ID: %u", properties.deviceID);
-        CGS_LOG_INFO("\tDevice Type: %u", static_cast<int>(properties.deviceType));
-        CGS_LOG_INFO("\tDevice Name: %s", properties.deviceName);
+        CGS_LOG_INFO("\tAPI Version: %u.%u.%u.%u", VK_API_VERSION_VARIANT(properties.properties.apiVersion),
+                     VK_API_VERSION_MAJOR(properties.properties.apiVersion),
+                     VK_API_VERSION_MINOR(properties.properties.apiVersion),
+                     VK_API_VERSION_PATCH(properties.properties.apiVersion));
+        CGS_LOG_INFO("\tDriver Version: %u", properties.properties.driverVersion);
+        CGS_LOG_INFO("\tVendor ID: %u", properties.properties.vendorID);
+        CGS_LOG_INFO("\tDevice ID: %u", properties.properties.deviceID);
+        CGS_LOG_INFO("\tDevice Type: %u", static_cast<int>(properties.properties.deviceType));
+        CGS_LOG_INFO("\tDevice Name: %s", properties.properties.deviceName);
     }
 }

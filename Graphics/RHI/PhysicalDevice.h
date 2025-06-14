@@ -35,7 +35,7 @@ namespace cgs::graphics::rhi
 		void PrintProperties() const noexcept;
 
 	private:
-		static void printDeviceProperties(const VkPhysicalDeviceProperties &properties) noexcept;
+		static void printDeviceProperties(const VkPhysicalDeviceProperties2 &properties) noexcept;
 
 	private:
 		Instance&				mInstance;
