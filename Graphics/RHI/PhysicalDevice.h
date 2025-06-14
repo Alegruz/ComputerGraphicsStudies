@@ -108,8 +108,6 @@ namespace cgs::graphics::rhi
 		default:
 			return "Unknown Vendor ID";
 		}
-
-		return nullptr; // Fallback in case no match is found
 	}
 
 	CGS_INLINE constexpr const char* PhysicalDevice::getTypeName(const VkPhysicalDeviceType deviceType) noexcept
@@ -130,8 +128,6 @@ namespace cgs::graphics::rhi
 			CGS_LOG_ERROR("Unknown physical device type: %d", static_cast<int>(deviceType));
 			return "Unknown Device Type";
 		}
-
-		return nullptr; // Fallback in case no match is found
 	}
 
 	CGS_INLINE constexpr const char* PhysicalDevice::getDriverIdName(const VkDriverId driverId) noexcept
@@ -199,7 +195,5 @@ namespace cgs::graphics::rhi
 		}
 			return "Unknown Driver ID";
 		}
-
-		return nullptr; // Fallback in case no match is found
 	}
 }

@@ -86,7 +86,8 @@ namespace cgs::core
             {
                 // Try to detect boolean
                 std::string lowerValue = value;
-                std::transform(lowerValue.begin(), lowerValue.end(), lowerValue.begin(), ::tolower);
+                std::transform(lowerValue.begin(), lowerValue.end(), lowerValue.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
                 if (lowerValue == "true" || lowerValue == "false")
                 {
                     mBoolSettings[key] = (lowerValue == "true");
