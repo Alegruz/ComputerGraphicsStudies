@@ -25,6 +25,35 @@
             ],
             "problemMatcher": ["$gcc"],
             "group": "build"
+        },
+        {
+            "label": "CMake Build (clang-Debug)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/out/build/clang-debug"
+            ],
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "CMake Build (clang-Release)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/out/build/clang-release"
+            ],
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": "build"
         }
     ]
 }

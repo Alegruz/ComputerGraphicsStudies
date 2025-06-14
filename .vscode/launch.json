@@ -4,7 +4,7 @@
         {
             "type": "cppvsdbg",
             "request": "launch",
-            "name": "Debug RendererMain (Debug)",
+            "name": "Debug RendererMain (x64-Debug)",
             "program": "${workspaceFolder}/out/build/x64-debug/RendererMain.exe",
             "cwd": "${workspaceFolder}",
             "stopAtEntry": true,
@@ -13,11 +13,29 @@
         {
             "type": "cppvsdbg",
             "request": "launch",
-            "name": "Debug RendererMain (Release)",
+            "name": "Debug RendererMain (x64-Release)",
             "program": "${workspaceFolder}/out/build/x64-release/RendererMain.exe",
             "cwd": "${workspaceFolder}",
             "stopAtEntry": true,
             "preLaunchTask": "CMake Build (x64-Release)"
+        },
+        {
+            "type": "cppdbg",
+            "request": "launch",
+            "name": "Debug RendererMain (clang-Debug)",
+            "program": "${workspaceFolder}/out/build/clang-debug/RendererMain",
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": true,
+            "preLaunchTask": "CMake Build (clang-Debug)"
+        },
+        {
+            "type": "cppdbg",
+            "request": "launch",
+            "name": "Debug RendererMain (clang-Release)",
+            "program": "${workspaceFolder}/out/build/clang-release/RendererMain",
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": true,
+            "preLaunchTask": "CMake Build (clang-Release)"
         }
     ]
 }
