@@ -4,8 +4,8 @@
         {
             "type": "cppvsdbg",
             "request": "launch",
-            "name": "Debug RendererMain (x64-Debug)",
-            "program": "${workspaceFolder}/out/build/x64-debug/RendererMain.exe",
+            "name": "Debug RendererApp (x64-Debug)",
+            "program": "${workspaceFolder}/out/build/x64-debug/RendererApp.exe",
             "cwd": "${workspaceFolder}",
             "stopAtEntry": true,
             "preLaunchTask": "CMake Build (x64-Debug)"
@@ -13,8 +13,8 @@
         {
             "type": "cppvsdbg",
             "request": "launch",
-            "name": "Debug RendererMain (x64-Release)",
-            "program": "${workspaceFolder}/out/build/x64-release/RendererMain.exe",
+            "name": "Debug RendererApp (x64-Release)",
+            "program": "${workspaceFolder}/out/build/x64-release/RendererApp.exe",
             "cwd": "${workspaceFolder}",
             "stopAtEntry": true,
             "preLaunchTask": "CMake Build (x64-Release)"
@@ -22,8 +22,8 @@
         {
             "type": "cppdbg",
             "request": "launch",
-            "name": "Debug RendererMain (clang-Debug)",
-            "program": "${workspaceFolder}/out/build/clang-debug/RendererMain",
+            "name": "Debug RendererApp (clang-Debug)",
+            "program": "${workspaceFolder}/out/build/clang-debug/RendererApp",
             "cwd": "${workspaceFolder}",
             "stopAtEntry": true,
             "preLaunchTask": "CMake Build (clang-Debug)"
@@ -31,8 +31,8 @@
         {
             "type": "cppdbg",
             "request": "launch",
-            "name": "Debug RendererMain (clang-Release)",
-            "program": "${workspaceFolder}/out/build/clang-release/RendererMain",
+            "name": "Debug RendererApp (clang-Release)",
+            "program": "${workspaceFolder}/out/build/clang-release/RendererApp",
             "cwd": "${workspaceFolder}",
             "stopAtEntry": true,
             "preLaunchTask": "CMake Build (clang-Release)"

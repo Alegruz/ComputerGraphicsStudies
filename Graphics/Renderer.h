@@ -4,16 +4,21 @@
 
 namespace cgs::graphics
 {
-    struct RendererCreateInfo;
+    struct RendererCreateInfo
+    {
+        cgs::core::Config::CreateInfo   ConfigCreateInfo; // Configuration for the renderer
+        cgs::core::ProjectInfo          ApplicationInfo;
+    };
     
 	class Renderer
 	{
 	public:
 		Renderer() = delete;
 		explicit Renderer(const RendererCreateInfo& createInfo) noexcept;
-		CGS_INLINE ~Renderer() noexcept = default;
+		~Renderer() noexcept;
 
 	private:
-		rhi::Instance mInstance;
+		cgs::core::Config mConfig; // Configuration for the renderer
+		std::unique_ptr<rhi::Instance> mInstance;
 	};
 }

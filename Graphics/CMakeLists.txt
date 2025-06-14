@@ -8,6 +8,7 @@ target_sources(Graphics
         "${CMAKE_CURRENT_SOURCE_DIR}/RHI/Device.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/RHI/Instance.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/RHI/PhysicalDevice.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/RHI/QueueFamily.cpp"
         "${CMAKE_SOURCE_DIR}/External/volk/volk.c"
 )
 

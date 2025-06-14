@@ -8,6 +8,7 @@ namespace cgs::graphics::rhi
 {
 	class Device;
 	class Instance;
+	class QueueFamily;
 
 	class PhysicalDevice final
 	{
@@ -64,7 +65,8 @@ namespace cgs::graphics::rhi
 		Instance&				mInstance;
 		VkPhysicalDevice		mPhysicalDevice;
 		Properties				mProperties; // Properties of the physical device
-		std::vector<VkQueueFamilyProperties2>	mQueueFamilyPropertiesList; // List of queue family properties
+
+		std::vector<std::unique_ptr<QueueFamily>> mQueueFamilies; // Queue families supported by this physical device
 		std::unique_ptr<Device>	mLogicalDevice; // Logical device created from this physical device, if any
 	};
 

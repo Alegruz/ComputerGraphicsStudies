@@ -1,12 +1,17 @@
 #pragma once
 
+#include <algorithm>
 #include <cassert>
+#include <concepts>
 #include <cstdarg>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <queue>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #if defined(CGS_COMPILER_MSVC)
@@ -40,6 +45,7 @@
 #endif	// NOT defined(Renderer_EXPORTS)
 
 #include "Core/Log.h"
+#include "Core/Config.h"
 
 namespace cgs
 {

@@ -8,7 +8,11 @@ namespace cgs::graphics::rhi
 {
     class PhysicalDevice;
 
-    struct InstanceCreateInfo;
+	struct InstanceCreateInfo
+	{
+		cgs::core::ProjectInfo ApplicationInfo; // Information about the application
+		cgs::core::ProjectInfo EngineInfo;
+	};
 
 	class Instance final
 	{

@@ -53,4 +53,5 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 
 add_subdirectory(Core)
 add_subdirectory(Graphics)
-add_subdirectory(Application)
+add_subdirectory(Engine)
+add_subdirectory(Renderer)

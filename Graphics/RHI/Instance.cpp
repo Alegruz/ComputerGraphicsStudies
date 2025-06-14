@@ -8,8 +8,6 @@
 
 #include "Core/pch.h"
 
-#include "Graphics/Common.h"
-
 #include "Graphics/RHI/PhysicalDevice.h"
 
 namespace cgs::graphics::rhi

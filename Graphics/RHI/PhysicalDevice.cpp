@@ -2,6 +2,7 @@
 
 #include "Graphics/RHI/Device.h"
 #include "Graphics/RHI/Instance.h"
+#include "Graphics/RHI/QueueFamily.h"
 
 namespace cgs::graphics::rhi
 {
@@ -18,9 +19,19 @@ namespace cgs::graphics::rhi
 
         uint32_t queueFamilyCount = 0;
         vkGetPhysicalDeviceQueueFamilyProperties2(mPhysicalDevice, &queueFamilyCount, nullptr);
-        mQueueFamilyPropertiesList.resize(queueFamilyCount);
-        vkGetPhysicalDeviceQueueFamilyProperties2(mPhysicalDevice, &queueFamilyCount, mQueueFamilyPropertiesList.data());
+        std::vector<VkQueueFamilyProperties2> queueFamilyPropertiesList(queueFamilyCount, { .sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2 });
+        vkGetPhysicalDeviceQueueFamilyProperties2(mPhysicalDevice, &queueFamilyCount, queueFamilyPropertiesList.data());
         CGS_LOG_INFO("Physical device %s has %u queue families.", GetName(), queueFamilyCount);
+
+        for (uint32_t i = 0; i < queueFamilyCount; ++i)
+        {
+            QueueFamily::CreateInfo queueFamilyCreateInfo =
+            {
+                .RhiPhysicalDevice = *this,
+                .QueueFamilyProperties = queueFamilyPropertiesList[i],
+            };
+            mQueueFamilies.emplace_back(std::make_unique<QueueFamily>(queueFamilyCreateInfo));
+        }
     }
 
     PhysicalDevice::~PhysicalDevice() noexcept
