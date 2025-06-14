@@ -36,6 +36,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name : Initialize Submodules
+        # If your project uses git submodules, you can initialize them with the following command.
+        # See https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/using-git-submodules-in-a-workflow
+        run: git submodule update --init --recursive
+
       - name: Configure CMake
         run: cmake -B ${{ env.build }}
 
