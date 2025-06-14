@@ -8,10 +8,19 @@ namespace cgs::graphics::rhi
     PhysicalDevice::PhysicalDevice(const CreateInfo& createInfo) noexcept
         : mInstance(createInfo.RhiInstance)
         , mPhysicalDevice(createInfo.PhysicalDevice)
+        , mProperties()
+        , mLogicalDevice(nullptr)
     {
         assert(mPhysicalDevice != VK_NULL_HANDLE);
+        vkGetPhysicalDeviceProperties2(mPhysicalDevice, const_cast<VkPhysicalDeviceProperties2*>(&mProperties.PhysicalDeviceProperties));
 
         PrintProperties();
+
+        uint32_t queueFamilyCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties2(mPhysicalDevice, &queueFamilyCount, nullptr);
+        mQueueFamilyPropertiesList.resize(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties2(mPhysicalDevice, &queueFamilyCount, mQueueFamilyPropertiesList.data());
+        CGS_LOG_INFO("Physical device has %u queue families.", queueFamilyCount);
     }
 
     PhysicalDevice::~PhysicalDevice() noexcept
@@ -55,22 +64,33 @@ namespace cgs::graphics::rhi
 
     void PhysicalDevice::PrintProperties() const noexcept
     {
-        VkPhysicalDeviceProperties2 properties;
-        vkGetPhysicalDeviceProperties2(mPhysicalDevice, &properties);
-        printDeviceProperties(properties);
+        printDeviceProperties(mProperties);
     }
 
-    void PhysicalDevice::printDeviceProperties(const VkPhysicalDeviceProperties2& properties) noexcept
+    void PhysicalDevice::printDeviceProperties(const Properties& properties) noexcept
     {
-        CGS_LOG_INFO("Physical Device Properties:");
-        CGS_LOG_INFO("\tAPI Version: %u.%u.%u.%u", VK_API_VERSION_VARIANT(properties.properties.apiVersion),
-                     VK_API_VERSION_MAJOR(properties.properties.apiVersion),
-                     VK_API_VERSION_MINOR(properties.properties.apiVersion),
-                     VK_API_VERSION_PATCH(properties.properties.apiVersion));
-        CGS_LOG_INFO("\tDriver Version: %u", properties.properties.driverVersion);
-        CGS_LOG_INFO("\tVendor ID: %u", properties.properties.vendorID);
-        CGS_LOG_INFO("\tDevice ID: %u", properties.properties.deviceID);
-        CGS_LOG_INFO("\tDevice Type: %u", static_cast<int>(properties.properties.deviceType));
-        CGS_LOG_INFO("\tDevice Name: %s", properties.properties.deviceName);
+        CGS_LOG_INFO("Physical Device Properties:"
+                    "\n\tAPI Version: %u.%u.%u.%u"
+                    "\n\tDriver Version: %u"
+                    "\n\tVendor ID: %s"
+                    "\n\tDevice ID: %u"
+                    "\n\tDevice Type: %s"
+                    "\n\tDevice Name: %s"
+                    "\n\tDriver ID: %s"
+                    "\n\tDriver Name: %s"
+                    "\n\tDriver Info: %s"
+                    , VK_API_VERSION_VARIANT(properties.PhysicalDeviceProperties.properties.apiVersion)
+                    , VK_API_VERSION_MAJOR(properties.PhysicalDeviceProperties.properties.apiVersion)
+                    , VK_API_VERSION_MINOR(properties.PhysicalDeviceProperties.properties.apiVersion)
+                    , VK_API_VERSION_PATCH(properties.PhysicalDeviceProperties.properties.apiVersion)
+                    , properties.PhysicalDeviceProperties.properties.driverVersion
+                    , getVendorIdName(static_cast<VkVendorId>(properties.PhysicalDeviceProperties.properties.vendorID))
+                    , properties.PhysicalDeviceProperties.properties.deviceID
+                    , getTypeName(properties.PhysicalDeviceProperties.properties.deviceType)
+                    , properties.PhysicalDeviceProperties.properties.deviceName
+                    , getDriverIdName(properties.Vulkan12Properties.driverID)
+                    , properties.Vulkan12Properties.driverName
+                    , properties.Vulkan12Properties.driverInfo
+                );
     }
 }
