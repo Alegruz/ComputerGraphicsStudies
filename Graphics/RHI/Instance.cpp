@@ -224,6 +224,7 @@ namespace cgs::graphics::rhi
 		vr = vkEnumerateInstanceVersion(&apiVersion);
 		assert(vr == VK_SUCCESS);
 		std::cout << "Vulkan Instance Version: " << VK_API_VERSION_VARIANT(apiVersion) << '.' << VK_API_VERSION_MAJOR(apiVersion) << '.' << VK_API_VERSION_MINOR(apiVersion) << '.' << VK_API_VERSION_PATCH(apiVersion) << '\n';
+		assert(apiVersion >= VK_API_VERSION_1_3);
 
 		VkApplicationInfo applicationInfo =
 		{
