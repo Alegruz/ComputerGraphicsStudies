@@ -1,5 +1,6 @@
 #include "Graphics/RHI/PhysicalDevice.h"
 
+#include "Graphics/RHI/Device.h"
 #include "Graphics/RHI/Instance.h"
 
 namespace cgs::graphics::rhi
@@ -9,10 +10,19 @@ namespace cgs::graphics::rhi
         , mPhysicalDevice(createInfo.PhysicalDevice)
     {
         assert(mPhysicalDevice != VK_NULL_HANDLE);
+
+        
     }
 
     PhysicalDevice::~PhysicalDevice() noexcept
     {
+        if (mLogicalDevice != nullptr)
+        {
+            vkDestroyDevice(mLogicalDevice->mDevice, nullptr);
+            mLogicalDevice->mDevice = VK_NULL_HANDLE;
+            mLogicalDevice.reset();
+        }
+
         mPhysicalDevice = VK_NULL_HANDLE;
     }
 
@@ -41,5 +51,26 @@ namespace cgs::graphics::rhi
 
         score += deviceTypeScore;
         return score;
+    }
+
+    void PhysicalDevice::PrintProperties() const noexcept
+    {
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(mPhysicalDevice, &properties);
+        printDeviceProperties(properties);
+    }
+
+    void PhysicalDevice::printDeviceProperties(const VkPhysicalDeviceProperties& properties) noexcept
+    {
+        CGS_LOG_INFO("Physical Device Properties:");
+        CGS_LOG_INFO("\tAPI Version: %u.%u.%u.%u", VK_API_VERSION_VARIANT(properties.apiVersion),
+                     VK_API_VERSION_MAJOR(properties.apiVersion),
+                     VK_API_VERSION_MINOR(properties.apiVersion),
+                     VK_API_VERSION_PATCH(properties.apiVersion));
+        CGS_LOG_INFO("\tDriver Version: %u", properties.driverVersion);
+        CGS_LOG_INFO("\tVendor ID: %u", properties.vendorID);
+        CGS_LOG_INFO("\tDevice ID: %u", properties.deviceID);
+        CGS_LOG_INFO("\tDevice Type: %u", static_cast<int>(properties.deviceType));
+        CGS_LOG_INFO("\tDevice Name: %s", properties.deviceName);
     }
 }

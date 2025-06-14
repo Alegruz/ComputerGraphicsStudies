@@ -6,6 +6,7 @@
 
 namespace cgs::graphics::rhi
 {
+	class Device;
 	class Instance;
 
 	class PhysicalDevice final
@@ -29,11 +30,16 @@ namespace cgs::graphics::rhi
 
 		PhysicalDevice& operator=(const PhysicalDevice&) = delete;
 		PhysicalDevice& operator=(PhysicalDevice&&) noexcept = delete;
-
+		
 		float EvaluateScore() const noexcept;
+		void PrintProperties() const noexcept;
 
 	private:
-		Instance&			mInstance;
-		VkPhysicalDevice	mPhysicalDevice;
+		static void printDeviceProperties(const VkPhysicalDeviceProperties &properties) noexcept;
+
+	private:
+		Instance&				mInstance;
+		VkPhysicalDevice		mPhysicalDevice;
+		std::unique_ptr<Device>	mLogicalDevice; // Logical device created from this physical device, if any
 	};
 }

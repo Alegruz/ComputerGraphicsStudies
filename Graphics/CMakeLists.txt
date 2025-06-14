@@ -5,6 +5,7 @@ add_library(Graphics STATIC)
 target_sources(Graphics
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/Renderer.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/RHI/Device.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/RHI/Instance.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/RHI/PhysicalDevice.cpp"
         "${CMAKE_SOURCE_DIR}/External/volk/volk.c"
