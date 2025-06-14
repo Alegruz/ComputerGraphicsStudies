@@ -213,7 +213,10 @@ namespace cgs::graphics::rhi
 	}
     
 	Instance::Instance(const InstanceCreateInfo& createInfo) noexcept
-		: mInstance(VK_NULL_HANDLE)
+		: mConfig(createInfo.Config)
+		, mInstance(VK_NULL_HANDLE)
+		, mPhysicalDevices()
+		, mDebugUtilsMessenger(VK_NULL_HANDLE)
 	{
 		VkResult vr = volkInitialize();
 		assert(vr == VK_SUCCESS);
@@ -305,6 +308,24 @@ namespace cgs::graphics::rhi
 
 		volkLoadInstance(mInstance);
 
+		bool bIsDebugLayerEnabled = false;
+#if defined(CGS_DEBUG)
+		bIsDebugLayerEnabled = true;
+#else  // defined(CGS_DEBUG)
+		bool bIsDebugLayerEnabledInConfig = false;
+		const bool result = mConfig.GetSetting("EnableDebugUtilsMessenger", bIsDebugLayerEnabledInConfig);
+		if (result == true)
+		{
+			bIsDebugLayerEnabled = bIsDebugLayerEnabledInConfig;
+		}
+#endif // defined(CGS_DEBUG)
+
+		if (bIsDebugLayerEnabled)
+		{
+			vr = vkCreateDebugUtilsMessengerEXT(mInstance, &debugUtilsMessengerCreateInfo, nullptr, &mDebugUtilsMessenger);
+			assert(vr == VK_SUCCESS && mDebugUtilsMessenger != VK_NULL_HANDLE);
+		}
+
 		uint32_t physicalDeviceCount = 0;
 		vr = vkEnumeratePhysicalDevices(mInstance, &physicalDeviceCount, nullptr);
 		assert(vr == VK_SUCCESS && physicalDeviceCount > 0);
@@ -350,6 +371,12 @@ namespace cgs::graphics::rhi
 		// Destroy the debug utils messenger if it was created.
 		// vkDestroyDebugUtilsMessengerEXT(mInstance, mDebugUtilsMessenger, nullptr);
 		// mDebugUtilsMessenger = VK_NULL_HANDLE;
+
+		if (mDebugUtilsMessenger != VK_NULL_HANDLE)
+		{
+			vkDestroyDebugUtilsMessengerEXT(mInstance, mDebugUtilsMessenger, nullptr);
+			mDebugUtilsMessenger = VK_NULL_HANDLE;
+		}
 
 		// Destroy the instance.
 		if(mInstance != VK_NULL_HANDLE)

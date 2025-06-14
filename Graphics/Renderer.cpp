@@ -56,6 +56,7 @@ namespace cgs::graphics
 
 		rhi::InstanceCreateInfo instanceCreateInfo =
 		{
+			.Config = mConfig,
 			.ApplicationInfo = createInfo.ApplicationInfo,
 			.EngineInfo =
 			{

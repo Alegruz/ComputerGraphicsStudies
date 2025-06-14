@@ -10,6 +10,7 @@ namespace cgs::graphics::rhi
 
 	struct InstanceCreateInfo
 	{
+		cgs::core::Config& Config; // Reference to the configuration object
 		cgs::core::ProjectInfo ApplicationInfo; // Information about the application
 		cgs::core::ProjectInfo EngineInfo;
 	};
@@ -27,7 +28,9 @@ namespace cgs::graphics::rhi
 		~Instance() noexcept;
 
 	private:
-		VkInstance	mInstance;
-        std::vector<std::unique_ptr<PhysicalDevice>> mPhysicalDevices;
+		[[maybe_unused]] cgs::core::Config& mConfig;
+		VkInstance mInstance;
+		std::vector<std::unique_ptr<PhysicalDevice>> mPhysicalDevices;
+		VkDebugUtilsMessengerEXT mDebugUtilsMessenger; // Debug messenger for Vulkan validation layers
 	};
 }
