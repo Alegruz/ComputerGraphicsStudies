@@ -53,6 +53,7 @@ namespace cgs::graphics::rhi
 		void PrintProperties() const noexcept;
 
 		constexpr const char* GetName() const noexcept;
+		constexpr const std::vector<std::unique_ptr<QueueFamily>> &GetQueueFamilies() const noexcept;
 
 	private:
 		static void printDeviceProperties(const Properties &properties) noexcept;
@@ -77,6 +78,11 @@ namespace cgs::graphics::rhi
 	CGS_INLINE constexpr const char* PhysicalDevice::GetName() const noexcept
 	{
 		return mProperties.PhysicalDeviceProperties.properties.deviceName;
+	}
+
+	CGS_INLINE constexpr const std::vector<std::unique_ptr<QueueFamily>>& PhysicalDevice::GetQueueFamilies() const noexcept
+	{
+		return mQueueFamilies;
 	}
 
 	CGS_INLINE constexpr const char* PhysicalDevice::getVendorIdName(const VkVendorId vendorId) noexcept

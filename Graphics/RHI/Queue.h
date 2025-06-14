@@ -26,6 +26,9 @@ namespace cgs::graphics::rhi
         Queue& operator=(const Queue&) = delete;
         Queue& operator=(Queue&&) noexcept = delete;
 
+        void Reset() noexcept;
+        void Trim() noexcept;
+
     private:
         [[maybe_unused]] Device& mDevice; // Reference to the device this queue belongs to
         [[maybe_unused]] QueueFamily& mQueueFamily; // Reference to the queue family this queue belongs to

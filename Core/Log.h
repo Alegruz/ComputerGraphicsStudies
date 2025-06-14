@@ -20,10 +20,30 @@ namespace cgs::core
             static Log sInstance;
             return sInstance;
         }
+
+        static CGS_INLINE eLogLevel eLogLevelFromString(const char* logLevelStr) noexcept
+        {
+            if (strcmp(logLevelStr, "Info") == 0) return eLogLevel::Info;
+            if (strcmp(logLevelStr, "Warning") == 0) return eLogLevel::Warning;
+            if (strcmp(logLevelStr, "Error") == 0) return eLogLevel::Error;
+            if (strcmp(logLevelStr, "Debug") == 0) return eLogLevel::Debug;
+            if (strcmp(logLevelStr, "Critical") == 0) return eLogLevel::Critical;
+            return eLogLevel::Info; // Default to Info if no match
+        }
     
     public:
         void Print(const eLogLevel logLevel, const char* fileName, const uint32_t lineNumber, const char* functionName, const char* format, ...) const noexcept;
-    
+
+        CGS_INLINE constexpr void SetLogLevel(const eLogLevel logLevel) noexcept
+        {
+            mCurrentLogLevel = logLevel;
+        }
+
+        CGS_INLINE constexpr eLogLevel GetLogLevel() const noexcept
+        {
+            return mCurrentLogLevel;
+        }
+
     private:
         CGS_INLINE constexpr Log() noexcept
             : mCurrentLogLevel(eLogLevel::Info)

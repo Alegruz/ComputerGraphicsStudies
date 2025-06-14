@@ -59,6 +59,15 @@ namespace cgs
         CGS_LOG_INFO("Project Info - Name: %s, Version: %u", mProjectInfo.Name.c_str(), mProjectInfo.Version);
         CGS_LOG_INFO("Engine initialized with project: %s (Version: %u)", mProjectInfo.Name.c_str(), mProjectInfo.Version);
 
+        std::string minimumLogLevel;
+        result = mConfig.GetSetting("MinimumLogLevel", minimumLogLevel);
+        if (result == false)
+        {
+            minimumLogLevel = "Info"; // Default log level if not specified
+            mConfig.SetSetting("MinimumLogLevel", minimumLogLevel);
+        }
+        cgs::core::Log::GetInstance().SetLogLevel(cgs::core::Log::eLogLevelFromString(minimumLogLevel.c_str()));
+
         CGS_LOG_INFO("Creating Renderer...");
 
         // Create the renderer with the provided project information
