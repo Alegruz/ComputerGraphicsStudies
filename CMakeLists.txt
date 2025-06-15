@@ -51,6 +51,17 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 
+if(WIN32)
+    message(STATUS "Building Graphics on Windows")
+    set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_WIN32_KHR)
+elseif(UNIX)
+    message(STATUS "Building Graphics on Unix-like system")
+    set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_XLIB_KHR)
+endif()
+
+set(VULKAN_HEADERS_INSTALL_DIR "${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include")
+message(STATUS "volk: using VULKAN_HEADERS_INSTALL_DIR: ${VULKAN_HEADERS_INSTALL_DIR}")
+
 add_subdirectory(Core)
 add_subdirectory(Graphics)
 add_subdirectory(Engine)

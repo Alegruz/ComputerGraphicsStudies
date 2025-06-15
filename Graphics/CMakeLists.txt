@@ -19,17 +19,6 @@ target_include_directories(Graphics PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(Graphics PUBLIC ${CMAKE_SOURCE_DIR}/External)
 target_include_directories(Graphics PUBLIC ${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include)
 
-if(WIN32)
-    message(STATUS "Building Graphics on Windows")
-    set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_WIN32_KHR)
-elseif(UNIX)
-    message(STATUS "Building Graphics on Unix-like system")
-    set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_XLIB_KHR)
-endif()
-
-set(VULKAN_HEADERS_INSTALL_DIR "${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include")
-message(STATUS "volk: using VULKAN_HEADERS_INSTALL_DIR: ${VULKAN_HEADERS_INSTALL_DIR}")
-
 target_link_libraries(Graphics PUBLIC Core volk)
 target_compile_definitions(Graphics PRIVATE Graphics_EXPORTS)
 add_dependencies(Graphics Core)
