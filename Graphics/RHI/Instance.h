@@ -15,7 +15,20 @@ namespace cgs::graphics::rhi
 			cgs::core::ProjectInfo ApplicationInfo; // Information about the application
 			cgs::core::ProjectInfo EngineInfo;
 			uint32_t ApiVersion = VK_API_VERSION_1_3; // Vulkan API version to use, default is 1.3
-			VkDebugUtilsMessengerCreateInfoEXT DebugUtilsMessengerCreateInfo = { .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT, .pNext = nullptr };
+			VkDebugUtilsMessengerCreateInfoEXT DebugUtilsMessengerCreateInfo = 
+			{ 
+				.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT, 
+				.pNext = nullptr,
+				.flags = 0,
+				.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
+								   VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | 
+								   VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+				.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+							   VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | 
+							   VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+				.pfnUserCallback = DebugUtilsMessengerCallback,
+				.pUserData = nullptr
+			};
 		};
 
 	public:
