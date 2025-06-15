@@ -2,6 +2,8 @@ project(Engine LANGUAGES CXX)
 
 add_library(Engine STATIC)
 
+configure_cgs_target(Engine)
+
 target_sources(Engine
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/pch.cpp"

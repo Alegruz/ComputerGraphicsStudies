@@ -2,6 +2,8 @@ project(Graphics LANGUAGES CXX)
 
 add_library(Graphics STATIC)
 
+configure_cgs_target(Graphics)
+
 target_sources(Graphics
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/pch.cpp"
