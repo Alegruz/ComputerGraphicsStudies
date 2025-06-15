@@ -17,6 +17,19 @@ namespace cgs::graphics::rhi
 
     Device::~Device() noexcept
     {
+        // Destroy any command pools that were created by this device before
+        // tearing down the logical device. This ensures the pools are released
+        // with a valid device handle.
+        for (auto& commandPool : mCommandPools)
+        {
+            if (commandPool)
+            {
+                Destroy(*commandPool);
+            }
+        }
+
+        mCommandPools.clear();
+
         mPhysicalDevice.DestroyLogicalDevice(mDevice);
     }
 
