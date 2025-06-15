@@ -64,10 +64,10 @@ function(configure_cgs_target target)
     target_compile_options(${target} PRIVATE /W4 /WX /EHsc /wd4201)
   elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_definitions(${target} PRIVATE CGS_COMPILER_CLANG)
-    target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic -Wno-missing-field-initializers)
   elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_definitions(${target} PRIVATE CGS_COMPILER_GCC)
-    target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic -Wno-missing-field-initializers)
   endif()
 
   # Apply build-type-specific definitions to the target
