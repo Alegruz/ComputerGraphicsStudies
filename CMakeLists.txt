@@ -59,6 +59,8 @@ elseif(UNIX)
     set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_XLIB_KHR)
 endif()
 
+include_directories(${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include)
+
 set(VULKAN_HEADERS_INSTALL_DIR "${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include")
 message(STATUS "volk: using VULKAN_HEADERS_INSTALL_DIR: ${VULKAN_HEADERS_INSTALL_DIR}")
 
