@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <concepts>
+#include <cctype>
 #include <cstdarg>
 #include <cstdint>
 #include <cstring>
