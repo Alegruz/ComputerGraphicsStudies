@@ -88,7 +88,6 @@ namespace cgs::core
             }
         }
 
-        mRect;
         int x = CW_USEDEFAULT;
         int y = CW_USEDEFAULT;
 
