@@ -60,15 +60,21 @@ namespace cgs::graphics::rhi
         {
             case VK_PHYSICAL_DEVICE_TYPE_OTHER:
                 deviceTypeScore = 0.0f; // Lowest score for unknown devices.
+                break;
             case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
                 deviceTypeScore = 1.0f; // Integrated GPUs are generally less powerful.
+                break;
             case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
                 deviceTypeScore = 2.0f; // Discrete GPUs are typically more powerful.
+                break;
             case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
                 deviceTypeScore = 1.5f; // Virtual GPUs can vary in performance.
+                break;
             case VK_PHYSICAL_DEVICE_TYPE_CPU:
                 deviceTypeScore = 0.5f; // CPUs are not suitable for graphics tasks.
+                break;
         default:
+            CGS_LOG_ERROR("Unknown physical device type: %d", static_cast<int>(properties.deviceType));
             break;
         }
 
