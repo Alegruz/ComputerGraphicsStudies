@@ -95,4 +95,4 @@ namespace cgs::graphics::rhi
             mCommandPools.push_back(std::move(commandPool));
         }
     }
-} 
+}
