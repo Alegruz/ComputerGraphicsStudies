@@ -190,6 +190,11 @@ namespace cgs::graphics::rhi
 
 	constexpr void Instance::FilterMessages(bool& bInoutPrintMessage, const char* message) noexcept
 	{
+		if (!message)
+		{
+			return;
+		}
+
 		if (bInoutPrintMessage == true)
 		{
 			if (strstr(message, "#LLP_LAYER_3") != nullptr)
