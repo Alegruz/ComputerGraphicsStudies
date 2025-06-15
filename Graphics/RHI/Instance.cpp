@@ -215,7 +215,7 @@ namespace cgs::graphics::rhi
 		, mPhysicalDeviceGroups()
 		, mDebugUtilsMessenger(VK_NULL_HANDLE)
 	{
-		VkResult vr = volkInitialize();
+		[[maybe_unused]] VkResult vr = volkInitialize();
 		assert(vr == VK_SUCCESS);
 		
 		uint32_t apiVersion = 0;
@@ -254,7 +254,7 @@ namespace cgs::graphics::rhi
 
 	void Instance::createInstance(CreateInfo& createInfo) noexcept
 	{
-		VkResult vr = VK_SUCCESS;
+		[[maybe_unused]] VkResult vr = VK_SUCCESS;
 
 		VkApplicationInfo applicationInfo =
 		{
@@ -340,7 +340,7 @@ namespace cgs::graphics::rhi
 
 	void Instance::createDebugUtilsMessenger(CreateInfo& createInfo) noexcept
 	{
-		VkResult vr = VK_SUCCESS;
+		[[maybe_unused]] VkResult vr = VK_SUCCESS;
 
 		bool bIsDebugLayerEnabled = false;
 #if defined(CGS_DEBUG)
@@ -364,7 +364,7 @@ namespace cgs::graphics::rhi
 
 	void Instance::createPhysicalDeviceGroups() noexcept
 	{
-		VkResult vr = VK_SUCCESS;
+		[[maybe_unused]] VkResult vr = VK_SUCCESS;
 
 		uint32_t physicalDeviceGroupCount = 0;
 		vr = vkEnumeratePhysicalDeviceGroups(mInstance, &physicalDeviceGroupCount, nullptr);
