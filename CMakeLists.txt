@@ -25,6 +25,14 @@ set(VULKAN_HEADERS_INSTALL_DIR "${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include")
 add_subdirectory(External/volk)
 add_subdirectory(External/fltk)
 
+if(TARGET fltk)
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(fltk PRIVATE /wd4100 /wd4201 /wd4324 /WX-)
+  else()
+    target_compile_options(fltk PRIVATE -Wno-error -Wno-unused-parameter -Wno-missing-field-initializers)
+  endif()
+endif()
+
 # Platform-specific Vulkan defines
 if(WIN32)
   message(STATUS "Building on Windows")
