@@ -26,6 +26,7 @@
 #define MAKE_API_VERSION(variant, major, minor, patch) \
 	((((uint32_t)(variant)) << 29U) | (((uint32_t)(major)) << 22U) | (((uint32_t)(minor)) << 12U) | ((uint32_t)(patch)))
 
+#if defined(CGS_DEBUG)
 #if defined(CGS_COMPILER_MSVC)
 #define DEBUG_BREAK()	__debugbreak()
 #elif defined(CGS_COMPILER_CLANG) || defined(CGS_COMPILER_GCC)
@@ -34,6 +35,9 @@
 		#define DEBUG_BREAK() raise(SIGTRAP)
 	#endif	// defined(CGS_UNIX)
 #endif	// defined(CGS_COMPILER_MSVC)
+#else	// NOT defined(CGS_DEBUG)
+#define DEBUG_BREAK()
+#endif	// defined(CGS_DEBUG)
 
 #if !defined(DEBUG_BREAK)
 #error "DEBUG_BREAK is not defined for the current compiler"

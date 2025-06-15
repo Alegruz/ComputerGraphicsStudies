@@ -63,23 +63,8 @@ namespace cgs::core
 #define CGS_LOG(level, format, ...) \
     cgs::core::Log::GetInstance().Print(level, __FILE__, __LINE__, __FUNCTION__, format, ##__VA_ARGS__)
 #define CGS_LOG_INFO(format, ...) CGS_LOG(cgs::core::Log::eLogLevel::Info, format, ##__VA_ARGS__)
-#define CGS_LOG_WARNING(format, ...) CGS_LOG(cgs::core::Log::eLogLevel::Warning, format, ##__VA_ARGS__); \
-    { \
-        #ifdef CGS_DEBUG \
-        DEBUG_BREAK(); \
-        #endif \
-    }
-#define CGS_LOG_ERROR(format, ...) CGS_LOG(cgs::core::Log::eLogLevel::Error, format, ##__VA_ARGS__); \
-    { \
-        #ifdef CGS_DEBUG \
-        DEBUG_BREAK(); \
-        #endif \
-    }
+#define CGS_LOG_WARNING(format, ...) CGS_LOG(cgs::core::Log::eLogLevel::Warning, format, ##__VA_ARGS__); DEBUG_BREAK()
+#define CGS_LOG_ERROR(format, ...) CGS_LOG(cgs::core::Log::eLogLevel::Error, format, ##__VA_ARGS__); DEBUG_BREAK()
 #define CGS_LOG_DEBUG(format, ...) CGS_LOG(cgs::core::Log::eLogLevel::Debug, format, ##__VA_ARGS__)
-#define CGS_LOG_CRITICAL(format, ...) CGS_LOG(cgs::core::Log::eLogLevel::Critical, format, ##__VA_ARGS__); \
-    { \
-        #ifdef CGS_DEBUG \
-        DEBUG_BREAK(); \
-        #endif \
-    }
+#define CGS_LOG_CRITICAL(format, ...) CGS_LOG(cgs::core::Log::eLogLevel::Critical, format, ##__VA_ARGS__); DEBUG_BREAK()
 }
