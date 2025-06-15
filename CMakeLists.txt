@@ -25,7 +25,7 @@ set(VULKAN_HEADERS_INSTALL_DIR "${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include")
 add_subdirectory(External/volk)
 add_subdirectory(External/fltk)
 
-foreach(t fltk fltk_images fltk_gl fltk-options fluid-lib)
+foreach(t fltk fltk_images fltk_gl fltk-options fluid fluid-lib)
   if(TARGET ${t})
     if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
       target_compile_options(${t} PRIVATE /wd4100 /wd4201 /wd4324 /WX-)
