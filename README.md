@@ -33,4 +33,25 @@ cmake --preset clang-release
 cmake --build --preset clang-release
 ```
 
-On Windows, replace the preset names with `x64-debug` or `x64-release`.
+The equivalent commands on Windows use the `x64` presets:
+
+```bash
+# Debug build on Windows
+cmake --preset x64-debug
+cmake --build --preset x64-debug
+
+# Release build on Windows
+cmake --preset x64-release
+cmake --build --preset x64-release
+```
+
+## Running the Sample Applications
+
+After building, the executables are placed in `out/build/<preset>`. Run them directly from that directory:
+
+```bash
+out/build/x64-debug/LauncherApp.exe   # Launches the engine with default config
+out/build/x64-debug/RendererApp.exe   # Standalone renderer example
+```
+
+Replace `x64-debug` with `x64-release` to run the release binaries.
