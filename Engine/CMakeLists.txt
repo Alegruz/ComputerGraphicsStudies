@@ -13,7 +13,7 @@ target_sources(Engine
 target_include_directories(Engine PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(Engine PUBLIC ${CMAKE_SOURCE_DIR}/External)
 
-target_compile_definitions(Engine PRIVATE Core_EXPORTS)
+target_compile_definitions(Engine PRIVATE Engine_EXPORTS)
 
 target_precompile_headers(Engine PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/pch.h")
 target_link_libraries(Engine PRIVATE Graphics)
