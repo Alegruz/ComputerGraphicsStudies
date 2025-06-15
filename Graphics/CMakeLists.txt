@@ -25,6 +25,9 @@ elseif(UNIX)
     set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_X11_KHR)
 endif()
 
+set(VULKAN_HEADERS_INSTALL_DIR "${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include")
+message(STATUS "volk: using VULKAN_HEADERS_INSTALL_DIR: ${VULKAN_HEADERS_INSTALL_DIR}")
+
 target_link_libraries(Graphics PUBLIC Core volk)
 target_compile_definitions(Graphics PRIVATE Graphics_EXPORTS)
 add_dependencies(Graphics Core)
