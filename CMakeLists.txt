@@ -24,6 +24,7 @@ set(VULKAN_HEADERS_INSTALL_DIR "${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include")
 
 add_subdirectory(External/volk)
 add_subdirectory(External/fltk)
+set(FLTK_WERROR OFF CACHE BOOL "" FORCE)
 
 foreach(t fltk fltk_images fltk_gl fltk-options fluid fluid-lib fltk-options-cmd fluid-cmd)
   if(TARGET ${t})
@@ -32,6 +33,14 @@ foreach(t fltk fltk_images fltk_gl fltk-options fluid fluid-lib fltk-options-cmd
     else()
       target_compile_options(${t} PRIVATE -Wno-error -Wno-unused-parameter -Wno-missing-field-initializers)
     endif()
+  endif()
+endforeach()
+
+foreach(t fltk fltk_images fltk_gl fltk-options fluid fluid-lib fltk-options-cmd fluid-cmd)
+  if(TARGET ${t})
+    get_target_property(opts ${t} COMPILE_OPTIONS)
+    list(REMOVE_ITEM opts "/WX")
+    set_target_properties(${t} PROPERTIES COMPILE_OPTIONS "${opts}")
   endif()
 endforeach()
 
