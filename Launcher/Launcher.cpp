@@ -57,7 +57,7 @@ namespace cgs
             file_chooser.type(Fl_Native_File_Chooser::BROWSE_SAVE_FILE);
             if (file_chooser.show() == 0)
             {
-                fl_message(file_chooser.filename());
+                CGS_LOG_INFO(file_chooser.filename());
             }
         }
     }
