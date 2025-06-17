@@ -36,6 +36,43 @@
             "cwd": "${workspaceFolder}",
             "stopAtEntry": true,
             "preLaunchTask": "CMake Build (clang-Release)"
+        },
+        
+        {
+            "type": "cppvsdbg",
+            "request": "launch",
+            "name": "Debug LauncherApp (x64-Debug)",
+            "program": "${workspaceFolder}/out/build/x64-debug/LauncherApp.exe",
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": true,
+            "preLaunchTask": "CMake Build (x64-Debug)"
+        },
+        {
+            "type": "cppvsdbg",
+            "request": "launch",
+            "name": "Debug LauncherApp (x64-Release)",
+            "program": "${workspaceFolder}/out/build/x64-release/LauncherApp.exe",
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": true,
+            "preLaunchTask": "CMake Build (x64-Release)"
+        },
+        {
+            "type": "cppdbg",
+            "request": "launch",
+            "name": "Debug LauncherApp (clang-Debug)",
+            "program": "${workspaceFolder}/out/build/clang-debug/LauncherApp",
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": true,
+            "preLaunchTask": "CMake Build (clang-Debug)"
+        },
+        {
+            "type": "cppdbg",
+            "request": "launch",
+            "name": "Debug LauncherApp (clang-Release)",
+            "program": "${workspaceFolder}/out/build/clang-release/LauncherApp",
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": true,
+            "preLaunchTask": "CMake Build (clang-Release)"
         }
     ]
 }
