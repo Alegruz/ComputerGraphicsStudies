@@ -39,10 +39,10 @@ jobs:
       - name : Initialize Submodules
         # If your project uses git submodules, you can initialize them with the following command.
         # See https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/using-git-submodules-in-a-workflow
-        run: git submodule update --init --recursive
+        run: ./init.bat
 
       - name: Configure CMake
-        run: cmake -B ${{ env.build }}
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=Release
 
       # Build is not required unless generated source files are used
       # - name: Build CMake
