@@ -1,27 +1,19 @@
-#include <iostream>
+#include "Launcher/pch.h"
 
-#include "Core/pch.h"
-
-#include "Engine/Engine.h"
+#include "Launcher/Launcher.h"
 
 int main(int argc, char **argv)
 {
-	cgs::Engine::CreateInfo engineCreateInfo =
-	{
-		.ConfigCreateInfo =
-		{
-			.ConfigFilePath = "config.ini" // Path to the configuration file
-		}
-	};
-	cgs::Engine engine(engineCreateInfo);
+	// cgs::Engine::CreateInfo engineCreateInfo =
+	// {
+	// 	.ConfigCreateInfo =
+	// 	{
+	// 		.ConfigFilePath = "config.ini" // Path to the configuration file
+	// 	}
+	// };
+	// cgs::Engine engine(engineCreateInfo);
 
-	Fl_Window *window = new Fl_Window(340, 180);
-	Fl_Box *box = new Fl_Box(20, 40, 300, 100, "Hello, World!");
-	box->box(FL_UP_BOX);
-	box->labelfont(FL_BOLD + FL_ITALIC);
-	box->labelsize(36);
-	box->labeltype(FL_SHADOW_LABEL);
-	window->end();
-	window->show(argc, argv);
-	return Fl::run();
+	cgs::Launcher launcher;
+
+	return launcher.Run(argc, argv);
 }

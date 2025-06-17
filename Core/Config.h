@@ -25,6 +25,10 @@ namespace cgs::core
         Config& operator=(Config&&) noexcept = delete;
 
         CGS_INLINE constexpr const std::filesystem::path& GetConfigFilePath() const noexcept { return mConfigFilePath; } // Accessor for the configuration file path
+        CGS_INLINE constexpr const std::unordered_map<std::string, std::string>& GetStringSettings() const noexcept { return mStringSettings; } // Accessor for string settings
+        CGS_INLINE constexpr const std::unordered_map<std::string, uint32_t>& GetIntSettings() const noexcept { return mIntSettings; } // Accessor for integer settings
+        CGS_INLINE constexpr const std::unordered_map<std::string, bool>& GetBoolSettings() const noexcept { return mBoolSettings; } // Accessor for boolean settings
+        CGS_INLINE constexpr const std::unordered_map<std::string, float>& GetFloatSettings() const noexcept { return mFloatSettings; } // Accessor for float settings
 
         template<ConfigValueType T>
         bool GetSetting(const std::string& key, T& outValue) const noexcept; // Get a configuration setting by key
