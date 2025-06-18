@@ -2,7 +2,9 @@
 
 namespace cgs::graphics::rhi
 {
+    class CommandBuffer;
     class CommandPool;
+    class Fence;
     class PhysicalDevice;
 
     class Device final
@@ -27,7 +29,12 @@ namespace cgs::graphics::rhi
         Device& operator=(const Device&) = delete;
         Device& operator=(Device&&) noexcept = delete;
 
+        VkCommandBuffer Allocate(CommandPool& commandPool) const noexcept;
+        std::unique_ptr<Fence> CreateFence() const noexcept;
+        void FreeCommandBuffer(CommandPool& commandPool, CommandBuffer& inoutCommandBuffer) const noexcept;
+        void Destroy(CommandPool& commandPool, CommandBuffer& inoutCommandBuffer) const noexcept;
         void Destroy(CommandPool& inoutCommandPool) const noexcept;
+        void Destroy(Fence& inoutFence) const noexcept;
         void Reset(CommandPool& inoutCommandPool) const noexcept;
         void Trim(CommandPool& inoutCommandPool) const noexcept;
 

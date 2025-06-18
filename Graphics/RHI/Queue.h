@@ -3,6 +3,7 @@
 namespace cgs::graphics::rhi
 {
     class Device;
+    class Fence; // Forward declaration of Fence class
     class QueueFamily;
 
     class Queue final
@@ -21,17 +22,17 @@ namespace cgs::graphics::rhi
 
         Queue(const Queue&) = delete;
         Queue(Queue&&) noexcept = default;
-        ~Queue() noexcept = default;
+        ~Queue() noexcept;
 
         Queue& operator=(const Queue&) = delete;
         Queue& operator=(Queue&&) noexcept = delete;
 
-        void Reset() noexcept;
-        void Trim() noexcept;
+        void Submit() const noexcept;
 
     private:
         [[maybe_unused]] Device& mDevice; // Reference to the device this queue belongs to
         [[maybe_unused]] QueueFamily& mQueueFamily; // Reference to the queue family this queue belongs to
         VkQueue mQueue; // The Vulkan queue handle
+        std::unique_ptr<Fence> mSubmissionFence;
     };
 } // namespace cgs::graphics::rhi

@@ -2,7 +2,9 @@
 
 #include "Graphics/RHI/Device.h"
 
+#include "Graphics/RHI/CommandBuffer.h"
 #include "Graphics/RHI/CommandPool.h"
+#include "Graphics/RHI/Fence.h"
 #include "Graphics/RHI/PhysicalDevice.h"
 #include "Graphics/RHI/QueueFamily.h"
 
@@ -33,12 +35,87 @@ namespace cgs::graphics::rhi
         mPhysicalDevice.DestroyLogicalDevice(mDevice);
     }
 
+    VkCommandBuffer Device::Allocate(CommandPool& commandPool) const noexcept
+    {
+        assert(commandPool.mCommandPool != VK_NULL_HANDLE);
+
+        VkCommandBufferAllocateInfo allocateInfo =
+        {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .pNext = nullptr,
+            .commandPool = commandPool.mCommandPool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, // Primary command buffer
+            .commandBufferCount = 1 // Allocate one command buffer
+        };
+
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkResult vr = vkAllocateCommandBuffers(mDevice, &allocateInfo, &commandBuffer);
+        if (vr != VK_SUCCESS)
+        {
+            CGS_LOG_ERROR("Failed to allocate command buffer: %s", VkResultToString(vr));
+            return VK_NULL_HANDLE; // Return null handle on failure
+        }
+        
+        return commandBuffer;
+    }
+
+    std::unique_ptr<Fence> Device::CreateFence() const noexcept
+    {
+        VkFenceCreateInfo fenceCreateInfo =
+        {
+            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0 // No special flags
+        };
+
+        VkFence fence = VK_NULL_HANDLE;
+        VkResult vr = vkCreateFence(mDevice, &fenceCreateInfo, nullptr, &fence);
+        if (vr != VK_SUCCESS)
+        {
+            CGS_LOG_ERROR("Failed to create fence: %s", VkResultToString(vr));
+            return nullptr; // Return null on failure
+        }
+
+        Fence::CreateInfo fenceCreateInfoStruct =
+        {
+            .RhiDevice = *this,
+            .Fence = fence // Pass the created
+        };
+        return std::make_unique<Fence>(fenceCreateInfoStruct);
+    }
+
+    void Device::FreeCommandBuffer(CommandPool& commandPool, CommandBuffer& inoutCommandBuffer) const noexcept
+    {
+        assert(commandPool.mCommandPool != VK_NULL_HANDLE);
+        assert(inoutCommandBuffer.mCommandBuffer != VK_NULL_HANDLE);
+        // Free the command buffer from the command pool
+        vkFreeCommandBuffers(mDevice, commandPool.mCommandPool, 1, &inoutCommandBuffer.mCommandBuffer);
+        inoutCommandBuffer.mCommandBuffer = VK_NULL_HANDLE; // Reset the command buffer handle
+    }
+
+    void Device::Destroy(CommandPool& commandPool, CommandBuffer& inoutCommandBuffer) const noexcept
+    {
+        assert(commandPool.mCommandPool != VK_NULL_HANDLE);
+        assert(inoutCommandBuffer.mCommandBuffer != VK_NULL_HANDLE);
+        // Free the command buffer from the command pool
+        vkFreeCommandBuffers(mDevice, commandPool.mCommandPool, 1, &inoutCommandBuffer.mCommandBuffer);
+    }
+
     void Device::Destroy(CommandPool& inoutCommandPool) const noexcept
     {
         if (inoutCommandPool.mCommandPool != VK_NULL_HANDLE)
         {
             vkDestroyCommandPool(mDevice, inoutCommandPool.mCommandPool, nullptr);
             inoutCommandPool.mCommandPool = VK_NULL_HANDLE;
+        }
+    }
+
+    void Device::Destroy(Fence& inoutFence) const noexcept
+    {
+        if (inoutFence.mFence != VK_NULL_HANDLE)
+        {
+            vkDestroyFence(mDevice, inoutFence.mFence, nullptr);
+            inoutFence.mFence = VK_NULL_HANDLE;
         }
     }
 

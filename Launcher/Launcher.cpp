@@ -221,8 +221,12 @@ namespace cgs
 
     Launcher::~Launcher() noexcept
     {
+        mEngine.reset(); // Reset the engine instance to release resources
+        mInstance.reset(); // Reset the RHI instance to release resources
+
         mAppMenuBar.reset();
         mWidgets.clear(); // Clear the widgets vector to release resources
+        mRendererConfig.reset(); // Reset the renderer configuration object
         mConfig.reset(); // Reset the configuration object
         mWindow.reset();
     }
