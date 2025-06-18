@@ -28,6 +28,7 @@ namespace cgs::graphics::rhi
         void PrintProperties() const noexcept;
 
         CGS_INLINE constexpr uint32_t GetIndex() const noexcept { return mIndex; }
+        CGS_INLINE constexpr const std::vector<std::unique_ptr<PhysicalDevice>>& GetPhysicalDevices() const noexcept { return mPhysicalDevices; }
 
     private:
         void createPhysicalDevices() noexcept;

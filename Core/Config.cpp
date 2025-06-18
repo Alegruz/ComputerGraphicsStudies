@@ -30,6 +30,53 @@ namespace cgs::core
         loadConfig(mConfigFilePath);
     }
 
+    void Config::CreateProjectInfo(cgs::core::ProjectInfo& outProjectInfo) noexcept
+    {
+        std::string projectName;
+        bool result = GetSetting("Name", projectName);
+        if (result == false)
+        {
+            CGS_LOG_ERROR("Failed to retrieve project name from configuration. Using default name 'DefaultProject'.");
+            projectName = "DefaultProject";
+            SetSetting("Name", projectName);
+        }
+        outProjectInfo.Name = projectName.c_str();
+
+        uint32_t projectVersionVariant;
+        result = GetSetting("VersionVariant", projectVersionVariant);
+        if (result == false)
+        {
+            CGS_LOG_ERROR("Failed to retrieve project version variant from configuration. Using default value 0.");
+            projectVersionVariant = 0;
+            SetSetting("VersionVariant", projectVersionVariant);
+        }
+        uint32_t projectVersionMajor;
+        result = GetSetting("VersionMajor", projectVersionMajor);
+        if (result == false)
+        {
+            CGS_LOG_ERROR("Failed to retrieve project version major from configuration. Using default value 0.");
+            projectVersionMajor = 0;
+            SetSetting("VersionMajor", projectVersionMajor);
+        }
+        uint32_t projectVersionMinor;
+        result = GetSetting("VersionMinor", projectVersionMinor);
+        if (result == false)
+        {
+            CGS_LOG_ERROR("Failed to retrieve project version minor from configuration. Using default value 0.");
+            projectVersionMinor = 0;
+            SetSetting("VersionMinor", projectVersionMinor);
+        }
+        uint32_t projectVersionPatch;
+        result = GetSetting("VersionPatch", projectVersionPatch);
+        if (result == false)
+        {
+            CGS_LOG_ERROR("Failed to retrieve project version patch from configuration. Using default value 1.");
+            projectVersionPatch = 1;
+            SetSetting("VersionPatch", projectVersionPatch);
+        }
+        outProjectInfo.Version = MAKE_API_VERSION(projectVersionVariant, projectVersionMajor, projectVersionMinor, projectVersionPatch);
+    }
+
     void Config::loadConfig(const std::filesystem::path& filePath) noexcept
     {
         // Load configuration from the specified file path

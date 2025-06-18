@@ -23,7 +23,8 @@ namespace cgs
 
     public:
         Engine() = delete;
-        explicit Engine(const CreateInfo &createInfo) noexcept;
+        explicit Engine(const CreateInfo& createInfo) noexcept;
+        explicit Engine(core::Config&& config) noexcept;
 
         Engine(const Engine&) = delete;
         Engine(Engine&&) noexcept = default;
@@ -33,6 +34,9 @@ namespace cgs
         Engine& operator=(Engine&&) noexcept = delete;
 
         CGS_INLINE constexpr const core::Config& GetConfig() const noexcept { return mConfig; } // Accessor for the engine configuration
+
+    private:
+        void initialize() noexcept; // Initialize the engine
 
     private:
         core::Config mConfig; // Configuration for the engine

@@ -42,6 +42,7 @@ namespace cgs::graphics::rhi
 		~Instance() noexcept;
 
 		CGS_INLINE constexpr const cgs::core::Config& GetConfig() const noexcept { return mConfig; } // Accessor for the configuration object
+		CGS_INLINE constexpr const std::vector<std::unique_ptr<PhysicalDeviceGroup>>& GetPhysicalDeviceGroups() const noexcept { return mPhysicalDeviceGroups; } // Accessor for the physical device groups
 
 	private:
 		void createInstance(CreateInfo& createInfo) noexcept;

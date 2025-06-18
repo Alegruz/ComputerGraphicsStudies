@@ -10,57 +10,31 @@ namespace cgs
         : mConfig(createInfo.ConfigCreateInfo)
         , mProjectInfo()
     {
+        initialize(); // Call the initialization method
+    }
+
+    Engine::Engine(core::Config&& config) noexcept
+        : mConfig(std::move(config))
+        , mProjectInfo()
+    {
+        initialize(); // Call the initialization method
+    }
+
+    Engine::~Engine() noexcept
+    {
+        mRenderer.reset(); // Release the renderer
+        CGS_LOG_INFO("Engine destroyed.");
+    }
+
+    void Engine::initialize() noexcept
+    {
         const std::filesystem::path& configFilePath = mConfig.GetConfigFilePath();
         CGS_LOG_INFO("Engine created with configuration from: %s", configFilePath.string().c_str());
 
-        std::string projectName;
-        bool result = mConfig.GetSetting("Name", projectName);
-        if (result == false)
-        {
-            CGS_LOG_ERROR("Failed to retrieve project name from configuration. Using default name 'DefaultProject'.");
-            projectName = "DefaultProject";
-            mConfig.SetSetting("Name", projectName);
-        }
-        mProjectInfo.Name = projectName.c_str();
-
-        uint32_t projectVersionVariant;
-        result = mConfig.GetSetting("VersionVariant", projectVersionVariant);
-        if (result == false)
-        {
-            CGS_LOG_ERROR("Failed to retrieve project version variant from configuration. Using default value 0.");
-            projectVersionVariant = 0;
-            mConfig.SetSetting("VersionVariant", projectVersionVariant);
-        }
-        uint32_t projectVersionMajor;
-        result = mConfig.GetSetting("VersionMajor", projectVersionMajor);
-        if (result == false)
-        {
-            CGS_LOG_ERROR("Failed to retrieve project version major from configuration. Using default value 0.");
-            projectVersionMajor = 0;
-            mConfig.SetSetting("VersionMajor", projectVersionMajor);
-        }
-        uint32_t projectVersionMinor;
-        result = mConfig.GetSetting("VersionMinor", projectVersionMinor);
-        if (result == false)
-        {
-            CGS_LOG_ERROR("Failed to retrieve project version minor from configuration. Using default value 0.");
-            projectVersionMinor = 0;
-            mConfig.SetSetting("VersionMinor", projectVersionMinor);
-        }
-        uint32_t projectVersionPatch;
-        result = mConfig.GetSetting("VersionPatch", projectVersionPatch);
-        if (result == false)
-        {
-            CGS_LOG_ERROR("Failed to retrieve project version patch from configuration. Using default value 1.");
-            projectVersionPatch = 1;
-            mConfig.SetSetting("VersionPatch", projectVersionPatch);
-        }
-        mProjectInfo.Version = MAKE_API_VERSION(projectVersionVariant, projectVersionMajor, projectVersionMinor, projectVersionPatch);
-        CGS_LOG_INFO("Project Info - Name: %s, Version: %u", mProjectInfo.Name.c_str(), mProjectInfo.Version);
-        CGS_LOG_INFO("Engine initialized with project: %s (Version: %u)", mProjectInfo.Name.c_str(), mProjectInfo.Version);
+        mConfig.CreateProjectInfo(mProjectInfo); // Create project information from the configuration
 
         std::string minimumLogLevel;
-        result = mConfig.GetSetting("MinimumLogLevel", minimumLogLevel);
+        bool result = mConfig.GetSetting("MinimumLogLevel", minimumLogLevel);
         if (result == false)
         {
             minimumLogLevel = "Info"; // Default log level if not specified
@@ -97,11 +71,5 @@ namespace cgs
         mRenderer = std::make_unique<graphics::Renderer>(rendererCreateInfo);
         CGS_LOG_INFO("Renderer created successfully.");
         CGS_LOG_INFO("Engine initialized successfully.");
-    }
-
-    Engine::~Engine() noexcept
-    {
-        mRenderer.reset(); // Release the renderer
-        CGS_LOG_INFO("Engine destroyed.");
     }
 } // namespace cgs

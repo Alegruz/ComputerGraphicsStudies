@@ -95,6 +95,11 @@
         "cinttypes": "cpp",
         "stack": "cpp",
         "typeindex": "cpp",
-        "xstddef": "cpp"
+        "xstddef": "cpp",
+        "any": "cpp",
+        "future": "cpp",
+        "ranges": "cpp",
+        "stacktrace": "cpp",
+        "stdfloat": "cpp"
     }
 }

@@ -2,6 +2,8 @@
 
 namespace cgs::core
 {
+    struct ProjectInfo;
+
     template<typename T>
     concept ConfigValueType = std::is_same_v<T, std::string> || std::is_same_v<T, uint32_t> || std::is_same_v<T, bool> || std::is_same_v<T, float> || std::is_same_v<T, std::filesystem::path>;
 
@@ -17,7 +19,7 @@ namespace cgs::core
         Config() = delete;
         explicit Config(const CreateInfo &createInfo) noexcept;
 
-        Config(const Config&) = delete;
+        Config(const Config&) = default;
         Config(Config&&) noexcept = default;
         ~Config() noexcept = default;
 
@@ -35,6 +37,8 @@ namespace cgs::core
         
         template<ConfigValueType T>
         constexpr void SetSetting(const std::string& key, const T& value) noexcept; // Set a configuration setting
+
+        void CreateProjectInfo(cgs::core::ProjectInfo& outProjectInfo) noexcept;
     
     private:
         void loadConfig(const std::filesystem::path& filePath) noexcept;

@@ -2,6 +2,14 @@
 
 #include "Launcher/Launcher.h"
 
+#include "Graphics/pch.h"
+#include "Graphics/RHI/Device.h"
+#include "Graphics/RHI/Instance.h"
+#include "Graphics/RHI/PhysicalDevice.h"
+#include "Graphics/RHI/PhysicalDeviceGroup.h"
+
+#include "Engine/Engine.h"
+
 namespace cgs
 {
     void Launcher::MenuQuitCallback(Fl_Widget*, void*) noexcept
@@ -75,7 +83,19 @@ namespace cgs
         MenuSaveAsCallback(NULL, reinterpret_cast<void*>(filePath.data()));
     }
 
-    Launcher::Launcher()
+    void Launcher::OnButtonClick(Fl_Widget*, void* pData) noexcept
+    {
+        if (pData == nullptr)
+        {
+            CGS_LOG_ERROR("pData must be a valid pointer to Launcher instance.");
+            return;
+        }
+
+        Launcher* launcher = static_cast<Launcher*>(pData);
+        launcher->startEngine();
+    }
+
+    Launcher::Launcher() noexcept
         : mWindow(std::make_unique<Fl_Double_Window>(800, 600, "CGS Launcher"))
         , mAppMenuBar()
         , mConfigFilePath("config.ini") // Default path for the configuration file
@@ -92,13 +112,32 @@ namespace cgs
         mAppMenuBar->insert(ix, "Open", FL_COMMAND+'o', MenuOpenCallback, this, FL_MENU_DIVIDER);
         mAppMenuBar->insert(ix+1, "Save", FL_COMMAND+'s', MenuSaveCallback, this);
         mAppMenuBar->insert(ix+2, "Save as...", FL_COMMAND+'S', MenuSaveAsCallback, this, FL_MENU_DIVIDER);
+        
+        UpdateConfig(); // Initialize the configuration settings and widgets
+
+        auto launchButton = std::make_unique<Fl_Button>(350, 550, 120, 30, "Launch Engine");
+        launchButton->callback(OnButtonClick, this); // Set the callback for the button
+        mWindow->add(launchButton.get());
+        mWidgets.push_back(std::move(launchButton));
+
+        const std::vector<std::unique_ptr<graphics::rhi::PhysicalDeviceGroup>>& physicalDeviceGroups = mInstance->GetPhysicalDeviceGroups(); // Create physical device groups
+        for (const auto& group : physicalDeviceGroups)
+        {
+            const std::vector<std::unique_ptr<graphics::rhi::PhysicalDevice>>& physicalDevices = group->GetPhysicalDevices();
+            for (const auto& physicalDevice : physicalDevices)
+            {
+                const char* deviceName = physicalDevice->GetProperties().PhysicalDeviceProperties.properties.deviceName;
+                auto comboBox = std::make_unique<Fl_Choice>(100, 400, 250, 30, "Physical Device");
+                comboBox->add(deviceName);
+                comboBox->value(0); // Select the first device by default
+                mWidgets.push_back(std::move(comboBox));
+            }
+        }
 
         mWindow->end();
-
-        UpdateConfig(); // Initialize the configuration settings and widgets
     }
 
-    Launcher::~Launcher()
+    Launcher::~Launcher() noexcept
     {
         mAppMenuBar.reset();
         mWidgets.clear(); // Clear the widgets vector to release resources
@@ -106,12 +145,39 @@ namespace cgs
         mWindow.reset();
     }
 
-    void Launcher::UpdateConfig()
+    void Launcher::UpdateConfig() noexcept
     {
-        const std::unordered_map<std::string, bool> boolSettings = mConfig->GetBoolSettings();
-        const std::unordered_map<std::string, uint32_t> intSettings = mConfig->GetIntSettings();
-        const std::unordered_map<std::string, std::string> stringSettings = mConfig->GetStringSettings();
-        const std::unordered_map<std::string, float> floatSettings = mConfig->GetFloatSettings();
+        updateConfig(*mConfig); // Initialize the configuration settings and widgets
+
+        std::filesystem::path rendererConfigFilePath;
+        bool result = mConfig->GetSetting("RendererConfigFilePath", rendererConfigFilePath);
+        if (result == false)
+        {
+            CGS_LOG_INFO("Using default path 'Engine/config.ini'.");
+            rendererConfigFilePath = "Engine/config.ini"; // Default path if not specified
+            mConfig->SetSetting("RendererConfigFilePath", rendererConfigFilePath.string());
+        }
+        else
+        {
+            CGS_LOG_INFO("Using renderer configuration file: %s", rendererConfigFilePath.string().c_str());
+        }
+        mRendererConfig = std::make_unique<core::Config>(core::Config::CreateInfo{.ConfigFilePath = rendererConfigFilePath});
+
+        graphics::rhi::Instance::CreateInfo instanceCreateInfo
+        {
+            .Config = *mRendererConfig,
+        };
+        mConfig->CreateProjectInfo(instanceCreateInfo.ApplicationInfo);
+        mRendererConfig->CreateProjectInfo(instanceCreateInfo.EngineInfo);
+        mInstance = std::make_unique<graphics::rhi::Instance>(instanceCreateInfo);
+    }
+
+    void Launcher::updateConfig(const core::Config& config) noexcept
+    {
+        const std::unordered_map<std::string, bool> boolSettings = config.GetBoolSettings();
+        const std::unordered_map<std::string, uint32_t> intSettings = config.GetIntSettings();
+        const std::unordered_map<std::string, std::string> stringSettings = config.GetStringSettings();
+        const std::unordered_map<std::string, float> floatSettings = config.GetFloatSettings();
         const uint32_t numSettings = static_cast<uint32_t>(boolSettings.size() + intSettings.size() + stringSettings.size() + floatSettings.size());
         mWindow->clear(); // Clear the window before adding new widgets
         mWidgets.reserve(numSettings);
@@ -182,9 +248,26 @@ namespace cgs
         mWindow->redraw(); // Redraw the window to show the new widgets
     }
 
-    int Launcher::Run(const int32_t argc, char **argv)
+    int Launcher::Run(const int32_t argc, char **argv) noexcept
     {
         mWindow->show(argc, argv);
         return Fl::run();
+    }
+
+    void Launcher::startEngine() noexcept
+    {
+        if (!mEngine)
+        {
+            core::Config config = *mConfig;
+            mEngine = std::make_unique<cgs::Engine>(std::move(config));
+        }
+    }
+
+    void Launcher::stopEngine() noexcept
+    {
+        if (mEngine)
+        {
+            mEngine.reset(); // Release the engine resources
+        }
     }
 } // namespace cgs
