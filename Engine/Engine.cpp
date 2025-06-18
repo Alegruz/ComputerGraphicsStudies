@@ -10,14 +10,28 @@ namespace cgs
         : mConfig(createInfo.ConfigCreateInfo)
         , mProjectInfo()
     {
-        initialize(); // Call the initialization method
+        std::filesystem::path rendererConfigFilePath;
+        const bool result = mConfig.GetSetting("RendererConfigFilePath", rendererConfigFilePath);
+        if (result == false)
+        {
+            CGS_LOG_INFO("Using default path 'Engine/config.ini'.");
+            rendererConfigFilePath = "Engine/config.ini"; // Default path if not specified
+            mConfig.SetSetting("RendererConfigFilePath", rendererConfigFilePath.string());
+        }
+        else
+        {
+            CGS_LOG_INFO("Using renderer configuration file: %s", rendererConfigFilePath.string().c_str());
+        }
+
+        cgs::core::Config rendererConfig = core::Config(core::Config::CreateInfo{.ConfigFilePath = rendererConfigFilePath});
+        initialize(std::move(rendererConfig)); // Call the initialization method
     }
 
-    Engine::Engine(core::Config&& config) noexcept
+    Engine::Engine(core::Config&& config, core::Config&& rendererConfig) noexcept
         : mConfig(std::move(config))
         , mProjectInfo()
     {
-        initialize(); // Call the initialization method
+        initialize(std::move(rendererConfig)); // Call the initialization method
     }
 
     Engine::~Engine() noexcept
@@ -26,7 +40,7 @@ namespace cgs
         CGS_LOG_INFO("Engine destroyed.");
     }
 
-    void Engine::initialize() noexcept
+    void Engine::initialize(core::Config&& rendererConfig) noexcept
     {
         const std::filesystem::path& configFilePath = mConfig.GetConfigFilePath();
         CGS_LOG_INFO("Engine created with configuration from: %s", configFilePath.string().c_str());
@@ -45,30 +59,14 @@ namespace cgs
         CGS_LOG_INFO("Creating Renderer...");
 
         // Create the renderer with the provided project information
-
-        std::filesystem::path rendererConfigFilePath;
-        result = mConfig.GetSetting("RendererConfigFilePath", rendererConfigFilePath);
-        if (result == false)
-        {
-            CGS_LOG_INFO("Using default path 'Engine/config.ini'.");
-            rendererConfigFilePath = "Engine/config.ini"; // Default path if not specified
-            mConfig.SetSetting("RendererConfigFilePath", rendererConfigFilePath.string());
-        }
-        else
-        {
-            CGS_LOG_INFO("Using renderer configuration file: %s", rendererConfigFilePath.string().c_str());
-        }
-
         graphics::Renderer::CreateInfo rendererCreateInfo =
         {
-            .ConfigCreateInfo = core::Config::CreateInfo
-            {
-                .ConfigFilePath = rendererConfigFilePath
-            },
+            .Config = std::move(rendererConfig),
             .ApplicationInfo = mProjectInfo,
         };
 
         mRenderer = std::make_unique<graphics::Renderer>(rendererCreateInfo);
+            
         CGS_LOG_INFO("Renderer created successfully.");
         CGS_LOG_INFO("Engine initialized successfully.");
     }

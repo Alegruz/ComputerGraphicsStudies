@@ -386,11 +386,18 @@ namespace cgs::graphics::rhi
 		vr = vkEnumeratePhysicalDeviceGroups(mInstance, &physicalDeviceGroupCount, physicalDeviceGroupProperties.data());
 		assert(vr == VK_SUCCESS);
 
+		uint32_t physicalDeviceGroupToUseIndex = std::numeric_limits<uint32_t>::max();
+		const bool bPhysicalDeviceGroupIndexFound = mConfig.GetSetting("PhysicalDeviceGroupIndex", physicalDeviceGroupToUseIndex);
+
 		for (uint32_t i = 0; i < physicalDeviceGroupCount; ++i)
 		{
 			const auto& groupProperties = physicalDeviceGroupProperties[i];
 			assert(groupProperties.sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES);
-			CGS_LOG_INFO("Physical Device Group %u contains %u physical devices.", i, groupProperties.physicalDeviceCount);
+			
+			if(bPhysicalDeviceGroupIndexFound == true && i != physicalDeviceGroupToUseIndex)
+			{
+				continue;
+			}
 
 			PhysicalDeviceGroup::CreateInfo createInfo =
 			{
@@ -399,6 +406,11 @@ namespace cgs::graphics::rhi
 				.PhysicalDeviceGroupProperties = groupProperties,
 			};
 			mPhysicalDeviceGroups.emplace_back(std::make_unique<PhysicalDeviceGroup>(createInfo));
+			
+			if(bPhysicalDeviceGroupIndexFound == true && i == physicalDeviceGroupToUseIndex)
+			{
+				break;
+			}
 		}
 		
 	}

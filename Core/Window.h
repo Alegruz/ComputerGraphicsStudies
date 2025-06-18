@@ -2,6 +2,8 @@
 
 #if defined(CGS_WIN32)
 #define UNICODE
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 #elif defined(CGS_UNIX)
 #endif // defined(CGS_WIN32)

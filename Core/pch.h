@@ -15,6 +15,8 @@
 #include <unordered_map>
 #include <vector>
 
+#define NOMINMAX
+
 #if defined(CGS_COMPILER_MSVC)
 #define CGS_INLINE __forceinline
 #elif defined(CGS_COMPILER_CLANG) || defined(CGS_COMPILER_GCC)

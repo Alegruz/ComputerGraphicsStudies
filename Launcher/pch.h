@@ -2,6 +2,7 @@
 
 #include "Engine/pch.h"
 
+#include <limits>
 
 #pragma warning(push)
 #pragma warning(disable: 4819 4244)

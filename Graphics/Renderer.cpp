@@ -7,7 +7,7 @@
 namespace cgs::graphics
 {
 	Renderer::Renderer(const CreateInfo& createInfo) noexcept
-		: mConfig(createInfo.ConfigCreateInfo)
+		: mConfig(std::move(createInfo.Config))
 		, mInstance()
 	{
 		const std::filesystem::path& configFilePath = mConfig.GetConfigFilePath();

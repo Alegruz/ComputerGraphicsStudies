@@ -45,34 +45,61 @@ namespace cgs::graphics::rhi
         const uint32_t physicalDeviceCount = mPhysicalDeviceGroupProperties.physicalDeviceCount;
         CGS_LOG_INFO("Physical device group contains %u physical devices.", physicalDeviceCount);
 
-        struct PhysicalDeviceComparator final
+        std::string deviceName;
+        mInstance.GetConfig().GetSetting("PhysicalDevice", deviceName);
+        if (!deviceName.empty())
         {
-            CGS_INLINE bool operator()(const std::unique_ptr<PhysicalDevice> &lhs, const std::unique_ptr<PhysicalDevice> &rhs) const noexcept
+            for (uint32_t i = 0; i < physicalDeviceCount; ++i)
             {
-                return (lhs == nullptr || rhs == nullptr) || (lhs->EvaluateScore() < rhs->EvaluateScore());
+                VkPhysicalDeviceProperties properties;
+                vkGetPhysicalDeviceProperties(mPhysicalDeviceGroupProperties.physicalDevices[i], &properties);
+                std::string currentDeviceName(properties.deviceName);
+                if (deviceName == currentDeviceName)
+                {
+                    PhysicalDevice::CreateInfo physicalDeviceCreateInfo =
+                    {
+                        .RhiInstance = mInstance,
+                        .RhiPhysicalDeviceGroup = *this,
+                        .PhysicalDevice = mPhysicalDeviceGroupProperties.physicalDevices[i],
+                    };
+                    std::unique_ptr<PhysicalDevice> device = std::make_unique<PhysicalDevice>(physicalDeviceCreateInfo);
+                    assert(device->mPhysicalDevice != VK_NULL_HANDLE);
+                    mPhysicalDevices.push_back(std::move(device));
+                    break;
+                }
             }
-        };
-
-        std::priority_queue<std::unique_ptr<PhysicalDevice>, std::vector<std::unique_ptr<PhysicalDevice>>, PhysicalDeviceComparator> physicalDevicesToCreate;
-        for (uint32_t i = 0; i < physicalDeviceCount; ++i)
-        {
-            PhysicalDevice::CreateInfo physicalDeviceCreateInfo =
-            {
-                .RhiInstance = mInstance,
-                .RhiPhysicalDeviceGroup = *this,
-                .PhysicalDevice = mPhysicalDeviceGroupProperties.physicalDevices[i],
-            };
-            std::unique_ptr<PhysicalDevice> physicalDevice = std::make_unique<PhysicalDevice>(physicalDeviceCreateInfo);
-            assert(physicalDevice->mPhysicalDevice != VK_NULL_HANDLE);
-            physicalDevicesToCreate.push(std::move(physicalDevice));
         }
-
-        mPhysicalDevices.reserve(physicalDeviceCount);
-        while (!physicalDevicesToCreate.empty())
+        else
         {
-            auto device = std::move(const_cast<std::unique_ptr<PhysicalDevice>&>(physicalDevicesToCreate.top()));
-            mPhysicalDevices.push_back(std::move(device));
-            physicalDevicesToCreate.pop();
+            struct PhysicalDeviceComparator final
+            {
+                CGS_INLINE bool operator()(const std::unique_ptr<PhysicalDevice> &lhs, const std::unique_ptr<PhysicalDevice> &rhs) const noexcept
+                {
+                    return (lhs == nullptr || rhs == nullptr) || (lhs->EvaluateScore() < rhs->EvaluateScore());
+                }
+            };
+
+            std::priority_queue<std::unique_ptr<PhysicalDevice>, std::vector<std::unique_ptr<PhysicalDevice>>, PhysicalDeviceComparator> physicalDevicesToCreate;
+            for (uint32_t i = 0; i < physicalDeviceCount; ++i)
+            {
+                PhysicalDevice::CreateInfo physicalDeviceCreateInfo =
+                {
+                    .RhiInstance = mInstance,
+                    .RhiPhysicalDeviceGroup = *this,
+                    .PhysicalDevice = mPhysicalDeviceGroupProperties.physicalDevices[i],
+                };
+                std::unique_ptr<PhysicalDevice> physicalDevice = std::make_unique<PhysicalDevice>(physicalDeviceCreateInfo);
+                assert(physicalDevice->mPhysicalDevice != VK_NULL_HANDLE);
+                physicalDevicesToCreate.push(std::move(physicalDevice));
+            }
+
+            mPhysicalDevices.reserve(physicalDeviceCount);
+            while (!physicalDevicesToCreate.empty())
+            {
+                auto device = std::move(const_cast<std::unique_ptr<PhysicalDevice>&>(physicalDevicesToCreate.top()));
+                mPhysicalDevices.push_back(std::move(device));
+                physicalDevicesToCreate.pop();
+            }
         }
     }
 } // namespace cgs::graphics::rhi

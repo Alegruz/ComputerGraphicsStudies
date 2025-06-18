@@ -55,12 +55,6 @@ namespace cgs::core
         WCHAR szExePath[MAX_PATH];
         GetModuleFileName(NULL, szExePath, MAX_PATH);
 
-        // If the icon is NULL, then use the first one found in the exe
-        if (hIcon == NULL)
-        {
-            hIcon = ExtractIcon(mhInstance, szExePath, 0);
-        }
-
         // Register the windows class
         WNDCLASS wndClass;
         wndClass.style = CS_DBLCLKS;

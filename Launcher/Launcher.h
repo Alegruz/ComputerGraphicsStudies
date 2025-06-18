@@ -20,6 +20,8 @@ namespace cgs
         static void MenuSaveAsCallback(Fl_Widget*, void*) noexcept;
         static void MenuSaveCallback(Fl_Widget*, void* pData) noexcept;
         static void OnButtonClick(Fl_Widget*, void* pData) noexcept;
+        static void OnPhysicalDeviceGroupChange(Fl_Widget*, void* pData) noexcept;
+        static void OnPhysicalDeviceChange(Fl_Widget*, void* pData) noexcept;
 
     public:
         Launcher() noexcept;
@@ -41,6 +43,7 @@ namespace cgs
         std::unique_ptr<core::Config> mRendererConfig;
         std::unique_ptr<graphics::rhi::Instance> mInstance; // Renderer Hardware Interface instance
 
+        uint32_t mPhysicalDeviceChoiceWidgetIndex; // Index of the physical device choice widget
         std::vector<std::unique_ptr<Fl_Widget>> mWidgets; // Store widgets to manage their lifetime
         std::unique_ptr<Engine> mEngine;
     };

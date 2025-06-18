@@ -95,11 +95,95 @@ namespace cgs
         launcher->startEngine();
     }
 
+    void Launcher::OnPhysicalDeviceGroupChange(Fl_Widget* widget, void* pData) noexcept
+    {
+        if (pData == nullptr)
+        {
+            CGS_LOG_ERROR("pData must be a valid pointer to Launcher instance.");
+            return;
+        }
+
+        Launcher* launcher = static_cast<Launcher*>(pData);
+        Fl_Choice* choice = static_cast<Fl_Choice*>(widget);
+        if (choice == nullptr)
+        {
+            CGS_LOG_ERROR("Choice widget is null.");
+            return;
+        }
+
+        const uint32_t selectedIndex = static_cast<uint32_t>(choice->value());
+        const std::vector<std::unique_ptr<graphics::rhi::PhysicalDeviceGroup>>& physicalDeviceGroups = launcher->mInstance->GetPhysicalDeviceGroups(); // Create physical device groups
+        graphics::rhi::PhysicalDeviceGroup& group = *physicalDeviceGroups[selectedIndex];
+        const std::vector<std::unique_ptr<graphics::rhi::PhysicalDevice>>& physicalDevices = group.GetPhysicalDevices();
+        launcher->mRendererConfig->SetSetting("PhysicalDeviceGroupIndex", selectedIndex);
+
+        if(launcher->mPhysicalDeviceChoiceWidgetIndex == std::numeric_limits<uint32_t>::max())
+        {
+            auto comboBox = std::make_unique<Fl_Choice>(250, 500, 250, 30, "Physical Devices");
+            comboBox->callback(OnPhysicalDeviceChange, launcher); // Set the callback for the combo box
+            launcher->mWidgets.push_back(std::move(comboBox));
+            launcher->mPhysicalDeviceChoiceWidgetIndex = static_cast<uint32_t>(launcher->mWidgets.size()) - 1; // Update the index of the physical device choice widget
+        }
+        
+        Fl_Choice& comboBox = *static_cast<Fl_Choice*>(launcher->mWidgets[launcher->mPhysicalDeviceChoiceWidgetIndex].get());
+        comboBox.clear(); // Clear the existing items in the combo box
+        for (const auto& physicalDevice : physicalDevices)
+        {
+            const char* deviceName = physicalDevice->GetProperties().PhysicalDeviceProperties.properties.deviceName;
+            comboBox.add(deviceName);
+            CGS_LOG_INFO("Adding physical device: %s", deviceName);
+        }
+        comboBox.value(0); // Select the first device by default
+        OnPhysicalDeviceChange(&comboBox, launcher); // Call the change handler to update the renderer config
+
+        launcher->mWindow->redraw(); // Redraw the window to show the updated combo box
+    }
+
+    void Launcher::OnPhysicalDeviceChange(Fl_Widget* widget, void* pData) noexcept
+    {
+        if (pData == nullptr)
+        {
+            CGS_LOG_ERROR("pData must be a valid pointer to Launcher instance.");
+            return;
+        }
+
+        Launcher* launcher = static_cast<Launcher*>(pData);
+        Fl_Choice* choice = static_cast<Fl_Choice*>(widget);
+        if (choice == nullptr)
+        {
+            CGS_LOG_ERROR("Choice widget is null.");
+            return;
+        }
+
+        uint32_t selectedPhysicalDeviceGroupIndex = 0;
+        const bool result = launcher->mRendererConfig->GetSetting("PhysicalDeviceGroupIndex", selectedPhysicalDeviceGroupIndex);
+        if (!result)
+        {
+            CGS_LOG_ERROR("Failed to get PhysicalDeviceGroupIndex from configuration.");
+            return;
+        }
+
+        const std::vector<std::unique_ptr<graphics::rhi::PhysicalDeviceGroup>>& physicalDeviceGroups = launcher->mInstance->GetPhysicalDeviceGroups(); // Create physical device groups
+        graphics::rhi::PhysicalDeviceGroup& group = *physicalDeviceGroups[selectedPhysicalDeviceGroupIndex];
+        
+        const uint32_t selectedPhysicalDeviceIndex = static_cast<uint32_t>(choice->value());
+        const std::vector<std::unique_ptr<graphics::rhi::PhysicalDevice>>& physicalDevices = group.GetPhysicalDevices();
+        launcher->mRendererConfig->SetSetting("PhysicalDeviceIndex", selectedPhysicalDeviceIndex);
+        const std::string selectedDeviceName = physicalDevices[selectedPhysicalDeviceIndex]->GetProperties().PhysicalDeviceProperties.properties.deviceName;
+        launcher->mRendererConfig->SetSetting("PhysicalDevice", selectedDeviceName);
+        launcher->mWindow->redraw(); // Redraw the window to show the updated combo box
+    }
+
     Launcher::Launcher() noexcept
         : mWindow(std::make_unique<Fl_Double_Window>(800, 600, "CGS Launcher"))
         , mAppMenuBar()
         , mConfigFilePath("config.ini") // Default path for the configuration file
         , mConfig(std::make_unique<cgs::core::Config>(core::Config::CreateInfo{.ConfigFilePath = mConfigFilePath}))
+        , mRendererConfig()
+        , mInstance()
+        , mPhysicalDeviceChoiceWidgetIndex(std::numeric_limits<uint32_t>::max()) // Initialize the index to an invalid value
+        , mWidgets()
+        , mEngine()
     {
         Fl::scheme("gtk+"); // Set the FLTK scheme to GTK+ for better appearance on Linux
         mWindow->label("CGS Launcher"); // Set the window title
@@ -120,19 +204,17 @@ namespace cgs
         mWindow->add(launchButton.get());
         mWidgets.push_back(std::move(launchButton));
 
+        auto comboBox = std::make_unique<Fl_Choice>(250, 400, 250, 30, "Physical Device Group");
         const std::vector<std::unique_ptr<graphics::rhi::PhysicalDeviceGroup>>& physicalDeviceGroups = mInstance->GetPhysicalDeviceGroups(); // Create physical device groups
-        for (const auto& group : physicalDeviceGroups)
+        for (size_t i = 0; i < physicalDeviceGroups.size(); ++i)
         {
-            const std::vector<std::unique_ptr<graphics::rhi::PhysicalDevice>>& physicalDevices = group->GetPhysicalDevices();
-            for (const auto& physicalDevice : physicalDevices)
-            {
-                const char* deviceName = physicalDevice->GetProperties().PhysicalDeviceProperties.properties.deviceName;
-                auto comboBox = std::make_unique<Fl_Choice>(100, 400, 250, 30, "Physical Device");
-                comboBox->add(deviceName);
-                comboBox->value(0); // Select the first device by default
-                mWidgets.push_back(std::move(comboBox));
-            }
+            std::string label = "Group " + std::to_string(i);
+            comboBox->add(label.c_str(), 0, nullptr, reinterpret_cast<void*>(i));
         }
+        comboBox->callback(OnPhysicalDeviceGroupChange, this); // Set the callback for the combo box
+        comboBox->value(0); // Select the first device by default
+        OnPhysicalDeviceGroupChange(comboBox.get(), this); // Call the change handler to update the renderer config
+        mWidgets.push_back(std::move(comboBox));
 
         mWindow->end();
     }
@@ -259,7 +341,8 @@ namespace cgs
         if (!mEngine)
         {
             core::Config config = *mConfig;
-            mEngine = std::make_unique<cgs::Engine>(std::move(config));
+            core::Config rendererConfig = *mRendererConfig;
+            mEngine = std::make_unique<cgs::Engine>(std::move(config), std::move(rendererConfig));
         }
     }
 
