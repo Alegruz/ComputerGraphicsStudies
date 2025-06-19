@@ -36,8 +36,10 @@ namespace cgs::graphics::rhi
         CGS_INLINE constexpr const VkQueueFamilyProperties2& GetQueueFamilyProperties() const noexcept { return mQueueFamilyProperties; }
         CGS_INLINE constexpr uint32_t GetQueueCount() const noexcept { return mQueueFamilyProperties.queueFamilyProperties.queueCount; }
         CGS_INLINE constexpr VkQueueFlags GetQueueFlags() const noexcept { return mQueueFamilyProperties.queueFamilyProperties.queueFlags; }
+        bool IsPresentSupported() const noexcept;
 
     private:
+        const PhysicalDevice& mPhysicalDevice; // Reference to the physical device this queue family belongs to
         VkQueueFamilyProperties2 mQueueFamilyProperties; // Properties of the queue family
         uint32_t mIndex; // Index of the queue family in the physical device
         std::vector<std::unique_ptr<Queue>> mQueues; // Queues in this queue family, if any

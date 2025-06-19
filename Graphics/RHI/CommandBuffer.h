@@ -2,6 +2,8 @@
 
 namespace cgs::graphics::rhi
 {
+    class Fence;
+
     class CommandBuffer final
     {
     public:
@@ -12,6 +14,7 @@ namespace cgs::graphics::rhi
         {
             CommandPool& RhiCommandPool;
             uint32_t Index = 0; // Index of the command buffer in the command pool
+            uint32_t FrameBufferIndex = 0; // Index of the frame buffer this command buffer is associated with
             VkCommandBuffer CommandBuffer = VK_NULL_HANDLE;
         };
 
@@ -28,9 +31,15 @@ namespace cgs::graphics::rhi
         void End() const noexcept;
         void Reset() const noexcept;
 
+        CGS_INLINE constexpr uint32_t GetIndex() const noexcept { return mIndex; }
+        CGS_INLINE constexpr uint32_t GetFrameBufferIndex() const noexcept { return mFrameBufferIndex; }
+        CGS_INLINE Fence& GetFence() const noexcept { return *mFence; }
+
     private:
         CommandPool& mCommandPool;
         uint32_t mIndex;
+        uint32_t mFrameBufferIndex; // Index of the frame buffer this command buffer is associated with
         VkCommandBuffer mCommandBuffer;
+        std::unique_ptr<Fence> mFence; // Optional fence for synchronization
     };
 } // namespace cgs::graphics::rhi

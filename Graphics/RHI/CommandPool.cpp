@@ -4,6 +4,7 @@
 
 #include "Graphics/RHI/CommandBuffer.h"
 #include "Graphics/RHI/Device.h"
+#include "Graphics/RHI/SwapChain.h"
 
 namespace cgs::graphics::rhi
 {
@@ -19,45 +20,76 @@ namespace cgs::graphics::rhi
     CommandPool::~CommandPool() noexcept
     {
         mCommandBuffers.clear();
-        mDevice.Destroy(*this);
+
+        if (mCommandPool != VK_NULL_HANDLE)
+        {
+            vkDestroyCommandPool(mDevice.GetVkDevice(), mCommandPool, nullptr);
+            mCommandPool = VK_NULL_HANDLE;
+        }
     }
 
     void CommandPool::AllocateCommandBuffer() noexcept
     {
         assert(mCommandPool != VK_NULL_HANDLE);
 
-        CommandBuffer::CreateInfo commandBufferCreateInfo =
-        {
-            .RhiCommandPool = *this,
-            .Index = static_cast<uint32_t>(mCommandBuffers.size()), // Use the current size as the index
-            .CommandBuffer = mDevice.Allocate(*this) // Allocate a new command buffer from the device
-        };
+        const SwapChain& swapChain = mDevice.GetSwapChain();
+        const uint32_t frameBufferCount = swapChain.GetBackBufferCount();
 
-        if (commandBufferCreateInfo.CommandBuffer != VK_NULL_HANDLE)
+        for (uint32_t i = 0; i < frameBufferCount; ++i)
         {
-            mCommandBuffers.emplace_back(std::make_unique<CommandBuffer>(commandBufferCreateInfo));
-        }
-        else
-        {
-            CGS_LOG_ERROR("Failed to allocate command buffer for command pool.");
+            // Allocate command buffers for each frame buffer
+            CommandBuffer::CreateInfo commandBufferCreateInfo =
+            {
+                .RhiCommandPool = *this,
+                .Index = static_cast<uint32_t>(mCommandBuffers.size()), // Use the current size as the index
+                .FrameBufferIndex = i, // Set the frame buffer index
+            };
+
+            VkCommandBufferAllocateInfo allocateInfo =
+            {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .commandPool = mCommandPool,
+                .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, // Primary command buffer
+                .commandBufferCount = 1 // Allocate one command buffer
+            };
+            
+            VkResult vr = vkAllocateCommandBuffers(mDevice.GetVkDevice(), &allocateInfo, &commandBufferCreateInfo.CommandBuffer);
+            if (vr != VK_SUCCESS)
+            {
+                CGS_LOG_ERROR("Failed to allocate command buffer: %s", VkResultToString(vr));
+                continue; // Skip this iteration if allocation fails
+            }
+
+            if (commandBufferCreateInfo.CommandBuffer != VK_NULL_HANDLE)
+            {
+                mCommandBuffers.emplace_back(std::make_unique<CommandBuffer>(commandBufferCreateInfo));
+            }
+            else
+            {
+                CGS_LOG_ERROR("Failed to allocate command buffer for command pool.");
+            }
         }
     }
 
-    void CommandPool::FreeCommandBuffer(const uint32_t commandBufferIndex) noexcept
+    void CommandPool::Reset() noexcept
     {
-        mDevice.FreeCommandBuffer(*this, *mCommandBuffers[commandBufferIndex]);
-    }
-
-    void CommandPool::FreeCommandBuffers() noexcept
-    {
-        for(auto& commandBuffer : mCommandBuffers)
+        if (mCommandPool != VK_NULL_HANDLE)
         {
-            mDevice.FreeCommandBuffer(*this, *commandBuffer);
+            VkResult vr = VK_SUCCESS;
+            vr = vkResetCommandPool(mDevice.GetVkDevice(), mCommandPool, 0);
+            if (vr != VK_SUCCESS)
+            {
+                CGS_LOG_ERROR("Failed to reset command pool: %s", VkResultToString(vr));
+            }
         }
     }
-    
-    void CommandPool::Destroy(CommandBuffer& inoutCommandBuffer) noexcept
+
+    void CommandPool::Trim() const noexcept
     {
-        mDevice.Destroy(*this, inoutCommandBuffer);
+        if (mCommandPool != VK_NULL_HANDLE)
+        {
+            vkTrimCommandPool(mDevice.GetVkDevice(), mCommandPool, 0);
+        }
     }
 } // namespace cgs::graphics::rhi

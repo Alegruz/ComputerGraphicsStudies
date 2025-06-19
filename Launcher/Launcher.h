@@ -46,5 +46,7 @@ namespace cgs
         uint32_t mPhysicalDeviceChoiceWidgetIndex; // Index of the physical device choice widget
         std::vector<std::unique_ptr<Fl_Widget>> mWidgets; // Store widgets to manage their lifetime
         std::unique_ptr<Engine> mEngine;
+
+        std::unique_ptr<Fl_Double_Window> mRendererWindow;
     };
 } // namespace cgs

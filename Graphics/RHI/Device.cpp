@@ -5,8 +5,12 @@
 #include "Graphics/RHI/CommandBuffer.h"
 #include "Graphics/RHI/CommandPool.h"
 #include "Graphics/RHI/Fence.h"
+#include "Graphics/RHI/Image.h"
+#include "Graphics/RHI/Instance.h"
 #include "Graphics/RHI/PhysicalDevice.h"
 #include "Graphics/RHI/QueueFamily.h"
+#include "Graphics/RHI/Semaphore.h"
+#include "Graphics/RHI/SwapChain.h"
 
 namespace cgs::graphics::rhi
 {
@@ -15,6 +19,8 @@ namespace cgs::graphics::rhi
         , mDevice(createInfo.Device)
     {
         assert(mDevice != VK_NULL_HANDLE);
+        createSwapChain(); // Create the swap chain if needed
+        createCommandPools(); // Create command pools for the device
     }
 
     Device::~Device() noexcept
@@ -24,120 +30,12 @@ namespace cgs::graphics::rhi
         // with a valid device handle.
         for (auto& commandPool : mCommandPools)
         {
-            if (commandPool)
-            {
-                Destroy(*commandPool);
-            }
+            commandPool.reset(); // Reset the command pool, which will destroy its command buffers
         }
 
         mCommandPools.clear();
 
         mPhysicalDevice.DestroyLogicalDevice(mDevice);
-    }
-
-    VkCommandBuffer Device::Allocate(CommandPool& commandPool) const noexcept
-    {
-        assert(commandPool.mCommandPool != VK_NULL_HANDLE);
-
-        VkCommandBufferAllocateInfo allocateInfo =
-        {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .commandPool = commandPool.mCommandPool,
-            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, // Primary command buffer
-            .commandBufferCount = 1 // Allocate one command buffer
-        };
-
-        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-        VkResult vr = vkAllocateCommandBuffers(mDevice, &allocateInfo, &commandBuffer);
-        if (vr != VK_SUCCESS)
-        {
-            CGS_LOG_ERROR("Failed to allocate command buffer: %s", VkResultToString(vr));
-            return VK_NULL_HANDLE; // Return null handle on failure
-        }
-        
-        return commandBuffer;
-    }
-
-    std::unique_ptr<Fence> Device::CreateFence() const noexcept
-    {
-        VkFenceCreateInfo fenceCreateInfo =
-        {
-            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0 // No special flags
-        };
-
-        VkFence fence = VK_NULL_HANDLE;
-        VkResult vr = vkCreateFence(mDevice, &fenceCreateInfo, nullptr, &fence);
-        if (vr != VK_SUCCESS)
-        {
-            CGS_LOG_ERROR("Failed to create fence: %s", VkResultToString(vr));
-            return nullptr; // Return null on failure
-        }
-
-        Fence::CreateInfo fenceCreateInfoStruct =
-        {
-            .RhiDevice = *this,
-            .Fence = fence // Pass the created
-        };
-        return std::make_unique<Fence>(fenceCreateInfoStruct);
-    }
-
-    void Device::FreeCommandBuffer(CommandPool& commandPool, CommandBuffer& inoutCommandBuffer) const noexcept
-    {
-        assert(commandPool.mCommandPool != VK_NULL_HANDLE);
-        assert(inoutCommandBuffer.mCommandBuffer != VK_NULL_HANDLE);
-        // Free the command buffer from the command pool
-        vkFreeCommandBuffers(mDevice, commandPool.mCommandPool, 1, &inoutCommandBuffer.mCommandBuffer);
-        inoutCommandBuffer.mCommandBuffer = VK_NULL_HANDLE; // Reset the command buffer handle
-    }
-
-    void Device::Destroy(CommandPool& commandPool, CommandBuffer& inoutCommandBuffer) const noexcept
-    {
-        assert(commandPool.mCommandPool != VK_NULL_HANDLE);
-        assert(inoutCommandBuffer.mCommandBuffer != VK_NULL_HANDLE);
-        // Free the command buffer from the command pool
-        vkFreeCommandBuffers(mDevice, commandPool.mCommandPool, 1, &inoutCommandBuffer.mCommandBuffer);
-    }
-
-    void Device::Destroy(CommandPool& inoutCommandPool) const noexcept
-    {
-        if (inoutCommandPool.mCommandPool != VK_NULL_HANDLE)
-        {
-            vkDestroyCommandPool(mDevice, inoutCommandPool.mCommandPool, nullptr);
-            inoutCommandPool.mCommandPool = VK_NULL_HANDLE;
-        }
-    }
-
-    void Device::Destroy(Fence& inoutFence) const noexcept
-    {
-        if (inoutFence.mFence != VK_NULL_HANDLE)
-        {
-            vkDestroyFence(mDevice, inoutFence.mFence, nullptr);
-            inoutFence.mFence = VK_NULL_HANDLE;
-        }
-    }
-
-    void Device::Reset(CommandPool& inoutCommandPool) const noexcept
-    {
-        if (inoutCommandPool.mCommandPool != VK_NULL_HANDLE)
-        {
-            VkResult vr = VK_SUCCESS;
-            vr = vkResetCommandPool(mDevice, inoutCommandPool.mCommandPool, 0);
-            if (vr != VK_SUCCESS)
-            {
-                CGS_LOG_ERROR("Failed to reset command pool: %s", VkResultToString(vr));
-            }
-        }
-    }
-
-    void Device::Trim(CommandPool& inoutCommandPool) const noexcept
-    {
-        if (inoutCommandPool.mCommandPool != VK_NULL_HANDLE)
-        {
-            vkTrimCommandPool(mDevice, inoutCommandPool.mCommandPool, 0);
-        }
     }
 
     void Device::createCommandPools() noexcept
@@ -171,5 +69,106 @@ namespace cgs::graphics::rhi
             auto commandPool = std::make_unique<CommandPool>(commandPoolCreateInfo);
             mCommandPools.push_back(std::move(commandPool));
         }
+    }
+
+    void Device::createSwapChain() noexcept
+    {
+        VkResult vr = VK_SUCCESS;
+
+        const Instance& instance = mPhysicalDevice.GetInstance();
+
+        uint32_t width = 0;
+        uint32_t height = 0;
+        bool result = instance.GetConfig().GetSetting<uint32_t>(CONFIG_WIDTH, width);
+        if (!result || width == 0)
+        {
+            CGS_LOG_WARNING("Invalid window width: %u. Using default value of 800.", width);
+            width = 1920; // Default to 1920 if not set or invalid
+        }
+
+        result = instance.GetConfig().GetSetting<uint32_t>(CONFIG_HEIGHT, height);
+        if (!result || height == 0)
+        {
+            CGS_LOG_WARNING("Invalid window height: %u. Using default value of 600.", height);
+            height = 1080; // Default to 1080 if not set or invalid
+        }
+
+        SwapChain::CreateInfo swapChainCreateInfo =
+        {
+            .RhiDevice = *this, // Reference to the device this swap chain is created from
+            .SwapChain = VK_NULL_HANDLE, // Will be created later
+            .Extent = { .width = width, .height = height }, // Default extent for the swap chain, can be adjusted later
+        };
+
+        void* windowHandle = instance.GetWindowHandle();
+		if (windowHandle == nullptr)
+		{
+			CGS_LOG_ERROR("Window handle is null, cannot create surface.");
+			return;
+		}
+
+#if defined(CGS_WIN32)
+		const VkWin32SurfaceCreateInfoKHR win32SurfaceCreateInfo =
+		{
+			.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+			.pNext = nullptr,
+			.flags = 0,
+			.hinstance = ::GetModuleHandle(nullptr), // Use the current module handle
+			.hwnd = reinterpret_cast<HWND>(windowHandle), // Cast the window handle to HWND
+		};
+
+		vr = vkCreateWin32SurfaceKHR(instance.GetVkInstance(), &win32SurfaceCreateInfo, nullptr, &swapChainCreateInfo.Surface);
+		if (vr != VK_SUCCESS)
+		{
+			CGS_LOG_ERROR("Failed to create Vulkan surface: %d", vr);
+			return;
+		}
+#elif defined(CGS_UNIX)
+		// For Unix-like systems, you would typically use X11 or Wayland.
+		CGS_LOG_ERROR("Unix-like surface creation is not implemented yet.");
+#endif	// defined(CGS_WIN32)
+
+        uint32_t frameBufferCount = 0;
+        result = instance.GetConfig().GetSetting(CONFIG_FRAME_BUFFER_COUNT, frameBufferCount);
+        if (!result || frameBufferCount == 0)
+        {
+            CGS_LOG_ERROR("Invalid frame buffer count: %u. Using default value of 2.", frameBufferCount);
+            frameBufferCount = 2; // Default to 2 if not set or invalid
+        }
+
+        VkSwapchainCreateInfoKHR vkSwapChainCreateInfo =
+        {
+            .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+            .pNext = nullptr,
+            .flags = 0, // No special flags
+            .surface = swapChainCreateInfo.Surface,
+            .minImageCount = frameBufferCount,
+            .imageFormat = VK_FORMAT_B8G8R8A8_UNORM, // Standard RGBA format
+            .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, // Standard sRGB color space
+            .imageExtent = VkExtent2D
+            {
+                .width = width, // Width of the swap chain images
+                .height = height // Height of the swap chain images
+            },
+            .imageArrayLayers = 1, // Single layer for 2D images
+            .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, // Usage flags
+            .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, // Exclusive sharing mode
+            .queueFamilyIndexCount = 0, // Not sharing with other queue families
+            .pQueueFamilyIndices = nullptr,
+            .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR, // No transformation
+            .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, // Opaque composite alpha
+            .presentMode = VK_PRESENT_MODE_MAILBOX_KHR,
+            .clipped = VK_TRUE, // Clipping enabled
+            .oldSwapchain = VK_NULL_HANDLE // No old swapchain
+        };
+
+        vr = vkCreateSwapchainKHR(mDevice, &vkSwapChainCreateInfo, nullptr, &swapChainCreateInfo.SwapChain);
+        if (vr != VK_SUCCESS)
+        {
+            CGS_LOG_ERROR("Failed to create swap chain: %s", VkResultToString(vr));
+            return; // Exit if swap chain creation fails
+        }
+
+        mSwapChain = std::make_unique<SwapChain>(swapChainCreateInfo);
     }
 }

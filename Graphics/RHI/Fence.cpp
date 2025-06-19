@@ -10,7 +10,8 @@ namespace cgs::graphics::rhi
     {
         if (mFence != VK_NULL_HANDLE)
         {
-            mDevice.Destroy(*this); // Destroy the fence using the device
+            vkDestroyFence(mDevice.GetVkDevice(), mFence, nullptr);
+            mFence = VK_NULL_HANDLE;
         }
     }   
 } // namespace cgs::graphics::rhi

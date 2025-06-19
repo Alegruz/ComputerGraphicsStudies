@@ -8,6 +8,7 @@ namespace cgs::graphics::rhi
 {
     PhysicalDeviceGroup::PhysicalDeviceGroup(CreateInfo& createInfo) noexcept
         : mInstance(createInfo.RhiInstance)
+        , mIndex(createInfo.Index)
         , mPhysicalDeviceGroupProperties(createInfo.PhysicalDeviceGroupProperties)
         , mPhysicalDevices()
     {
@@ -17,7 +18,7 @@ namespace cgs::graphics::rhi
         assert(mPhysicalDeviceGroupProperties.physicalDeviceCount > 0);
         assert(mPhysicalDeviceGroupProperties.physicalDeviceCount <= VK_MAX_DEVICE_GROUP_SIZE);
         assert(mPhysicalDeviceGroupProperties.subsetAllocation == VK_FALSE || mPhysicalDeviceGroupProperties.subsetAllocation == VK_TRUE);
-        createPhysicalDevices();
+        createPhysicalDevices(createInfo.bCreateLogicalDevice);
     }
 
     PhysicalDeviceGroup::~PhysicalDeviceGroup() noexcept
@@ -40,7 +41,7 @@ namespace cgs::graphics::rhi
         }
     }
 
-    void PhysicalDeviceGroup::createPhysicalDevices() noexcept
+    void PhysicalDeviceGroup::createPhysicalDevices(const bool bCreateLogicalDevice) noexcept
     {
         const uint32_t physicalDeviceCount = mPhysicalDeviceGroupProperties.physicalDeviceCount;
         CGS_LOG_INFO("Physical device group contains %u physical devices.", physicalDeviceCount);
@@ -61,6 +62,7 @@ namespace cgs::graphics::rhi
                         .RhiInstance = mInstance,
                         .RhiPhysicalDeviceGroup = *this,
                         .PhysicalDevice = mPhysicalDeviceGroupProperties.physicalDevices[i],
+                        .bCreateLogicalDevice = bCreateLogicalDevice,
                     };
                     std::unique_ptr<PhysicalDevice> device = std::make_unique<PhysicalDevice>(physicalDeviceCreateInfo);
                     assert(device->mPhysicalDevice != VK_NULL_HANDLE);
@@ -87,6 +89,7 @@ namespace cgs::graphics::rhi
                     .RhiInstance = mInstance,
                     .RhiPhysicalDeviceGroup = *this,
                     .PhysicalDevice = mPhysicalDeviceGroupProperties.physicalDevices[i],
+                    .bCreateLogicalDevice = bCreateLogicalDevice,
                 };
                 std::unique_ptr<PhysicalDevice> physicalDevice = std::make_unique<PhysicalDevice>(physicalDeviceCreateInfo);
                 assert(physicalDevice->mPhysicalDevice != VK_NULL_HANDLE);

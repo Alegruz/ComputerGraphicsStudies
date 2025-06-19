@@ -2,6 +2,11 @@
 
 #include "Core/pch.h"
 
+#if defined(CGS_WIN32)
+#include <windows.h>
+#elif defined(CGS_LINUX)
+#endif  // defined(CGS_WIN32)
+
 #include "volk/volk.h"
 
 namespace cgs
@@ -11,6 +16,9 @@ namespace cgs
     const std::string CONFIG_PHYSICAL_DEVICE_GROUP_INDEX("PhysicalDeviceGroupIndex");
     const std::string CONFIG_PHYSICAL_DEVICE_INDEX("PhysicalDeviceIndex");
     const std::string CONFIG_PHYSICAL_DEVICE("PhysicalDevice");
+    const std::string CONFIG_WIDTH("Width");
+    const std::string CONFIG_HEIGHT("Height");
+    const std::string CONFIG_FRAME_BUFFER_COUNT("FrameBufferCount");
 
     namespace graphics
     {

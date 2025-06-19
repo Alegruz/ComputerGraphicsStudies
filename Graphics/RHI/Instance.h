@@ -3,6 +3,7 @@
 namespace cgs::graphics::rhi
 {
     class PhysicalDeviceGroup;
+	class SwapChain;
 
 	class Instance final
 	{
@@ -29,6 +30,8 @@ namespace cgs::graphics::rhi
 				.pfnUserCallback = DebugUtilsMessengerCallback,
 				.pUserData = nullptr
 			};
+			void* WindowHandle = nullptr; // Handle to the window for the renderer, if applicable
+			bool bCreateLogicalDevice = true; // Whether to create logical devices for the physical devices in this group
 		};
 
 	public:
@@ -42,17 +45,20 @@ namespace cgs::graphics::rhi
 		~Instance() noexcept;
 
 		CGS_INLINE constexpr const cgs::core::Config& GetConfig() const noexcept { return mConfig; } // Accessor for the configuration object
+		CGS_INLINE constexpr VkInstance GetVkInstance() const noexcept { return mInstance; } // Accessor for the Vulkan instance handle
 		CGS_INLINE constexpr const std::vector<std::unique_ptr<PhysicalDeviceGroup>>& GetPhysicalDeviceGroups() const noexcept { return mPhysicalDeviceGroups; } // Accessor for the physical device groups
+		CGS_INLINE constexpr void* GetWindowHandle() const noexcept { return mWindowHandle; } // Accessor for the window handle
 
 	private:
 		void createInstance(CreateInfo& createInfo) noexcept;
 		void createDebugUtilsMessenger(CreateInfo& createInfo) noexcept;
-		void createPhysicalDeviceGroups() noexcept;
+		void createPhysicalDeviceGroups(const bool bCreateLogicalDevice) noexcept;
 
 	private:
 		[[maybe_unused]] cgs::core::Config& mConfig;
 		VkInstance mInstance;
 		std::vector<std::unique_ptr<PhysicalDeviceGroup>> mPhysicalDeviceGroups;
 		VkDebugUtilsMessengerEXT mDebugUtilsMessenger; // Debug messenger for Vulkan validation layers
+		void* mWindowHandle; // Handle to the window for the renderer, if applicable
 	};
 }

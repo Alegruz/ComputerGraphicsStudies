@@ -9,6 +9,7 @@ namespace cgs::graphics
 	Renderer::Renderer(const CreateInfo& createInfo) noexcept
 		: mConfig(std::move(createInfo.Config))
 		, mInstance()
+		, mWindowHandle(createInfo.WindowHandle) // Store the window handle for the renderer
 	{
 		const std::filesystem::path& configFilePath = mConfig.GetConfigFilePath();
 		CGS_LOG_INFO("Renderer created with configuration from: %s", configFilePath.string().c_str());
@@ -18,6 +19,7 @@ namespace cgs::graphics
 		{
 			.Config = mConfig,
 			.ApplicationInfo = createInfo.ApplicationInfo,
+			.WindowHandle = mWindowHandle, // Pass the window handle to the instance create info
 		};
 
 		mConfig.CreateProjectInfo(instanceCreateInfo.EngineInfo);

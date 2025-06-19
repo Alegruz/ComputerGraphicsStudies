@@ -14,6 +14,7 @@ namespace cgs::graphics
 		{
 			cgs::core::Config&&		Config; // Configuration for the renderer
 			cgs::core::ProjectInfo	ApplicationInfo;
+			void*					WindowHandle = nullptr; // Handle to the window for the renderer
 		};
 
 	public:
@@ -24,5 +25,6 @@ namespace cgs::graphics
 	private:
 		cgs::core::Config mConfig; // Configuration for the renderer
 		std::unique_ptr<rhi::Instance> mInstance;
+		void* mWindowHandle = nullptr; // Handle to the window for the renderer
 	};
 }

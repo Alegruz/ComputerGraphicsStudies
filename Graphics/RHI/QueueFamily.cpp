@@ -8,7 +8,8 @@
 namespace cgs::graphics::rhi
 {
     QueueFamily::QueueFamily(const CreateInfo& createInfo) noexcept
-        : mQueueFamilyProperties(createInfo.QueueFamilyProperties)
+        : mPhysicalDevice(createInfo.RhiPhysicalDevice)
+        , mQueueFamilyProperties(createInfo.QueueFamilyProperties)
         , mIndex(createInfo.Index)
     {
         assert(mQueueFamilyProperties.sType == VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2);
@@ -65,5 +66,10 @@ namespace cgs::graphics::rhi
             , (mQueueFamilyProperties.queueFamilyProperties.queueFlags & VK_QUEUE_VIDEO_ENCODE_BIT_KHR) ? "true" : "false"
             , mQueueFamilyProperties.queueFamilyProperties.queueCount
         );
+    }
+
+    bool QueueFamily::IsPresentSupported() const noexcept
+    {
+        return mPhysicalDevice.IsPresentSupported(mIndex);
     }
 } // namespace cgs::graphics::rhi

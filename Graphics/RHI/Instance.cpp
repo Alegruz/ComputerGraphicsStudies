@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "Graphics/RHI/PhysicalDeviceGroup.h"
+#include "Graphics/RHI/SwapChain.h"
 
 namespace cgs::graphics::rhi
 {
@@ -219,6 +220,7 @@ namespace cgs::graphics::rhi
 		, mInstance(VK_NULL_HANDLE)
 		, mPhysicalDeviceGroups()
 		, mDebugUtilsMessenger(VK_NULL_HANDLE)
+		, mWindowHandle(createInfo.WindowHandle)
 	{
 		[[maybe_unused]] VkResult vr = volkInitialize();
 		assert(vr == VK_SUCCESS);
@@ -232,7 +234,7 @@ namespace cgs::graphics::rhi
 
 		createInstance(createInfo);
 		createDebugUtilsMessenger(createInfo);
-		createPhysicalDeviceGroups();
+		createPhysicalDeviceGroups(createInfo.bCreateLogicalDevice);
 	}
 
 	Instance::~Instance() noexcept
@@ -361,13 +363,14 @@ namespace cgs::graphics::rhi
 
 		if (bIsDebugLayerEnabled)
 		{
+			createInfo.DebugUtilsMessengerCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 			createInfo.DebugUtilsMessengerCreateInfo.pNext = nullptr;
 			vr = vkCreateDebugUtilsMessengerEXT(mInstance, &createInfo.DebugUtilsMessengerCreateInfo, nullptr, &mDebugUtilsMessenger);
 			assert(vr == VK_SUCCESS && mDebugUtilsMessenger != VK_NULL_HANDLE);
 		}
 	}
 
-	void Instance::createPhysicalDeviceGroups() noexcept
+	void Instance::createPhysicalDeviceGroups(const bool bCreateLogicalDevice) noexcept
 	{
 		[[maybe_unused]] VkResult vr = VK_SUCCESS;
 
@@ -404,6 +407,7 @@ namespace cgs::graphics::rhi
 				.RhiInstance = *this,
 				.Index = i,
 				.PhysicalDeviceGroupProperties = groupProperties,
+				.bCreateLogicalDevice = bCreateLogicalDevice,
 			};
 			mPhysicalDeviceGroups.emplace_back(std::make_unique<PhysicalDeviceGroup>(createInfo));
 			

@@ -184,6 +184,7 @@ namespace cgs
         , mPhysicalDeviceChoiceWidgetIndex(std::numeric_limits<uint32_t>::max()) // Initialize the index to an invalid value
         , mWidgets()
         , mEngine()
+        , mRendererWindow(std::make_unique<Fl_Double_Window>(800, 600, "CGS Renderer"))
     {
         Fl::scheme("gtk+"); // Set the FLTK scheme to GTK+ for better appearance on Linux
         mWindow->label("CGS Launcher"); // Set the window title
@@ -217,6 +218,23 @@ namespace cgs
         mWidgets.push_back(std::move(comboBox));
 
         mWindow->end();
+
+        uint32_t width = 1920; // Default width for the renderer window
+        uint32_t height = 1080; // Default height
+        bool result = mConfig->GetSetting(CONFIG_WIDTH, width);
+        if (!result)
+        {
+            CGS_LOG_INFO("Using default width: %u", width);
+            mConfig->SetSetting(CONFIG_WIDTH, width);
+        }
+        result = mConfig->GetSetting(CONFIG_HEIGHT, height);
+        if (!result)
+        {
+            CGS_LOG_INFO("Using default height: %u", height);
+            mConfig->SetSetting(CONFIG_HEIGHT, height);
+        }
+
+        mRendererWindow->resize(100, 100, width, height); // Set the initial size of the renderer window
     }
 
     Launcher::~Launcher() noexcept
@@ -252,6 +270,7 @@ namespace cgs
         graphics::rhi::Instance::CreateInfo instanceCreateInfo
         {
             .Config = *mRendererConfig,
+            .bCreateLogicalDevice = false,
         };
         mConfig->CreateProjectInfo(instanceCreateInfo.ApplicationInfo);
         mRendererConfig->CreateProjectInfo(instanceCreateInfo.EngineInfo);
@@ -344,9 +363,21 @@ namespace cgs
     {
         if (!mEngine)
         {
+            mRendererWindow->show(); // Show the renderer window
+            void* windowHandle = fl_xid(mRendererWindow.get());
+
             core::Config config = *mConfig;
             core::Config rendererConfig = *mRendererConfig;
-            mEngine = std::make_unique<cgs::Engine>(std::move(config), std::move(rendererConfig));
+            
+            Engine::CreateInfo engineCreateInfo
+            {
+                .EngineConfig = std::move(config),
+                .RendererConfig = std::move(rendererConfig),
+                .WindowHandle = windowHandle,
+            };
+
+            mInstance.reset(); // Reset the instance to ensure it's created fresh
+            mEngine = std::make_unique<cgs::Engine>(engineCreateInfo);
         }
     }
 
@@ -355,6 +386,7 @@ namespace cgs
         if (mEngine)
         {
             mEngine.reset(); // Release the engine resources
+            UpdateConfig(); // Reinitialize the configuration settings and widgets
         }
     }
 } // namespace cgs

@@ -18,10 +18,12 @@ namespace cgs::graphics::rhi
 			Instance&				RhiInstance;
 			PhysicalDeviceGroup&	RhiPhysicalDeviceGroup;
 			VkPhysicalDevice		PhysicalDevice;
+			bool					bCreateLogicalDevice = true; // Whether to create a logical device for this physical device
 		};
 
 		struct Properties final
 		{
+			VkPhysicalDeviceMemoryProperties	MemoryProperties;
 			VkPhysicalDeviceVulkan14Properties 	Vulkan14Properties;
 			VkPhysicalDeviceVulkan13Properties 	Vulkan13Properties;
 			VkPhysicalDeviceVulkan12Properties 	Vulkan12Properties;
@@ -50,6 +52,7 @@ namespace cgs::graphics::rhi
 
 		void DestroyLogicalDevice(VkDevice &inoutDevice) const noexcept;
 		float EvaluateScore() const noexcept;
+		uint32_t GetMemoryTypeIndex(const uint32_t typeBits, const VkMemoryPropertyFlags memoryPropertyFlags) const noexcept;
 		void PrintProperties() const noexcept;
 
 		constexpr const char* GetName() const noexcept;
@@ -57,6 +60,7 @@ namespace cgs::graphics::rhi
 		constexpr const std::vector<std::unique_ptr<QueueFamily>>& GetQueueFamilies() const noexcept;
 		CGS_INLINE const Device& GetLogicalDevice() const noexcept { return *mLogicalDevice; }
 		CGS_INLINE const Instance& GetInstance() const noexcept { return mInstance; }
+		bool IsPresentSupported(const uint32_t queueFamilyIndex) const noexcept;
 
 	private:
 		static void printDeviceProperties(const Properties &properties) noexcept;

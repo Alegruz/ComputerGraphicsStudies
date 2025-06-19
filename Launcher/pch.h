@@ -24,6 +24,7 @@
 #include <FL/Fl_Round_Button.H>
 #include <FL/Fl_Value_Input.H>
 #include <FL/Fl_Input.H>
+#include <FL/x.H>
 
 #if defined(CSG_COMPILER_CLANG)
 #pragma clang diagnostic pop

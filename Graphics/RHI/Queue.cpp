@@ -2,8 +2,9 @@
 
 #include "Graphics/RHI/Queue.h"
 
-#include "Graphics/RHI/Device.h"
+#include "Graphics/RHI/CommandBuffer.h"
 #include "Graphics/RHI/Fence.h"
+#include "Graphics/RHI/Device.h"
 
 namespace cgs::graphics::rhi
 {
@@ -11,12 +12,18 @@ namespace cgs::graphics::rhi
         : mDevice(createInfo.RhiDevice)
         , mQueueFamily(createInfo.RhiQueueFamily)
         , mQueue(createInfo.Queue)
-        , mSubmissionFence(mDevice.CreateFence())
     {
         assert(mQueue != VK_NULL_HANDLE);
+
+        VkFenceCreateInfo fenceCreateInfo =
+        {
+            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+        };
     }
     
-    void Queue::Submit() const noexcept
+    void Queue::Submit(CommandBuffer& commandBuffer) const noexcept
     {
         const VkSubmitInfo2 submitInfo =
         {
@@ -30,7 +37,8 @@ namespace cgs::graphics::rhi
             .signalSemaphoreInfoCount = 0, // No signal semaphores
             .pSignalSemaphoreInfos = nullptr // No signal semaphores
         };
-        VkResult vr = vkQueueSubmit2(mQueue, 1, &submitInfo, mSubmissionFence->mFence);
+        Fence& fence = commandBuffer.GetFence();
+        VkResult vr = vkQueueSubmit2(mQueue, 1, &submitInfo, fence.GetVkFence());
         if (vr != VK_SUCCESS)
         {
             CGS_LOG_ERROR("Failed to submit queue: %s", VkResultToString(vr));
@@ -43,10 +51,26 @@ namespace cgs::graphics::rhi
 
     Queue::~Queue() noexcept
     {
-        if (mSubmissionFence)
-        {
-            mSubmissionFence.reset();
-        }
         mQueue = VK_NULL_HANDLE;
+    }
+
+    void Queue::Present() const noexcept
+    {
+        const VkPresentInfoKHR presentInfo =
+        {
+            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .pNext = nullptr,
+            .waitSemaphoreCount = 0, // No wait semaphores
+            .pWaitSemaphores = nullptr, // No wait semaphores
+            .swapchainCount = 0, // No swap chains
+            .pSwapchains = nullptr, // No swap chains
+            .pImageIndices = nullptr, // No image indices
+            .pResults = nullptr // No results
+        };
+        VkResult vr = vkQueuePresentKHR(mQueue, &presentInfo);
+        if (vr != VK_SUCCESS)
+        {
+            CGS_LOG_ERROR("Failed to present queue: %s", VkResultToString(vr));
+        }
     }
 } // namespace cgs::graphics::rhi

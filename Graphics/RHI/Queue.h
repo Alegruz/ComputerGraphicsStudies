@@ -2,8 +2,8 @@
 
 namespace cgs::graphics::rhi
 {
+    class CommandBuffer; // Forward declaration of CommandBuffer class
     class Device;
-    class Fence; // Forward declaration of Fence class
     class QueueFamily;
 
     class Queue final
@@ -27,12 +27,12 @@ namespace cgs::graphics::rhi
         Queue& operator=(const Queue&) = delete;
         Queue& operator=(Queue&&) noexcept = delete;
 
-        void Submit() const noexcept;
+        void Present() const noexcept; // Present the queue, typically used for swap chain images
+        void Submit(CommandBuffer& commandBuffer) const noexcept;
 
     private:
         [[maybe_unused]] Device& mDevice; // Reference to the device this queue belongs to
         [[maybe_unused]] QueueFamily& mQueueFamily; // Reference to the queue family this queue belongs to
         VkQueue mQueue; // The Vulkan queue handle
-        std::unique_ptr<Fence> mSubmissionFence;
     };
 } // namespace cgs::graphics::rhi

@@ -15,6 +15,7 @@ namespace cgs::graphics::rhi
             Instance& RhiInstance; // Reference to the RHI instance
             uint32_t Index; // Index of the physical device group
             VkPhysicalDeviceGroupProperties PhysicalDeviceGroupProperties; // Properties of the physical device group
+            bool bCreateLogicalDevice = true; // Whether to create logical devices for the physical devices in this group
         };
 
     public:
@@ -31,7 +32,7 @@ namespace cgs::graphics::rhi
         CGS_INLINE constexpr const std::vector<std::unique_ptr<PhysicalDevice>>& GetPhysicalDevices() const noexcept { return mPhysicalDevices; }
 
     private:
-        void createPhysicalDevices() noexcept;
+        void createPhysicalDevices(const bool bCreateLogicalDevice) noexcept;
 
     private:
         Instance& mInstance; // Reference to the RHI instance

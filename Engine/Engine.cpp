@@ -8,31 +8,12 @@
 namespace cgs
 {
     Engine::Engine(const CreateInfo& createInfo) noexcept
-        : mConfig(createInfo.ConfigCreateInfo)
+        : mConfig(std::move(createInfo.EngineConfig))
         , mProjectInfo()
+        , mRenderer(nullptr)
+        , mWindowHandle(createInfo.WindowHandle) // Store the window handle for the renderer
     {
-        std::filesystem::path rendererConfigFilePath;
-        const bool result = mConfig.GetSetting(CONFIG_RENDERER_CONFIG_FILE_PATH, rendererConfigFilePath);
-        if (result == false)
-        {
-            CGS_LOG_INFO("Using default path 'Engine/config.ini'.");
-            rendererConfigFilePath = "Engine/config.ini"; // Default path if not specified
-            mConfig.SetSetting(CONFIG_RENDERER_CONFIG_FILE_PATH, rendererConfigFilePath.string());
-        }
-        else
-        {
-            CGS_LOG_INFO("Using renderer configuration file: %s", rendererConfigFilePath.string().c_str());
-        }
-
-        cgs::core::Config rendererConfig = core::Config(core::Config::CreateInfo{.ConfigFilePath = rendererConfigFilePath});
-        initialize(std::move(rendererConfig)); // Call the initialization method
-    }
-
-    Engine::Engine(core::Config&& config, core::Config&& rendererConfig) noexcept
-        : mConfig(std::move(config))
-        , mProjectInfo()
-    {
-        initialize(std::move(rendererConfig)); // Call the initialization method
+        initialize(std::move(createInfo.RendererConfig)); // Call the initialization method
     }
 
     Engine::~Engine() noexcept
@@ -64,6 +45,7 @@ namespace cgs
         {
             .Config = std::move(rendererConfig),
             .ApplicationInfo = mProjectInfo,
+            .WindowHandle = mWindowHandle, // Pass the window handle to the renderer
         };
 
         mRenderer = std::make_unique<graphics::Renderer>(rendererCreateInfo);

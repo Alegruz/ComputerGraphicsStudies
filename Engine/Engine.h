@@ -18,13 +18,14 @@ namespace cgs
     public:
         struct CreateInfo final
         {
-            core::Config::CreateInfo ConfigCreateInfo; // Configuration for the engine
+            core::Config&& EngineConfig;
+            core::Config&& RendererConfig;
+            void* WindowHandle = nullptr; // Handle to the window for the renderer
         };
 
     public:
         Engine() = delete;
         explicit Engine(const CreateInfo& createInfo) noexcept;
-        explicit Engine(core::Config&& config, core::Config&& rendererConfig) noexcept;
 
         Engine(const Engine&) = delete;
         Engine(Engine&&) noexcept = default;
@@ -43,5 +44,6 @@ namespace cgs
         core::ProjectInfo mProjectInfo; // Project information for the engine
 
         std::unique_ptr<graphics::Renderer> mRenderer; // Renderer instance for the engine
+        void* mWindowHandle = nullptr; // Handle to the window for the renderer
     };
 } // namespace cgs

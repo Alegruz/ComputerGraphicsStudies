@@ -19,6 +19,7 @@ namespace cgs::graphics::rhi
     {
         assert(mPhysicalDevice != VK_NULL_HANDLE);
         vkGetPhysicalDeviceProperties2(mPhysicalDevice, const_cast<VkPhysicalDeviceProperties2*>(&mProperties.PhysicalDeviceProperties));
+        vkGetPhysicalDeviceMemoryProperties(mPhysicalDevice, &mProperties.MemoryProperties);
 
         PrintProperties();
 
@@ -26,7 +27,11 @@ namespace cgs::graphics::rhi
         createQueueFamilies();
         CGS_LOG_INFO("Physical device %s has %zu queue families.", GetName(), mQueueFamilies.size());
         CGS_LOG_INFO("Creating logical device for the physical device %s...", GetName());
-        createLogicalDevice();
+
+        if (createInfo.bCreateLogicalDevice)
+        {
+            createLogicalDevice();
+        }
     }
 
     PhysicalDevice::~PhysicalDevice() noexcept
@@ -52,11 +57,8 @@ namespace cgs::graphics::rhi
     float PhysicalDevice::EvaluateScore() const noexcept
     {
         float score = 0.0f;
-        VkPhysicalDeviceProperties properties;
-        vkGetPhysicalDeviceProperties(mPhysicalDevice, &properties);
-
         float deviceTypeScore = 0.0f;
-        switch (properties.deviceType)
+        switch (mProperties.PhysicalDeviceProperties.properties.deviceType)
         {
             case VK_PHYSICAL_DEVICE_TYPE_OTHER:
                 deviceTypeScore = 0.0f; // Lowest score for unknown devices.
@@ -74,7 +76,7 @@ namespace cgs::graphics::rhi
                 deviceTypeScore = 0.5f; // CPUs are not suitable for graphics tasks.
                 break;
         default:
-            CGS_LOG_ERROR("Unknown physical device type: %d", static_cast<int>(properties.deviceType));
+            CGS_LOG_ERROR("Unknown physical device type: %d", static_cast<int>(mProperties.PhysicalDeviceProperties.properties.deviceType));
             break;
         }
 
@@ -82,9 +84,36 @@ namespace cgs::graphics::rhi
         return score;
     }
 
+    uint32_t PhysicalDevice::GetMemoryTypeIndex(const uint32_t typeBits, const VkMemoryPropertyFlags memoryPropertyFlags) const noexcept
+    {
+        for (uint32_t i = 0; i < mProperties.MemoryProperties.memoryTypeCount; ++i)
+        {
+            if ((typeBits & (1 << i)) && (mProperties.MemoryProperties.memoryTypes[i].propertyFlags & memoryPropertyFlags) == memoryPropertyFlags)
+            {
+                return i;
+            }
+        }
+
+        CGS_LOG_ERROR("Failed to find suitable memory type.");
+        return UINT32_MAX; // Return an invalid index if no suitable memory type is found.
+    }
+
     void PhysicalDevice::PrintProperties() const noexcept
     {
         printDeviceProperties(mProperties);
+    }
+
+    bool PhysicalDevice::IsPresentSupported(const uint32_t queueFamilyIndex) const noexcept
+    {
+#if defined(CGS_WIN32)
+        const VkBool32 result = vkGetPhysicalDeviceWin32PresentationSupportKHR(mPhysicalDevice, queueFamilyIndex);
+#elif defined(CGS_UNIX)
+        const VkBool32 result = vkGetPhysicalDeviceXlibPresentationSupportKHR(mPhysicalDevice, queueFamilyIndex, nullptr);
+#else
+        CGS_LOG_ERROR("Presentation support is not implemented for this platform.");
+        return false;
+#endif
+        return result == VK_TRUE;
     }
 
     void PhysicalDevice::printDeviceProperties(const Properties& properties) noexcept
@@ -128,6 +157,7 @@ namespace cgs::graphics::rhi
             {
                 .RhiPhysicalDevice = *this,
                 .QueueFamilyProperties = queueFamilyPropertiesList[i],
+                .Index = i,
             };
             mQueueFamilies.emplace_back(std::make_unique<QueueFamily>(queueFamilyCreateInfo));
         }
@@ -151,9 +181,10 @@ namespace cgs::graphics::rhi
 
         // Prepare queue create infos
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+        std::vector<std::vector<float>> queuePrioritiesList;
         for (const auto& queueFamily : mQueueFamilies)
         {
-            const std::vector<float> queuePriorities(queueFamily->GetQueueCount(), queueFamily->EvaluateScore());
+            queuePrioritiesList.emplace_back(std::vector<float>(queueFamily->GetQueueCount(), queueFamily->EvaluateScore()));
             VkDeviceQueueCreateInfo queueCreateInfo =
             {
                 .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -161,7 +192,7 @@ namespace cgs::graphics::rhi
                 .flags = 0,
                 .queueFamilyIndex = queueFamily->GetIndex(),
                 .queueCount = queueFamily->GetQueueCount(),
-                .pQueuePriorities = queuePriorities.data(),
+                .pQueuePriorities = queuePrioritiesList.back().data(),
             };
             queueCreateInfos.push_back(queueCreateInfo);
         }
@@ -226,7 +257,6 @@ namespace cgs::graphics::rhi
         Device::CreateInfo logicalDeviceCreateInfo =
         {
             .RhiPhysicalDevice = *this,
-            .Device = VK_NULL_HANDLE // This will be filled by vkCreateDevice
         };
         vr = vkCreateDevice(mPhysicalDevice, &deviceCreateInfo, nullptr, &logicalDeviceCreateInfo.Device);
         if (vr != VK_SUCCESS)
