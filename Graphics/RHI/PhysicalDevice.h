@@ -56,6 +56,7 @@ namespace cgs::graphics::rhi
 		CGS_INLINE constexpr const Properties& GetProperties() const noexcept { return mProperties; }
 		constexpr const std::vector<std::unique_ptr<QueueFamily>>& GetQueueFamilies() const noexcept;
 		CGS_INLINE const Device& GetLogicalDevice() const noexcept { return *mLogicalDevice; }
+		CGS_INLINE const Instance& GetInstance() const noexcept { return mInstance; }
 
 	private:
 		static void printDeviceProperties(const Properties &properties) noexcept;

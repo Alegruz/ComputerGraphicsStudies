@@ -138,7 +138,7 @@ namespace cgs::graphics::rhi
         VkResult vr = VK_SUCCESS;
 
         uint32_t mainPhysicalDeviceGroupIndex = 0;
-        const bool result = mInstance.GetConfig().GetSetting("MainPhysicalDeviceGroupIndex", mainPhysicalDeviceGroupIndex);
+        const bool result = mInstance.GetConfig().GetSetting(CONFIG_PHYSICAL_DEVICE_GROUP_INDEX, mainPhysicalDeviceGroupIndex);
         if (!result)
         {
             mainPhysicalDeviceGroupIndex = PhysicalDeviceGroup::DEFAULT_INDEX; // Default to the first physical device group if not set
@@ -166,17 +166,60 @@ namespace cgs::graphics::rhi
             queueCreateInfos.push_back(queueCreateInfo);
         }
 
+        std::vector<const char *> deviceExtensions = 
+        {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME, // Swapchain extension is commonly used
+        };
+
+        void* pNext = nullptr;
+        VkPhysicalDeviceVulkan14Features vulkan14Features = 
+        {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+            .pNext = pNext, // Link to Vulkan 1.3 features
+        };
+        pNext = &vulkan14Features;
+
+        VkPhysicalDeviceVulkan13Features vulkan13Features = 
+        {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+            .pNext = pNext,
+            .synchronization2 = VK_TRUE, // Enable synchronization 2
+            .dynamicRendering = VK_TRUE, // Enable dynamic rendering
+        };
+        pNext = &vulkan13Features;
+
+        VkPhysicalDeviceVulkan12Features vulkan12Features = 
+        {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+            .pNext = pNext,
+        };
+        pNext = &vulkan12Features;
+
+        VkPhysicalDeviceVulkan11Features vulkan11Features = 
+        {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+            .pNext = pNext,
+        };
+        pNext = &vulkan11Features;
+
+        VkPhysicalDeviceFeatures2 physicalDeviceFeatures2 = 
+        {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+            .pNext = pNext,
+        };
+        pNext = &physicalDeviceFeatures2;
+
         VkDeviceCreateInfo deviceCreateInfo =
         {
             .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            .pNext = nullptr,
+            .pNext = pNext,
             .flags = 0,
             .queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()),
             .pQueueCreateInfos = queueCreateInfos.data(),
             .enabledLayerCount = 0, // Deprecated, should not be used
             .ppEnabledLayerNames = nullptr, // Deprecated, should not be used
-            .enabledExtensionCount = 0, // Should be filled with enabled extensions
-            .ppEnabledExtensionNames = nullptr, // Should be filled with enabled extension names
+            .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()), // Should be filled with enabled extensions
+            .ppEnabledExtensionNames = deviceExtensions.data(), // Should be filled with enabled extension names
             .pEnabledFeatures = nullptr // Should be filled with enabled features
         };
 

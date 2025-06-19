@@ -115,7 +115,7 @@ namespace cgs
         const std::vector<std::unique_ptr<graphics::rhi::PhysicalDeviceGroup>>& physicalDeviceGroups = launcher->mInstance->GetPhysicalDeviceGroups(); // Create physical device groups
         graphics::rhi::PhysicalDeviceGroup& group = *physicalDeviceGroups[selectedIndex];
         const std::vector<std::unique_ptr<graphics::rhi::PhysicalDevice>>& physicalDevices = group.GetPhysicalDevices();
-        launcher->mRendererConfig->SetSetting("PhysicalDeviceGroupIndex", selectedIndex);
+        launcher->mRendererConfig->SetSetting(CONFIG_PHYSICAL_DEVICE_GROUP_INDEX, selectedIndex);
 
         if(launcher->mPhysicalDeviceChoiceWidgetIndex == std::numeric_limits<uint32_t>::max())
         {
@@ -156,7 +156,7 @@ namespace cgs
         }
 
         uint32_t selectedPhysicalDeviceGroupIndex = 0;
-        const bool result = launcher->mRendererConfig->GetSetting("PhysicalDeviceGroupIndex", selectedPhysicalDeviceGroupIndex);
+        const bool result = launcher->mRendererConfig->GetSetting(CONFIG_PHYSICAL_DEVICE_GROUP_INDEX, selectedPhysicalDeviceGroupIndex);
         if (!result)
         {
             CGS_LOG_ERROR("Failed to get PhysicalDeviceGroupIndex from configuration.");
@@ -168,9 +168,9 @@ namespace cgs
         
         const uint32_t selectedPhysicalDeviceIndex = static_cast<uint32_t>(choice->value());
         const std::vector<std::unique_ptr<graphics::rhi::PhysicalDevice>>& physicalDevices = group.GetPhysicalDevices();
-        launcher->mRendererConfig->SetSetting("PhysicalDeviceIndex", selectedPhysicalDeviceIndex);
+        launcher->mRendererConfig->SetSetting(CONFIG_PHYSICAL_DEVICE_INDEX, selectedPhysicalDeviceIndex);
         const std::string selectedDeviceName = physicalDevices[selectedPhysicalDeviceIndex]->GetProperties().PhysicalDeviceProperties.properties.deviceName;
-        launcher->mRendererConfig->SetSetting("PhysicalDevice", selectedDeviceName);
+        launcher->mRendererConfig->SetSetting(CONFIG_PHYSICAL_DEVICE, selectedDeviceName);
         launcher->mWindow->redraw(); // Redraw the window to show the updated combo box
     }
 
@@ -236,12 +236,12 @@ namespace cgs
         updateConfig(*mConfig); // Initialize the configuration settings and widgets
 
         std::filesystem::path rendererConfigFilePath;
-        bool result = mConfig->GetSetting("RendererConfigFilePath", rendererConfigFilePath);
+        bool result = mConfig->GetSetting(CONFIG_RENDERER_CONFIG_FILE_PATH, rendererConfigFilePath);
         if (result == false)
         {
             CGS_LOG_INFO("Using default path 'Engine/config.ini'.");
             rendererConfigFilePath = "Engine/config.ini"; // Default path if not specified
-            mConfig->SetSetting("RendererConfigFilePath", rendererConfigFilePath.string());
+            mConfig->SetSetting(CONFIG_RENDERER_CONFIG_FILE_PATH, rendererConfigFilePath.string());
         }
         else
         {

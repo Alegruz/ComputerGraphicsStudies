@@ -352,7 +352,7 @@ namespace cgs::graphics::rhi
 		bIsDebugLayerEnabled = true;
 #else  // defined(CGS_DEBUG)
 		bool bIsDebugLayerEnabledInConfig = false;
-		const bool result = mConfig.GetSetting("EnableDebugUtilsMessenger", bIsDebugLayerEnabledInConfig);
+		const bool result = mConfig.GetSetting(CONFIG_ENABLE_DEBUG_LAYER, bIsDebugLayerEnabledInConfig);
 		if (result == true)
 		{
 			bIsDebugLayerEnabled = bIsDebugLayerEnabledInConfig;
@@ -387,7 +387,7 @@ namespace cgs::graphics::rhi
 		assert(vr == VK_SUCCESS);
 
 		uint32_t physicalDeviceGroupToUseIndex = std::numeric_limits<uint32_t>::max();
-		const bool bPhysicalDeviceGroupIndexFound = mConfig.GetSetting("PhysicalDeviceGroupIndex", physicalDeviceGroupToUseIndex);
+		const bool bPhysicalDeviceGroupIndexFound = mConfig.GetSetting(CONFIG_PHYSICAL_DEVICE_GROUP_INDEX, physicalDeviceGroupToUseIndex);
 
 		for (uint32_t i = 0; i < physicalDeviceGroupCount; ++i)
 		{

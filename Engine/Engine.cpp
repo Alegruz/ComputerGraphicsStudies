@@ -2,6 +2,7 @@
 
 #include "Engine/Engine.h"
 
+#include "Graphics/pch.h"
 #include "Graphics/Renderer.h"
 
 namespace cgs
@@ -11,12 +12,12 @@ namespace cgs
         , mProjectInfo()
     {
         std::filesystem::path rendererConfigFilePath;
-        const bool result = mConfig.GetSetting("RendererConfigFilePath", rendererConfigFilePath);
+        const bool result = mConfig.GetSetting(CONFIG_RENDERER_CONFIG_FILE_PATH, rendererConfigFilePath);
         if (result == false)
         {
             CGS_LOG_INFO("Using default path 'Engine/config.ini'.");
             rendererConfigFilePath = "Engine/config.ini"; // Default path if not specified
-            mConfig.SetSetting("RendererConfigFilePath", rendererConfigFilePath.string());
+            mConfig.SetSetting(CONFIG_RENDERER_CONFIG_FILE_PATH, rendererConfigFilePath.string());
         }
         else
         {
@@ -48,11 +49,11 @@ namespace cgs
         mConfig.CreateProjectInfo(mProjectInfo); // Create project information from the configuration
 
         std::string minimumLogLevel;
-        bool result = mConfig.GetSetting("MinimumLogLevel", minimumLogLevel);
+        bool result = mConfig.GetSetting(CONFIG_MINIMUM_LOG_LEVEL, minimumLogLevel);
         if (result == false)
         {
             minimumLogLevel = "Info"; // Default log level if not specified
-            mConfig.SetSetting("MinimumLogLevel", minimumLogLevel);
+            mConfig.SetSetting(CONFIG_MINIMUM_LOG_LEVEL, minimumLogLevel);
         }
         cgs::core::Log::GetInstance().SetLogLevel(cgs::core::Log::eLogLevelFromString(minimumLogLevel.c_str()));
 

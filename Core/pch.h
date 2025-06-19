@@ -70,4 +70,11 @@ namespace cgs
 			uint32_t	Version;
 		};
 	}
+
+	const std::string CONFIG_NAME("Name");
+	const std::string CONFIG_VERSION_VARIANT("VersionVariant");
+	const std::string CONFIG_VERSION_MAJOR("VersionMajor");
+	const std::string CONFIG_VERSION_MINOR("VersionMinor");
+	const std::string CONFIG_VERSION_PATCH("VersionPatch");
+	const std::string CONFIG_MINIMUM_LOG_LEVEL("MinimumLogLevel");
 }

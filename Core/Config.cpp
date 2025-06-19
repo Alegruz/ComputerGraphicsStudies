@@ -33,46 +33,46 @@ namespace cgs::core
     void Config::CreateProjectInfo(cgs::core::ProjectInfo& outProjectInfo) noexcept
     {
         std::string projectName;
-        bool result = GetSetting("Name", projectName);
+        bool result = GetSetting(CONFIG_NAME, projectName);
         if (result == false)
         {
             CGS_LOG_ERROR("Failed to retrieve project name from configuration. Using default name 'DefaultProject'.");
             projectName = "DefaultProject";
-            SetSetting("Name", projectName);
+            SetSetting(CONFIG_NAME, projectName);
         }
         outProjectInfo.Name = projectName.c_str();
 
         uint32_t projectVersionVariant;
-        result = GetSetting("VersionVariant", projectVersionVariant);
+        result = GetSetting(CONFIG_VERSION_VARIANT, projectVersionVariant);
         if (result == false)
         {
             CGS_LOG_ERROR("Failed to retrieve project version variant from configuration. Using default value 0.");
             projectVersionVariant = 0;
-            SetSetting("VersionVariant", projectVersionVariant);
+            SetSetting(CONFIG_VERSION_VARIANT, projectVersionVariant);
         }
         uint32_t projectVersionMajor;
-        result = GetSetting("VersionMajor", projectVersionMajor);
+        result = GetSetting(CONFIG_VERSION_MAJOR, projectVersionMajor);
         if (result == false)
         {
             CGS_LOG_ERROR("Failed to retrieve project version major from configuration. Using default value 0.");
             projectVersionMajor = 0;
-            SetSetting("VersionMajor", projectVersionMajor);
+            SetSetting(CONFIG_VERSION_MAJOR, projectVersionMajor);
         }
         uint32_t projectVersionMinor;
-        result = GetSetting("VersionMinor", projectVersionMinor);
+        result = GetSetting(CONFIG_VERSION_MINOR, projectVersionMinor);
         if (result == false)
         {
             CGS_LOG_ERROR("Failed to retrieve project version minor from configuration. Using default value 0.");
             projectVersionMinor = 0;
-            SetSetting("VersionMinor", projectVersionMinor);
+            SetSetting(CONFIG_VERSION_MINOR, projectVersionMinor);
         }
         uint32_t projectVersionPatch;
-        result = GetSetting("VersionPatch", projectVersionPatch);
+        result = GetSetting(CONFIG_VERSION_PATCH, projectVersionPatch);
         if (result == false)
         {
             CGS_LOG_ERROR("Failed to retrieve project version patch from configuration. Using default value 1.");
             projectVersionPatch = 1;
-            SetSetting("VersionPatch", projectVersionPatch);
+            SetSetting(CONFIG_VERSION_PATCH, projectVersionPatch);
         }
         outProjectInfo.Version = MAKE_API_VERSION(projectVersionVariant, projectVersionMajor, projectVersionMinor, projectVersionPatch);
     }

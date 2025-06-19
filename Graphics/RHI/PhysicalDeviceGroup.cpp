@@ -46,7 +46,7 @@ namespace cgs::graphics::rhi
         CGS_LOG_INFO("Physical device group contains %u physical devices.", physicalDeviceCount);
 
         std::string deviceName;
-        mInstance.GetConfig().GetSetting("PhysicalDevice", deviceName);
+        mInstance.GetConfig().GetSetting(CONFIG_PHYSICAL_DEVICE, deviceName);
         if (!deviceName.empty())
         {
             for (uint32_t i = 0; i < physicalDeviceCount; ++i)
