@@ -34,7 +34,7 @@ namespace cgs::graphics::rhi
         }
 
         mCommandPools.clear();
-
+        mSwapChain.reset(); // Reset the swap chain, which will destroy its resources
         mPhysicalDevice.DestroyLogicalDevice(mDevice);
     }
 
@@ -132,7 +132,7 @@ namespace cgs::graphics::rhi
         result = instance.GetConfig().GetSetting(CONFIG_FRAME_BUFFER_COUNT, frameBufferCount);
         if (!result || frameBufferCount == 0)
         {
-            CGS_LOG_ERROR("Invalid frame buffer count: %u. Using default value of 2.", frameBufferCount);
+            CGS_LOG_WARNING("Invalid frame buffer count: %u. Using default value of 2.", frameBufferCount);
             frameBufferCount = 2; // Default to 2 if not set or invalid
         }
 

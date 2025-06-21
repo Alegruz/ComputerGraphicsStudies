@@ -1,5 +1,11 @@
 #pragma once
 
+#if defined(CGS_COMPILER_MSVC)
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#endif	// defined(CGS_COMPILER_MSVC)
+
 #include <algorithm>
 #include <cassert>
 #include <concepts>

@@ -25,6 +25,7 @@
 #include <FL/Fl_Value_Input.H>
 #include <FL/Fl_Input.H>
 #include <FL/x.H>
+#include <FL/Fl_Scroll.H>
 
 #if defined(CSG_COMPILER_CLANG)
 #pragma clang diagnostic pop

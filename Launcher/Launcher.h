@@ -22,6 +22,7 @@ namespace cgs
         static void OnButtonClick(Fl_Widget*, void* pData) noexcept;
         static void OnPhysicalDeviceGroupChange(Fl_Widget*, void* pData) noexcept;
         static void OnPhysicalDeviceChange(Fl_Widget*, void* pData) noexcept;
+        static void OnRendererWindowClose(Fl_Widget*, void* pData) noexcept;
 
     public:
         Launcher() noexcept;
@@ -31,20 +32,20 @@ namespace cgs
         int Run(const int32_t argc, char **argv) noexcept;
 
     private:
-        void updateConfig(const core::Config& config) noexcept;
+        void updateConfig(const core::Config& config, int& inoutYOffset) noexcept;
         void startEngine() noexcept;
         void stopEngine() noexcept;
     
     private:
         std::unique_ptr<Fl_Double_Window> mWindow;
-        std::unique_ptr<Fl_Menu_Bar> mAppMenuBar;
+        Fl_Menu_Bar* mAppMenuBar;
+		Fl_Scroll* mScroll; // Scroll widget to hold configuration settings
+		Fl_Choice* mPhysicalDeviceChoice; // Choice widget for physical device selection
         std::filesystem::path mConfigFilePath;
         std::unique_ptr<core::Config> mConfig;
         std::unique_ptr<core::Config> mRendererConfig;
         std::unique_ptr<graphics::rhi::Instance> mInstance; // Renderer Hardware Interface instance
 
-        uint32_t mPhysicalDeviceChoiceWidgetIndex; // Index of the physical device choice widget
-        std::vector<std::unique_ptr<Fl_Widget>> mWidgets; // Store widgets to manage their lifetime
         std::unique_ptr<Engine> mEngine;
 
         std::unique_ptr<Fl_Double_Window> mRendererWindow;
