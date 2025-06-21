@@ -219,6 +219,7 @@ namespace cgs::graphics::rhi
 		: mConfig(createInfo.Config)
 		, mInstance(VK_NULL_HANDLE)
 		, mPhysicalDeviceGroups()
+		, mMainPhysicalDeviceGroupIndex(0)
 		, mDebugUtilsMessenger(VK_NULL_HANDLE)
 		, mWindowHandle(createInfo.WindowHandle)
 	{
@@ -421,6 +422,7 @@ namespace cgs::graphics::rhi
 			
 			if(bPhysicalDeviceGroupIndexFound == true && i == physicalDeviceGroupToUseIndex)
 			{
+				mMainPhysicalDeviceGroupIndex = i;
 				break;
 			}
 		}

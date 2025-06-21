@@ -26,7 +26,7 @@ namespace cgs::graphics::rhi
         Fence& operator=(const Fence&) = delete; // Copy assignment operator is deleted
         Fence& operator=(Fence&&) noexcept = delete; // Move assignment operator is deleted
 
-        CGS_INLINE constexpr VkFence GetVkFence() const noexcept { return mFence; } // Accessor for the Vulkan fence handle
+        CGS_INLINE constexpr const VkFence& GetVkFence() const noexcept { return mFence; } // Accessor for the Vulkan fence handle
     
     private:
         const Device& mDevice; // Reference to the device this fence belongs to

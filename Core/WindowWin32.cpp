@@ -1,72 +1,60 @@
+#include "Core/pch.h"
+
 #include "Core/Window.h"
 
 #if defined(CGS_WIN32)
+
+#include "Core/Delegate.h"
+
 #include <iostream>
 
 namespace cgs::core
 {
-    LRESULT CALLBACK WindowWin32::StaticWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) noexcept
+    LRESULT CALLBACK Window::StaticWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) noexcept
     {
-        WindowWin32* pWindow;
+        Window* pWindow;
         if (uMsg == WM_CREATE)
         {
             CREATESTRUCT* pCreate = reinterpret_cast<CREATESTRUCT*>(lParam);
-            pWindow = reinterpret_cast<WindowWin32*>(pCreate->lpCreateParams);
+            pWindow = reinterpret_cast<Window*>(pCreate->lpCreateParams);
             SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)pWindow);
         }
         else
         {
-            pWindow = reinterpret_cast<WindowWin32*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+            pWindow = reinterpret_cast<Window*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
         }
 
-        switch (uMsg)
+        if (pWindow != nullptr)
         {
-        case WM_CLOSE:
-        {
-            HMENU hMenu;
-            hMenu = GetMenu(hWnd);
-            if (hMenu != NULL)
-            {
-                DestroyMenu(hMenu);
-            }
-            DestroyWindow(hWnd);
-            UnregisterClass(
-                pWindow->mProjectNameW.c_str(),
-                pWindow->mhInstance
-            );
-            return 0;
-        }
-
-        case WM_DESTROY:
-            PostQuitMessage(0);
-            break;
+			return pWindow->HandleMessage(uMsg, wParam, lParam);
         }
 
         return DefWindowProc(hWnd, uMsg, wParam, lParam);
     }
 
-    CGS_INLINE WindowWin32::WindowWin32(const ProjectInfo& projectInfo) noexcept
-        : mProjectInfo(projectInfo)
+    Window::Window(const CreateInfo& createInfo) noexcept
+        : mProjectInfo(createInfo.CurrentProjectInfo)
         , mhInstance(static_cast<HINSTANCE>(GetModuleHandle(nullptr)))
     {
         mProjectNameW.assign(mProjectInfo.Name.begin(), mProjectInfo.Name.end());
 
-        HICON hIcon = NULL;
         WCHAR szExePath[MAX_PATH];
         GetModuleFileName(NULL, szExePath, MAX_PATH);
 
         // Register the windows class
-        WNDCLASS wndClass;
-        wndClass.style = CS_DBLCLKS;
-        wndClass.lpfnWndProc = StaticWindowProc;
-        wndClass.cbClsExtra = 0;
-        wndClass.cbWndExtra = 0;
-        wndClass.hInstance = mhInstance;
-        wndClass.hIcon = hIcon;
-        wndClass.hCursor = LoadCursor(NULL, IDC_ARROW);
-        wndClass.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
-        wndClass.lpszMenuName = NULL;
-        wndClass.lpszClassName = mProjectNameW.c_str();
+        WNDCLASS wndClass =
+        {
+			.style = CS_HREDRAW | CS_VREDRAW,
+			.lpfnWndProc = StaticWindowProc,
+			.cbClsExtra = 0,
+			.cbWndExtra = 0,
+			.hInstance = mhInstance,
+			.hIcon = LoadIcon(NULL, IDI_APPLICATION), // Load the default application icon
+			.hCursor = LoadCursor(NULL, IDC_ARROW), // Load the default arrow cursor
+			.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH), // Use a black brush for the background
+			.lpszMenuName = NULL, // No menu for this window
+			.lpszClassName = mProjectNameW.c_str() // Use the project name as the class name
+		};
 
         if (!RegisterClass(&wndClass))
         {
@@ -89,8 +77,8 @@ namespace cgs::core
         mhMenu = NULL;
 
         // This example uses a non-resizable 640 by 480 viewport for simplicity.
-        int nDefaultWidth = 640;
-        int nDefaultHeight = 480;
+        int nDefaultWidth = createInfo.Width;
+        int nDefaultHeight = createInfo.Height;
         SetRect(&mRect, 0, 0, nDefaultWidth, nDefaultHeight);
         AdjustWindowRect(
             &mRect,
@@ -108,7 +96,7 @@ namespace cgs::core
             0,
             mhMenu,
             mhInstance,
-            0
+            this
         );
 
         if (mhWnd == NULL)
@@ -125,5 +113,71 @@ namespace cgs::core
             }
         }
     }
+
+	Window::~Window() noexcept
+	{
+		if (mhWnd != NULL)
+		{
+			DestroyWindow(mhWnd);
+			mhWnd = NULL;
+		}
+		if (mhInstance != NULL)
+		{
+			UnregisterClass(mProjectNameW.c_str(), mhInstance);
+			mhInstance = NULL;
+		}
+	}
+
+    LRESULT Window::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) noexcept
+	{
+        switch (message)
+        {
+        case WM_CLOSE:
+        {
+            HMENU hMenu;
+            hMenu = GetMenu(mhWnd);
+            if (hMenu != NULL)
+            {
+                DestroyMenu(hMenu);
+            }
+            DestroyWindow(mhWnd);
+            UnregisterClass(
+                mProjectNameW.c_str(),
+                mhInstance
+            );
+            return 0;
+        }
+
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            break;
+        }
+
+        std::unordered_map<uint32_t, Delegate<void(void)>>::const_iterator it = mDelegates.find(message);
+        if (it != mDelegates.end())
+        {
+            it->second.Invoke(); // Invoke the delegate associated with the message ID
+            return 0; // Return 0 to indicate that the message has been handled
+        }
+
+        return DefWindowProc(mhWnd, message, wParam, lParam);
+	}
+
+	void Window::RegisterDelegate(uint32_t messageId, Delegate<void(void)>&& delegate) noexcept
+	{
+		mDelegates[messageId] = std::move(delegate); // Register the delegate for the specified message ID
+	}
+
+	void Window::Show() const noexcept
+	{
+		if (mhWnd != NULL)
+		{
+			ShowWindow(mhWnd, SW_SHOWDEFAULT);
+		}
+		else
+		{
+			CGS_LOG_ERROR("Window handle is null, cannot show the window.");
+		}
+	}
 }
 #endif // defined(CGS_WIN32)

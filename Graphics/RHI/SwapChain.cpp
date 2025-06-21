@@ -149,43 +149,10 @@ namespace cgs::graphics::rhi
                 continue; // Skip this image if view creation fails
             }
 
-            Semaphore::CreateInfo presentSemaphoreCreateInfo =
-            {
-                .RhiDevice = mDevice,
-            };
-
-            Semaphore::CreateInfo renderSemaphoreCreateInfo =
-            {
-                .RhiDevice = mDevice,
-            };
-
-            VkSemaphoreCreateInfo semaphoreCreateInfo =
-            {
-                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0 // No special flags
-            };
-
-            vr = vkCreateSemaphore(mDevice.GetVkDevice(), &semaphoreCreateInfo, nullptr, &presentSemaphoreCreateInfo.Semaphore);
-            if (vr != VK_SUCCESS)
-            {
-                CGS_LOG_ERROR("Failed to create semaphore: %s", VkResultToString(vr));
-                continue; // Skip this image if semaphore creation fails
-            }
-
-            vr = vkCreateSemaphore(mDevice.GetVkDevice(), &semaphoreCreateInfo, nullptr, &renderSemaphoreCreateInfo.Semaphore);
-            if (vr != VK_SUCCESS)
-            {
-                CGS_LOG_ERROR("Failed to create semaphore: %s", VkResultToString(vr));
-                continue; // Skip this image if semaphore creation fails
-            }
-
             BackBuffer::CreateInfo backBufferCreateInfo =
             {
                 .ColorAttachment = std::make_unique<Image>(imageCreateInfo), // Create an Image for each back buffer
                 .DepthAttachment = std::make_unique<Image>(depthImageCreateInfo), // Create a depth Image for each back buffer
-                .PresentCompletionSemaphore = std::make_unique<Semaphore>(presentSemaphoreCreateInfo), // Create a semaphore for present completion
-                .RenderCompletionSemaphore = std::make_unique<Semaphore>(renderSemaphoreCreateInfo), // Create a semaphore for render completion
             };
             mBackBuffers.emplace_back(std::make_unique<BackBuffer>(backBufferCreateInfo)); // Create a BackBuffer for each image
         }

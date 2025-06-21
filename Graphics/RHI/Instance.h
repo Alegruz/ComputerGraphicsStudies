@@ -47,6 +47,8 @@ namespace cgs::graphics::rhi
 		CGS_INLINE constexpr const cgs::core::Config& GetConfig() const noexcept { return mConfig; } // Accessor for the configuration object
 		CGS_INLINE constexpr VkInstance GetVkInstance() const noexcept { return mInstance; } // Accessor for the Vulkan instance handle
 		CGS_INLINE constexpr const std::vector<std::unique_ptr<PhysicalDeviceGroup>>& GetPhysicalDeviceGroups() const noexcept { return mPhysicalDeviceGroups; } // Accessor for the physical device groups
+		CGS_INLINE const PhysicalDeviceGroup& GetMainPhysicalDeviceGroup() const noexcept { return *mPhysicalDeviceGroups[mMainPhysicalDeviceGroupIndex]; } // Accessor for the main physical device group
+		CGS_INLINE PhysicalDeviceGroup& GetMainPhysicalDeviceGroup() noexcept { return *mPhysicalDeviceGroups[mMainPhysicalDeviceGroupIndex]; } // Accessor for the main physical device group
 		CGS_INLINE constexpr void* GetWindowHandle() const noexcept { return mWindowHandle; } // Accessor for the window handle
 
 	private:
@@ -58,6 +60,7 @@ namespace cgs::graphics::rhi
 		[[maybe_unused]] cgs::core::Config& mConfig;
 		VkInstance mInstance;
 		std::vector<std::unique_ptr<PhysicalDeviceGroup>> mPhysicalDeviceGroups;
+		uint32_t mMainPhysicalDeviceGroupIndex; // Index of the main physical device group
 		VkDebugUtilsMessengerEXT mDebugUtilsMessenger; // Debug messenger for Vulkan validation layers
 		void* mWindowHandle; // Handle to the window for the renderer, if applicable
 	};

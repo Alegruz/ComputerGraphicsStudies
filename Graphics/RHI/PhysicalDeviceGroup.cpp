@@ -11,6 +11,7 @@ namespace cgs::graphics::rhi
         , mIndex(createInfo.Index)
         , mPhysicalDeviceGroupProperties(createInfo.PhysicalDeviceGroupProperties)
         , mPhysicalDevices()
+		, mMainPhysicalDeviceIndex(0) // Initialize to an invalid index
     {
         assert(mPhysicalDeviceGroupProperties.sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES);
         PrintProperties();
@@ -67,6 +68,7 @@ namespace cgs::graphics::rhi
                     std::unique_ptr<PhysicalDevice> device = std::make_unique<PhysicalDevice>(physicalDeviceCreateInfo);
                     assert(device->mPhysicalDevice != VK_NULL_HANDLE);
                     mPhysicalDevices.push_back(std::move(device));
+					mMainPhysicalDeviceIndex = i; // Set the main physical device index to the first matching device
                     break;
                 }
             }

@@ -32,6 +32,8 @@ namespace cgs::graphics::rhi
         uint32_t AcquireNextImage() const noexcept; // Acquire the next image from the swap chain
 
         CGS_INLINE constexpr const Device& GetDevice() const noexcept { return mDevice; } // Accessor for the device this swap chain is created from
+		CGS_INLINE constexpr VkSwapchainKHR GetVkSwapChain() const noexcept { return mSwapChain; } // Accessor for the Vulkan swap chain handle
+		CGS_INLINE const BackBuffer& GetBackBuffer(const uint32_t index) const noexcept { return *mBackBuffers[index]; } // Return the back buffer at the specified index
         CGS_INLINE constexpr uint32_t GetBackBufferCount() const noexcept { return static_cast<uint32_t>(mBackBuffers.size()); } // Get the number of back buffers in the swap chain
     
     private:

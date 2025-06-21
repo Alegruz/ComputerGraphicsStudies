@@ -11,14 +11,14 @@
 
 namespace cgs
 {
-    const std::string CONFIG_RENDERER_CONFIG_FILE_PATH("RendererConfigFilePath");
-    const std::string CONFIG_ENABLE_DEBUG_LAYER("EnableDebugLayer");
-    const std::string CONFIG_PHYSICAL_DEVICE_GROUP_INDEX("PhysicalDeviceGroupIndex");
-    const std::string CONFIG_PHYSICAL_DEVICE_INDEX("PhysicalDeviceIndex");
-    const std::string CONFIG_PHYSICAL_DEVICE("PhysicalDevice");
-    const std::string CONFIG_WIDTH("Width");
-    const std::string CONFIG_HEIGHT("Height");
-    const std::string CONFIG_FRAME_BUFFER_COUNT("FrameBufferCount");
+    constexpr const char* CONFIG_RENDERER_CONFIG_FILE_PATH("RendererConfigFilePath");
+    constexpr const char* CONFIG_ENABLE_DEBUG_LAYER("EnableDebugLayer");
+    constexpr const char* CONFIG_PHYSICAL_DEVICE_GROUP_INDEX("PhysicalDeviceGroupIndex");
+    constexpr const char* CONFIG_PHYSICAL_DEVICE_INDEX("PhysicalDeviceIndex");
+    constexpr const char* CONFIG_PHYSICAL_DEVICE("PhysicalDevice");
+    constexpr const char* CONFIG_WIDTH("Width");
+    constexpr const char* CONFIG_HEIGHT("Height");
+    constexpr const char* CONFIG_FRAME_BUFFER_COUNT("FrameBufferCount");
 
     namespace graphics
     {

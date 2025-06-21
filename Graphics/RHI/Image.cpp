@@ -10,6 +10,8 @@ namespace cgs::graphics::rhi
         : Resource(createInfo.ResourceCreateInfo)
         , mImage(createInfo.Image)
         , mImageView(createInfo.ImageView) // Initialize image view to null
+		, mWidth(createInfo.Width)
+		, mHeight(createInfo.Height)
     {
         assert(mImage != VK_NULL_HANDLE);
     }

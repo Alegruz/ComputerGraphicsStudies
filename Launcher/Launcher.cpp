@@ -2,6 +2,9 @@
 
 #include "Launcher/Launcher.h"
 
+#include "Core/Delegate.h"
+#include "Core/Window.h"
+
 #include "Graphics/pch.h"
 #include "Graphics/RHI/Device.h"
 #include "Graphics/RHI/Instance.h"
@@ -117,7 +120,12 @@ namespace cgs
         const std::vector<std::unique_ptr<graphics::rhi::PhysicalDevice>>& physicalDevices = group.GetPhysicalDevices();
         launcher->mRendererConfig->SetSetting(CONFIG_PHYSICAL_DEVICE_GROUP_INDEX, selectedIndex);
 
-        if(launcher->mPhysicalDeviceChoice == nullptr)
+        if (launcher->mPhysicalDeviceChoice != nullptr)
+        {
+            delete launcher->mPhysicalDeviceChoice;
+            launcher->mPhysicalDeviceChoice = nullptr;
+        }
+
         {
             launcher->mPhysicalDeviceChoice = new Fl_Choice(250, 500, 250, 30, "Physical Devices");
             launcher->mPhysicalDeviceChoice->callback(OnPhysicalDeviceChange, launcher); // Set the callback for the combo box
@@ -172,18 +180,6 @@ namespace cgs
         launcher->mWindow->redraw(); // Redraw the window to show the updated combo box
     }
 
-    void Launcher::OnRendererWindowClose(Fl_Widget*, void* pData) noexcept
-    {
-        if (pData == nullptr)
-        {
-            CGS_LOG_ERROR("pData must be a valid pointer to Launcher instance.");
-            return;
-        }
-
-        Launcher* launcher = static_cast<Launcher*>(pData);
-        launcher->stopEngine(); // Stop the engine
-    }
-
     static constexpr int SCROLL_X = 80;
     static constexpr int SCROLL_Y = 25;
     static constexpr int SCROLL_W = 640;
@@ -191,18 +187,19 @@ namespace cgs
 
     Launcher::Launcher() noexcept
         : mWindow(std::make_unique<Fl_Double_Window>(1600, 900, "CGS Launcher"))
-        , mAppMenuBar()
-		, mScroll() // Create a scroll widget to hold configuration settings
-		, mPhysicalDeviceChoice() // Initialize the physical device choice widget to nullptr
+        , mAppMenuBar(nullptr)
+		, mScroll(nullptr) // Create a scroll widget to hold configuration settings
+		, mPhysicalDeviceChoice(nullptr) // Initialize the physical device choice widget to nullptr
+		, mPhysicalDeviceGroupChoice(nullptr) // Initialize the physical device group choice widget to nullptr
+		, mLaunchButton(nullptr) // Initialize the launch button to nullptr
         , mConfigFilePath("config.ini") // Default path for the configuration file
         , mConfig(std::make_unique<cgs::core::Config>(core::Config::CreateInfo{.ConfigFilePath = mConfigFilePath}))
         , mRendererConfig()
         , mInstance()
         , mEngine()
-        , mRendererWindow(std::make_unique<Fl_Double_Window>(800, 600, "CGS Renderer"))
+        , mRendererWindow()
     {
         Fl::scheme("gtk+"); // Set the FLTK scheme to GTK+ for better appearance on Linux
-        mWindow->label("CGS Launcher"); // Set the window title
         mWindow->begin();
         mAppMenuBar = new Fl_Menu_Bar(0, 0, mWindow->w(), 25);
         mAppMenuBar->add("File/Quit Editor", FL_COMMAND+'q', MenuQuitCallback);
@@ -214,31 +211,14 @@ namespace cgs
         mAppMenuBar->insert(ix+2, "Save as...", FL_COMMAND+'S', MenuSaveAsCallback, this, FL_MENU_DIVIDER);
         
         UpdateConfig(); // Initialize the configuration settings and widgets
-
         mWindow->end();
-
-        uint32_t width = 1920; // Default width for the renderer window
-        uint32_t height = 1080; // Default height
-        bool result = mConfig->GetSetting(CONFIG_WIDTH, width);
-        if (!result)
-        {
-            CGS_LOG_INFO("Using default width: %u", width);
-            mConfig->SetSetting(CONFIG_WIDTH, width);
-        }
-        result = mConfig->GetSetting(CONFIG_HEIGHT, height);
-        if (!result)
-        {
-            CGS_LOG_INFO("Using default height: %u", height);
-            mConfig->SetSetting(CONFIG_HEIGHT, height);
-        }
-
-        mRendererWindow->resize(100, 100, width, height); // Set the initial size of the renderer window
-        mRendererWindow->callback(OnRendererWindowClose, this); // Set the callback for the renderer window close event
     }
 
     Launcher::~Launcher() noexcept
     {
         mEngine.reset(); // Reset the engine instance to release resources
+		mRendererWindow.reset(); // Reset the renderer window to release resources
+
         mInstance.reset(); // Reset the RHI instance to release resources
 
         mRendererConfig.reset(); // Reset the renderer configuration object
@@ -300,23 +280,57 @@ namespace cgs
 		const int scrollH = mScroll->h();
 
 		int y = scrollY + scrollH + 30; // Initial vertical offset for widgets
-        Fl_Button* launchButton = new Fl_Button(350, y, 120, 30, "Launch Engine");
+        if (mLaunchButton != nullptr)
+        {
+            delete mLaunchButton;
+            mLaunchButton = nullptr;
+        }
+        mLaunchButton = new Fl_Button(350, y, 120, 30, "Launch Engine");
         y += 100;
-        launchButton->callback(OnButtonClick, this); // Set the callback for the button
-        mWindow->add(launchButton);
+        mLaunchButton->callback(OnButtonClick, this); // Set the callback for the button
+        mWindow->add(mLaunchButton);
 
-        Fl_Choice* comboBox = new Fl_Choice(250, y, 250, 30, "Physical Device Group");
+        if (mPhysicalDeviceGroupChoice != nullptr)
+        {
+            delete mPhysicalDeviceGroupChoice;
+            mPhysicalDeviceGroupChoice = nullptr;
+        }
+        mPhysicalDeviceGroupChoice = new Fl_Choice(250, y, 250, 30, "Physical Device Group");
         const std::vector<std::unique_ptr<graphics::rhi::PhysicalDeviceGroup>>& physicalDeviceGroups = mInstance->GetPhysicalDeviceGroups(); // Create physical device groups
         for (size_t i = 0; i < physicalDeviceGroups.size(); ++i)
         {
             std::string label = "Group " + std::to_string(i);
-            comboBox->add(label.c_str(), 0, nullptr, reinterpret_cast<void*>(i));
+            mPhysicalDeviceGroupChoice->add(label.c_str(), 0, nullptr, reinterpret_cast<void*>(i));
         }
-        comboBox->callback(OnPhysicalDeviceGroupChange, this); // Set the callback for the combo box
-        comboBox->value(0); // Select the first device by default
-        OnPhysicalDeviceGroupChange(comboBox, this); // Call the change handler to update the renderer config
-		mWindow->add(comboBox); // Add the combo box to the window
+        mPhysicalDeviceGroupChoice->callback(OnPhysicalDeviceGroupChange, this); // Set the callback for the combo box
+        mPhysicalDeviceGroupChoice->value(0); // Select the first device by default
+        OnPhysicalDeviceGroupChange(mPhysicalDeviceGroupChoice, this); // Call the change handler to update the renderer config
+		mWindow->add(mPhysicalDeviceGroupChoice); // Add the combo box to the window
 		mWindow->end(); // End the window layout
+
+        uint32_t width = 1920; // Default width for the renderer window
+        uint32_t height = 1080; // Default height
+        result = mConfig->GetSetting(CONFIG_WIDTH, width);
+        if (!result)
+        {
+            CGS_LOG_INFO("Using default width: %u", width);
+            mConfig->SetSetting(CONFIG_WIDTH, width);
+        }
+        result = mConfig->GetSetting(CONFIG_HEIGHT, height);
+        if (!result)
+        {
+            CGS_LOG_INFO("Using default height: %u", height);
+            mConfig->SetSetting(CONFIG_HEIGHT, height);
+        }
+
+        mRendererWindow = std::make_unique<core::Window>(
+            core::Window::CreateInfo
+            {
+                .CurrentProjectInfo = instanceCreateInfo.ApplicationInfo,
+                .Width = width,
+                .Height = height,
+            }
+            );
     }
 
     void Launcher::updateConfig(const core::Config& config, int& inoutYOffset) noexcept
@@ -380,7 +394,6 @@ namespace cgs
             input->value(static_cast<double>(value)); // Set the initial value
             input->align(FL_ALIGN_TOP); // Set alignment for input widgets
         }
-
         mWindow->redraw(); // Redraw the window to show the new widgets
     }
 
@@ -394,9 +407,6 @@ namespace cgs
     {
         if (!mEngine)
         {
-            mRendererWindow->show(); // Show the renderer window
-            void* windowHandle = fl_xid(mRendererWindow.get());
-
             core::Config config = *mConfig;
             core::Config rendererConfig = *mRendererConfig;
             
@@ -404,20 +414,19 @@ namespace cgs
             {
                 .EngineConfig = std::move(config),
                 .RendererConfig = std::move(rendererConfig),
-                .WindowHandle = windowHandle,
+                .Window = *mRendererWindow,
             };
 
+			mRendererConfig.reset(); // Reset the renderer configuration to release resources
+			mConfig.reset(); // Reset the configuration to release resources
             mInstance.reset(); // Reset the instance to ensure it's created fresh
-            mEngine = std::make_unique<cgs::Engine>(engineCreateInfo);
-        }
-    }
+			mWindow.reset(); // Reset the window to release resources
 
-    void Launcher::stopEngine() noexcept
-    {
-        if (mEngine)
-        {
-            mRendererWindow->hide(); // Hide the renderer window
+            mEngine = std::make_unique<cgs::Engine>(engineCreateInfo);
+
+            mEngine->Run(); // Start the engine's main loop
             mEngine.reset(); // Release the engine resources
+            mRendererWindow.reset(); // Reset the renderer window to release resources
             UpdateConfig(); // Reinitialize the configuration settings and widgets
         }
     }

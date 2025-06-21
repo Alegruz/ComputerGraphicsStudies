@@ -15,10 +15,16 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <queue>
 #include <string>
+#include <thread>
+#include <tuple>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #define NOMINMAX
@@ -77,10 +83,10 @@ namespace cgs
 		};
 	}
 
-	const std::string CONFIG_NAME("Name");
-	const std::string CONFIG_VERSION_VARIANT("VersionVariant");
-	const std::string CONFIG_VERSION_MAJOR("VersionMajor");
-	const std::string CONFIG_VERSION_MINOR("VersionMinor");
-	const std::string CONFIG_VERSION_PATCH("VersionPatch");
-	const std::string CONFIG_MINIMUM_LOG_LEVEL("MinimumLogLevel");
+	constexpr const char* CONFIG_NAME("Name");
+	constexpr const char* CONFIG_VERSION_VARIANT("VersionVariant");
+	constexpr const char* CONFIG_VERSION_MAJOR("VersionMajor");
+	constexpr const char* CONFIG_VERSION_MINOR("VersionMinor");
+	constexpr const char* CONFIG_VERSION_PATCH("VersionPatch");
+	constexpr const char* CONFIG_MINIMUM_LOG_LEVEL("MinimumLogLevel");
 }

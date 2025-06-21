@@ -15,6 +15,7 @@ namespace cgs::graphics::rhi
         , mPhysicalDeviceGroup(createInfo.RhiPhysicalDeviceGroup)
         , mPhysicalDevice(createInfo.PhysicalDevice)
         , mProperties()
+		, mQueueFamilies()
         , mLogicalDevice(nullptr)
     {
         assert(mPhysicalDevice != VK_NULL_HANDLE);
@@ -116,7 +117,7 @@ namespace cgs::graphics::rhi
         return result == VK_TRUE;
     }
 
-    void PhysicalDevice::printDeviceProperties(const Properties& properties) noexcept
+    void PhysicalDevice::printDeviceProperties([[maybe_unused]] const Properties& properties) noexcept
     {
         CGS_LOG_INFO("Physical Device Properties:"
                     "\n\tAPI Version: %u.%u.%u.%u"
@@ -151,6 +152,15 @@ namespace cgs::graphics::rhi
         vkGetPhysicalDeviceQueueFamilyProperties2(mPhysicalDevice, &queueFamilyCount, queueFamilyPropertiesList.data());
         CGS_LOG_INFO("Physical device %s has %u queue families.", GetName(), queueFamilyCount);
 
+        struct QueueFamilyComparator final
+        {
+            CGS_INLINE bool operator()(const std::unique_ptr<QueueFamily>& lhs, const std::unique_ptr<QueueFamily>& rhs) const noexcept
+            {
+                return (lhs == nullptr || rhs == nullptr) || (lhs->EvaluateScore() < rhs->EvaluateScore());
+            }
+        };
+
+        std::priority_queue<std::unique_ptr<QueueFamily>, std::vector<std::unique_ptr<QueueFamily>>, QueueFamilyComparator> queueFamiliesToCreate;
         for (uint32_t i = 0; i < queueFamilyCount; ++i)
         {
             QueueFamily::CreateInfo queueFamilyCreateInfo =
@@ -159,7 +169,16 @@ namespace cgs::graphics::rhi
                 .QueueFamilyProperties = queueFamilyPropertiesList[i],
                 .Index = i,
             };
-            mQueueFamilies.emplace_back(std::make_unique<QueueFamily>(queueFamilyCreateInfo));
+            std::unique_ptr<QueueFamily> queueFamily = std::make_unique<QueueFamily>(queueFamilyCreateInfo);
+            queueFamiliesToCreate.push(std::move(queueFamily));
+        }
+
+        mQueueFamilies.reserve(queueFamilyCount);
+        while (!queueFamiliesToCreate.empty())
+        {
+            auto queueFamily = std::move(const_cast<std::unique_ptr<QueueFamily>&>(queueFamiliesToCreate.top()));
+            mQueueFamilies.push_back(std::move(queueFamily));
+            queueFamiliesToCreate.pop();
         }
     }
 
@@ -277,7 +296,6 @@ namespace cgs::graphics::rhi
                 {
                     .RhiDevice = *mLogicalDevice.get(),
                     .RhiQueueFamily = *queueFamily.get(),
-                    .Queue = VK_NULL_HANDLE // This will be filled by vkGetDeviceQueue
                 };
 
                 const VkDeviceQueueInfo2 queueFamilyCreateInfo =

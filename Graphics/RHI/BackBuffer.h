@@ -12,8 +12,6 @@ namespace cgs::graphics::rhi
         {
             std::unique_ptr<Image> ColorAttachment; // The color attachment image for the back buffer
             std::unique_ptr<Image> DepthAttachment; // The depth attachment image for the back buffer, if applicable
-            std::unique_ptr<Semaphore> PresentCompletionSemaphore;
-            std::unique_ptr<Semaphore> RenderCompletionSemaphore;
         };
     
     public:
@@ -26,10 +24,11 @@ namespace cgs::graphics::rhi
         BackBuffer& operator=(const BackBuffer&) = delete; // Copy assignment operator is deleted
         BackBuffer& operator=(BackBuffer&&) noexcept = default; // Move assignment operator
 
+		CGS_INLINE const Image& GetColorAttachment() const noexcept { return *mColorAttachment; } // Accessor for the color attachment image
+		CGS_INLINE constexpr const std::unique_ptr<Image>& GetDepthAttachmentOrNull() const noexcept { return mDepthAttachment; } // Accessor for the depth attachment image, if applicable
+
     private:
         std::unique_ptr<Image> mColorAttachment; // Color attachment image for the back buffer
         std::unique_ptr<Image> mDepthAttachment; // Depth attachment image for the back buffer
-        std::unique_ptr<Semaphore> mPresentCompletionSemaphore; // Semaphore for present completion
-        std::unique_ptr<Semaphore> mRenderCompletionSemaphore; // Semaphore for render
     };
 } // namespace cgs::graphics::rhi

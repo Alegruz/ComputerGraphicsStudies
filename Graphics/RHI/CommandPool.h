@@ -19,7 +19,7 @@ namespace cgs::graphics::rhi
 
     public:
         CommandPool() = delete; // Default constructor is deleted
-        explicit CommandPool(const CreateInfo &createInfo) noexcept;
+        explicit CommandPool(const CreateInfo& createInfo) noexcept;
 
         CommandPool(const CommandPool&) = delete; // Copy constructor is deleted
         CommandPool(CommandPool&&) noexcept = default; // Move constructor
@@ -31,6 +31,8 @@ namespace cgs::graphics::rhi
         CGS_INLINE constexpr const Device& GetDevice() const noexcept { return mDevice; } // Accessor for the device this command pool belongs to
         CGS_INLINE constexpr VkCommandPool GetVkCommandPool() const noexcept { return mCommandPool; } // Accessor for the Vulkan command pool handle
         constexpr const std::vector<std::unique_ptr<CommandBuffer>>& GetCommandBuffers() const noexcept;
+        CGS_INLINE const CommandBuffer& GetCommandBuffer(const uint32_t index) const noexcept { return *mCommandBuffers[index]; } // Return the command buffer at the specified index }
+        CGS_INLINE CommandBuffer& GetCommandBuffer(const uint32_t index) noexcept { return *mCommandBuffers[index]; } // Return the command buffer at the specified index }
         
         void AllocateCommandBuffer() noexcept; // Allocate command buffers from this command pool
         void Reset() noexcept; // Reset the command pool, releasing all command buffers

@@ -6,6 +6,7 @@ namespace cgs
 {
     namespace core
     {
+        class Window;
     } // namespace core
     
     namespace graphics
@@ -20,7 +21,7 @@ namespace cgs
         {
             core::Config&& EngineConfig;
             core::Config&& RendererConfig;
-            void* WindowHandle = nullptr; // Handle to the window for the renderer
+			core::Window& Window; // Reference to the window for the renderer
         };
 
     public:
@@ -34,6 +35,10 @@ namespace cgs
         Engine& operator=(const Engine&) = delete;
         Engine& operator=(Engine&&) noexcept = delete;
 
+		bool HandleSystemEvents() noexcept; // Handle system events, such as window events or input events
+		bool Run() noexcept; // Run the engine, typically starts the main loop
+		CGS_INLINE constexpr void Stop() noexcept { mbIsRunning = false; } // Stop the engine, sets the running flag to false
+
         CGS_INLINE constexpr const core::Config& GetConfig() const noexcept { return mConfig; } // Accessor for the engine configuration
 
     private:
@@ -44,6 +49,7 @@ namespace cgs
         core::ProjectInfo mProjectInfo; // Project information for the engine
 
         std::unique_ptr<graphics::Renderer> mRenderer; // Renderer instance for the engine
-        void* mWindowHandle = nullptr; // Handle to the window for the renderer
+        core::Window& mWindow;
+		bool mbIsRunning; // Flag to indicate if the engine is running
     };
 } // namespace cgs

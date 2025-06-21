@@ -24,6 +24,7 @@ namespace cgs::graphics::rhi
         Semaphore& operator=(Semaphore&&) noexcept = default; // Move assignment operator
 
         CGS_INLINE constexpr const Device& GetDevice() const noexcept { return mDevice; } // Accessor for the device this semaphore belongs to
+		CGS_INLINE constexpr VkSemaphore GetVkSemaphore() const noexcept { return mSemaphore; } // Accessor for the Vulkan semaphore handle
         
     private:
         const Device& mDevice; // Reference to the device this semaphore belongs to

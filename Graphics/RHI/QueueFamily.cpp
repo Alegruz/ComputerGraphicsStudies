@@ -2,6 +2,7 @@
 
 #include "Graphics/RHI/QueueFamily.h"
 
+#include "Graphics/RHI/Device.h"
 #include "Graphics/RHI/PhysicalDevice.h"
 #include "Graphics/RHI/Queue.h"
 
@@ -11,6 +12,8 @@ namespace cgs::graphics::rhi
         : mPhysicalDevice(createInfo.RhiPhysicalDevice)
         , mQueueFamilyProperties(createInfo.QueueFamilyProperties)
         , mIndex(createInfo.Index)
+		, mQueues()
+		, mMainQueueIndex(0) // Initialize to an invalid index
     {
         assert(mQueueFamilyProperties.sType == VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2);
 
@@ -72,4 +75,20 @@ namespace cgs::graphics::rhi
     {
         return mPhysicalDevice.IsPresentSupported(mIndex);
     }
+
+	bool QueueFamily::IsDirectQueue() const noexcept
+	{
+		// Direct queues are typically those that support graphics operations.
+		return (mQueueFamilyProperties.queueFamilyProperties.queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT)) != 0;
+	}
+
+	bool QueueFamily::IsComputeSupported() const noexcept
+	{
+		return (mQueueFamilyProperties.queueFamilyProperties.queueFlags & (VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT)) != 0;
+	}
+
+	bool QueueFamily::IsTransferSupported() const noexcept
+	{
+		return (mQueueFamilyProperties.queueFamilyProperties.queueFlags & VK_QUEUE_TRANSFER_BIT) != 0;
+	}
 } // namespace cgs::graphics::rhi

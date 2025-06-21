@@ -30,6 +30,8 @@ namespace cgs::graphics::rhi
 
         CGS_INLINE constexpr uint32_t GetIndex() const noexcept { return mIndex; }
         CGS_INLINE constexpr const std::vector<std::unique_ptr<PhysicalDevice>>& GetPhysicalDevices() const noexcept { return mPhysicalDevices; }
+		CGS_INLINE const PhysicalDevice& GetMainPhysicalDevice() const noexcept { return *mPhysicalDevices[mMainPhysicalDeviceIndex]; } // Accessor for the main physical device in the group
+        CGS_INLINE PhysicalDevice& GetMainPhysicalDevice() noexcept { return *mPhysicalDevices[mMainPhysicalDeviceIndex]; } // Accessor for the main physical device in the group
 
     private:
         void createPhysicalDevices(const bool bCreateLogicalDevice) noexcept;
@@ -39,5 +41,6 @@ namespace cgs::graphics::rhi
         uint32_t mIndex;
         VkPhysicalDeviceGroupProperties mPhysicalDeviceGroupProperties; // Properties of the physical device group
         std::vector<std::unique_ptr<PhysicalDevice>> mPhysicalDevices; // List of physical devices in the group
+		uint32_t mMainPhysicalDeviceIndex; // Index of the main physical device in the group, if applicable
     };
 } // namespace cgs::graphics::rhi

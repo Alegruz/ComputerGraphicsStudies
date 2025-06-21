@@ -4,9 +4,12 @@
 
 int main(int argc, char **argv)
 {
-	cgs::Launcher launcher;
+	int result = 0;
+	{
+		cgs::Launcher launcher;
 
-	const int result = launcher.Run(argc, argv);
+		result = launcher.Run(argc, argv);
+	}
 #if defined(_CRTDBG_MAP_ALLOC)
 	_CrtDumpMemoryLeaks(); // Check for memory leaks if using MSVC
 #endif	// defined(_CRTDBG_MAP_ALLOC)
