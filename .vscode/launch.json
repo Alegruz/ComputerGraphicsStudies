@@ -8,7 +8,8 @@
             "program": "${workspaceFolder}/out/build/x64-debug/LauncherApp.exe",
             "cwd": "${workspaceFolder}",
             "stopAtEntry": true,
-            "preLaunchTask": "CMake Build (x64-Debug)"
+            "preLaunchTask": "CMake Build (x64-Debug)",
+            "symbolSearchPath": "{env:_NT_SYMBOL_PATH};{cwd}/external/slang/bin;"
         },
         {
             "type": "cppvsdbg",
@@ -17,7 +18,8 @@
             "program": "${workspaceFolder}/out/build/x64-release/LauncherApp.exe",
             "cwd": "${workspaceFolder}",
             "stopAtEntry": true,
-            "preLaunchTask": "CMake Build (x64-Release)"
+            "preLaunchTask": "CMake Build (x64-Release)",
+            "symbolSearchPath": "{env:_NT_SYMBOL_PATH};{cwd}/external/slang/bin;"
         },
         {
             "type": "cppdbg",
