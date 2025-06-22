@@ -159,13 +159,14 @@ See the [documentation on testing](../tools/slang-test/README.md) for more infor
 | `SLANG_ENABLE_GFX`                | `TRUE`                     | Enable gfx targets                                                                           |
 | `SLANG_ENABLE_SLANGD`             | `TRUE`                     | Enable language server target                                                                |
 | `SLANG_ENABLE_SLANGC`             | `TRUE`                     | Enable standalone compiler target                                                            |
+| `SLANG_ENABLE_SLANGI`             | `TRUE`                     | Enable Slang interpreter target                                                              |
 | `SLANG_ENABLE_SLANGRT`            | `TRUE`                     | Enable runtime target                                                                        |
 | `SLANG_ENABLE_SLANG_GLSLANG`      | `TRUE`                     | Enable glslang dependency and slang-glslang wrapper target                                   |
 | `SLANG_ENABLE_TESTS`              | `TRUE`                     | Enable test targets, requires SLANG_ENABLE_GFX, SLANG_ENABLE_SLANGD and SLANG_ENABLE_SLANGRT |
 | `SLANG_ENABLE_EXAMPLES`           | `TRUE`                     | Enable example targets, requires SLANG_ENABLE_GFX                                            |
 | `SLANG_LIB_TYPE`                  | `SHARED`                   | How to build the slang library                                                               |
 | `SLANG_ENABLE_RELEASE_DEBUG_INFO` | `TRUE`                     | Enable generating debug info for Release configs                                             |
-| `SLANG_ENABLE_RELEASE_LTO`        | `TRUE`                     | Enable LTO for Release builds                                                                |
+| `SLANG_ENABLE_RELEASE_LTO`        | `FALSE`                    | Enable LTO for Release builds                                                                |
 | `SLANG_ENABLE_SPLIT_DEBUG_INFO`   | `TRUE`                     | Enable generating split debug info for Debug and RelWithDebInfo configs                      |
 | `SLANG_SLANG_LLVM_FLAVOR`         | `FETCH_BINARY_IF_POSSIBLE` | How to set up llvm support                                                                   |
 | `SLANG_SLANG_LLVM_BINARY_URL`     | System dependent           | URL specifying the location of the slang-llvm prebuilt library                               |
@@ -309,6 +310,20 @@ cmake --install build --prefix generators --component generators
 rm -rf build # The Visual Studio generator will complain if this is left over from a previous build
 cmake --preset vs2022 --fresh -A arm64 -DSLANG_GENERATORS_PATH=generators/bin
 cmake --build --preset release
+```
+
+### Nix
+
+This repository contains a [Nix](https://nixos.org/)
+[flake](https://wiki.nixos.org/wiki/Flakes) (not officially supported or
+tested), which provides the necessary prerequisites for local development. Also,
+if you use [direnv](https://direnv.net/), you can run the following commands to
+have the Nix environment automatically activate when you enter your clone of
+this repository:
+
+```bash
+echo 'use flake' >> .envrc
+direnv allow
 ```
 
 ## Building with an older CMake

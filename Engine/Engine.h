@@ -11,7 +11,7 @@ namespace cgs
     
     namespace graphics
     {
-        class Renderer; // Forward declaration of Renderer class
+        class RendererManager; // Forward declaration of RendererManager class
     } // namespace graphics
 
     class Engine final
@@ -48,7 +48,7 @@ namespace cgs
         core::Config mConfig; // Configuration for the engine
         core::ProjectInfo mProjectInfo; // Project information for the engine
 
-        std::unique_ptr<graphics::Renderer> mRenderer; // Renderer instance for the engine
+        std::unique_ptr<graphics::RendererManager> mRenderer; // RendererManager instance for the engine
         core::Window& mWindow;
 		bool mbIsRunning; // Flag to indicate if the engine is running
     };

@@ -5,7 +5,7 @@
 #include "Core/Window.h"
 
 #include "Graphics/pch.h"
-#include "Graphics/Renderer.h"
+#include "Graphics/RendererManager.h"
 
 namespace cgs
 {
@@ -77,19 +77,19 @@ namespace cgs
         }
         cgs::core::Log::GetInstance().SetLogLevel(cgs::core::Log::eLogLevelFromString(minimumLogLevel.c_str()));
 
-        CGS_LOG_INFO("Creating Renderer...");
+        CGS_LOG_INFO("Creating RendererManager...");
 
         // Create the renderer with the provided project information
-        graphics::Renderer::CreateInfo rendererCreateInfo =
+        graphics::RendererManager::CreateInfo rendererCreateInfo =
         {
             .Config = std::move(rendererConfig),
             .ApplicationInfo = mProjectInfo,
             .WindowHandle = mWindow.GetWindow(), // Pass the window handle to the renderer
         };
 
-        mRenderer = std::make_unique<graphics::Renderer>(rendererCreateInfo);
+        mRenderer = std::make_unique<graphics::RendererManager>(rendererCreateInfo);
             
-        CGS_LOG_INFO("Renderer created successfully.");
+        CGS_LOG_INFO("RendererManager created successfully.");
         CGS_LOG_INFO("Engine initialized successfully.");
     }
 } // namespace cgs

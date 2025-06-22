@@ -14,7 +14,6 @@ namespace cgs::graphics::rhi
         , mCommandBuffers()
     {
         assert(mCommandPool != VK_NULL_HANDLE);
-        AllocateCommandBuffer(); // Allocate the first command buffer upon creation
     }
 
     CommandPool::~CommandPool() noexcept

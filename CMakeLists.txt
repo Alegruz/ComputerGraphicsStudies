@@ -22,6 +22,7 @@ include_directories(${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include)
 
 set(VULKAN_HEADERS_INSTALL_DIR "${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include")
 
+add_subdirectory(External/pugixml)
 add_subdirectory(External/volk)
 add_subdirectory(External/fltk)
 set(FLTK_WERROR OFF CACHE BOOL "" FORCE)
@@ -107,7 +108,20 @@ function(configure_cgs_target target)
     LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
     RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
   )
+  
+  target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/External/slang/include)
+  target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/External/pugixml/src)
 endfunction()
+
+add_library(gfx STATIC IMPORTED)
+set_target_properties(gfx PROPERTIES IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/External/slang/lib/gfx.lib")
+
+add_library(slang STATIC IMPORTED)
+set_target_properties(slang PROPERTIES IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/External/slang/lib/slang.lib")
+
+add_library(slang_rt STATIC IMPORTED)
+set_target_properties(slang_rt PROPERTIES IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/External/slang/lib/slang-rt.lib")
+
 
 add_subdirectory(Core)
 add_subdirectory(Graphics)

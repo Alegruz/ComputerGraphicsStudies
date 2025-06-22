@@ -17,6 +17,7 @@ namespace cgs::graphics::rhi
             VkImageView ImageView = VK_NULL_HANDLE; // Optional image view for the image, if applicable
 			uint32_t Width = 0; // Width of the image
 			uint32_t Height = 0; // Height of the image
+            Format Format; // Format of the image
         };
 
     public:
@@ -41,5 +42,6 @@ namespace cgs::graphics::rhi
         VkImageView mImageView; // Optional image view for the image, if applicable
 		uint32_t mWidth; // Width of the image
 		uint32_t mHeight; // Height of the image
+        Format mFormat; // Format of the image
     };
 } // namespace cgs::graphics::rhi

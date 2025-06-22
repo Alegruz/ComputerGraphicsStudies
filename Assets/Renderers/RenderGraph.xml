@@ -1,0 +1,3 @@
+<RenderGraph>
+    <Render Renderer="TestRenderer"/>
+</RenderGraph>

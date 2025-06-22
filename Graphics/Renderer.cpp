@@ -2,103 +2,30 @@
 
 #include "Graphics/Renderer.h"
 
-#include "Graphics/RHI/BackBuffer.h"
-#include "Graphics/RHI/Device.h"
+#include "Graphics/RHI/Attachment.h"
 #include "Graphics/RHI/CommandBuffer.h"
-#include "Graphics/RHI/CommandPool.h"
+#include "Graphics/RHI/Device.h"
 #include "Graphics/RHI/Image.h"
 #include "Graphics/RHI/Instance.h"
+#include "Graphics/RHI/Pipeline.h"
 #include "Graphics/RHI/PhysicalDevice.h"
 #include "Graphics/RHI/PhysicalDeviceGroup.h"
-#include "Graphics/RHI/Queue.h"
 #include "Graphics/RHI/QueueFamily.h"
 #include "Graphics/RHI/SwapChain.h"
 
 namespace cgs::graphics
 {
-	Renderer::Renderer(const CreateInfo& createInfo) noexcept
-		: mConfig(std::move(createInfo.Config))
-		, mInstance()
-		, mWindowHandle(createInfo.WindowHandle) // Store the window handle for the renderer
-		, mRendererImplementations() // Initialize the renderer implementations vector
-		, mRenderingOrder() // Initialize the rendering order vector
-		, mCurrentFrameIndex(0) // Initialize the current frame index to 0
-	{
-		[[maybe_unused]] const std::filesystem::path& configFilePath = mConfig.GetConfigFilePath();
-		CGS_LOG_INFO("Renderer created with configuration from: %s", configFilePath.string().c_str());
-
-		// Retrieve project information from the configuration
-		rhi::Instance::CreateInfo instanceCreateInfo =
-		{
-			.Config = mConfig,
-			.ApplicationInfo = createInfo.ApplicationInfo,
-			.WindowHandle = mWindowHandle, // Pass the window handle to the instance create info
-		};
-
-		mConfig.CreateProjectInfo(instanceCreateInfo.EngineInfo);
-
-		CGS_LOG_INFO("Renderer initialized with project: %s (Version: %u)", 
-			instanceCreateInfo.ApplicationInfo.Name.c_str(),
-			instanceCreateInfo.ApplicationInfo.Version);
-		CGS_LOG_INFO("Creating RHI Instance...");
-		// Create the RHI instance with the provided application and engine information
-		mInstance = std::make_unique<rhi::Instance>(instanceCreateInfo);
-		CGS_LOG_INFO("RHI Instance created successfully.");
-		CGS_LOG_INFO("Renderer initialized successfully.");
-
-		const std::string emptyRendererName = "EmptyRenderer";
-		EmptyRendererImplementation::CreateInfo emptyRendererCreateInfo =
-		{
-			.BaseCreateInfo = {.Instance = *mInstance, .Name = emptyRendererName } // Create info for the empty renderer implementation
-		};
-		AddRenderer<EmptyRendererImplementation>(emptyRendererCreateInfo); // Add a default empty renderer implementation
-		mRenderingOrder.push_back(emptyRendererName); // Add the empty renderer to the rendering order
-	}
-
-	Renderer::~Renderer() noexcept
-	{
-		mInstance.reset(); // Automatically cleans up the RHI instance
-		CGS_LOG_INFO("Renderer destroyed.");
-	}
-
-	void Renderer::Render() noexcept
-	{
-		rhi::PhysicalDevice& physicalDevice = mInstance->GetMainPhysicalDeviceGroup().GetMainPhysicalDevice();
-		rhi::Device& device = physicalDevice.GetLogicalDevice();
-		const rhi::QueueFamily& queueFamily = physicalDevice.GetMainQueueFamily();
-		const rhi::Queue& queue = queueFamily.GetMainQueue();
-		rhi::CommandPool& commandPool = device.GetMainCommandPool();
-		rhi::CommandBuffer& commandBuffer = commandPool.GetCommandBuffer(mCurrentFrameIndex);
-
-		{
-			rhi::CommandBufferScope commandBufferScope(commandBuffer);
-
-			for (auto& rendererName : mRenderingOrder)
-			{
-				auto it = mRendererImplementations.find(rendererName);
-				if (it != mRendererImplementations.end())
-				{
-					it->second->Render(commandBuffer); // Call the Render method of each renderer implementation
-				}
-				else
-				{
-					CGS_LOG_ERROR("Renderer implementation '%s' not found in the rendering order.", rendererName.c_str());
-				}
-			}
-		}
-
-		queue.Submit(commandBuffer);
-		queue.Present(commandBuffer);
-
-		mCurrentFrameIndex = (mCurrentFrameIndex + 1) % device.GetSwapChain().GetBackBufferCount(); // Increment the frame index for the next frame
-	}
-
-	void EmptyRendererImplementation::Render(rhi::CommandBuffer& commandBuffer) noexcept
+	void RenderCommand<eRenderCommand::DRAW>::Execute(rhi::CommandBuffer& commandBuffer) noexcept
 	{
 		const rhi::PhysicalDevice& physicalDevice = mInstance.GetMainPhysicalDeviceGroup().GetMainPhysicalDevice();
-		const rhi::Device& device = physicalDevice.GetLogicalDevice();
 		const rhi::QueueFamily& queueFamily = physicalDevice.GetMainQueueFamily();
-		const rhi::BackBuffer& backBuffer = device.GetSwapChain().GetBackBuffer(commandBuffer.GetFrameBufferIndex());
+
+		const uint32_t currentFrameBufferIndex = commandBuffer.GetFrameBufferIndex();
+
+		const rhi::GraphicsPipeline& graphicsPipeline = static_cast<const rhi::GraphicsPipeline&>(mPipeline);
+		const rhi::Attachment& attachment = graphicsPipeline.GetAttachment();
+		const rhi::Image& colorAttachment = attachment.GetColorAttachment(currentFrameBufferIndex);
+		[[maybe_unused]] const rhi::Image& depthAttachment = attachment.GetDepthAttachment(currentFrameBufferIndex);
 
 		VkImageMemoryBarrier imageMemoryBarrier =
 		{
@@ -110,7 +37,7 @@ namespace cgs::graphics
 			.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, // New layout is optimal for color attachment
 			.srcQueueFamilyIndex = queueFamily.GetIndex(), // Source queue family index
 			.dstQueueFamilyIndex = queueFamily.GetIndex(), // Destination queue family index
-			.image = backBuffer.GetColorAttachment().GetVkImage(), // Image to transition
+			.image = colorAttachment.GetVkImage(), // Image to transition
 			.subresourceRange =
 			{
 				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, // Aspect mask for color attachment
@@ -135,22 +62,22 @@ namespace cgs::graphics
 		{
 			.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
 			.pNext = nullptr,
-			.imageView = backBuffer.GetColorAttachment().GetVkImageView(), // Image view for the color attachment
+			.imageView = colorAttachment.GetVkImageView(), // Image view for the color attachment
 			.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, // Layout for the color attachment
 			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, // Clear the attachment at the start
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE, // Store the result
 			.clearValue = { 0.0f, 0.0f, 0.2f, 1.0f } // Clear value for the color attachment
 		};
 
-		const uint32_t width = backBuffer.GetColorAttachment().GetWidth();
-		const uint32_t height = backBuffer.GetColorAttachment().GetHeight();
+		const uint32_t width = colorAttachment.GetWidth();
+		const uint32_t height = colorAttachment.GetHeight();
 
 		VkRenderingInfo renderingInfo =
 		{
 			.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
 			.pNext = nullptr,
 			.flags = 0, // No special flags
-			.renderArea = { .offset = { .x = 0, .y = 0 }, .extent = { .width = width, .height = height } }, // Render area based on the back buffer size
+			.renderArea = {.offset = {.x = 0, .y = 0 }, .extent = {.width = width, .height = height } }, // Render area based on the back buffer size
 			.layerCount = 1, // Single layer for 2D rendering
 			.viewMask = 0, // No view mask for single view rendering
 			.colorAttachmentCount = 1, // Single color attachment
@@ -201,7 +128,7 @@ namespace cgs::graphics
 			.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, // New layout is present source
 			.srcQueueFamilyIndex = queueFamily.GetIndex(), // Source queue family index
 			.dstQueueFamilyIndex = queueFamily.GetIndex(), // Destination queue family index
-			.image = backBuffer.GetColorAttachment().GetVkImage(), // Image to transition
+			.image = colorAttachment.GetVkImage(), // Image to transition
 			.subresourceRange =
 			{
 				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, // Aspect mask for color attachment
@@ -221,5 +148,87 @@ namespace cgs::graphics
 			0, nullptr, // No buffer barriers
 			1, &imageMemoryBarrier // Single image memory barrier
 		);
+	}
+
+	std::unique_ptr<Renderer> Renderer::CreateOrNull(CreateInfo& createInfo) noexcept
+	{
+		pugi::xml_document doc;
+		const pugi::xml_parse_result result = doc.load_file(createInfo.RendererFilePath.string().c_str());
+		if (!result)
+		{
+			return nullptr;
+		}
+
+		const pugi::xml_node root = doc.child("Renderer");
+		if (!root)
+		{
+			return nullptr;
+		}
+
+		std::unique_ptr<Renderer> renderer = std::make_unique<Renderer>(createInfo.Instance);
+		renderer->mName = root.attribute("Name").as_string();
+		if (renderer->mName.empty())
+		{
+			CGS_LOG_ERROR("Renderer name is empty in the file: %s", createInfo.RendererFilePath.string().c_str());
+			return nullptr;
+		}
+
+		const pugi::xml_node pipelinesNode = root.child("Pipelines");
+		for (const pugi::xml_node pipelineNode : pipelinesNode.children())
+		{
+			renderer->mPipelines.emplace(
+				std::string(pipelineNode.name()),
+				nullptr
+			);
+		}
+
+		const pugi::xml_node renderNode = root.child("Render");
+		for (const pugi::xml_node renderCommandNode : renderNode.children())
+		{
+			const std::string commandType = renderCommandNode.name();
+			if (commandType == "Draw")
+			{
+				const std::string pipelineName = renderCommandNode.attribute("Pipeline").as_string();
+				auto it = renderer->mPipelines.find(pipelineName);
+				if (it == renderer->mPipelines.end())
+				{
+					CGS_LOG_ERROR("Pipeline '%s' not found in renderer: %s", pipelineName.c_str(), renderer->mName.c_str());
+					continue;
+				}
+				if (it->second == nullptr)
+				{
+					CGS_LOG_ERROR("Pipeline '%s' is not initialized", pipelineName.c_str());
+					continue;
+				}
+				renderer->mRenderCommands.push_back(
+					std::make_unique<RenderCommand<eRenderCommand::DRAW>>(createInfo.Instance, *it->second)
+				);
+			}
+			else
+			{
+				CGS_LOG_ERROR("Unknown render command type: %s in renderer: %s", commandType.c_str(), renderer->mName.c_str());
+			}
+		}
+
+		return renderer;
+	}
+	
+	Renderer::Renderer(rhi::Instance& instance) noexcept
+		: mInstance(instance)
+	{
+	}
+	
+	Renderer::~Renderer() noexcept
+	{
+		mPipelines.clear();
+		mRenderCommands.clear();
+	}
+
+	void Renderer::Render(rhi::CommandBuffer& commandBuffer) noexcept
+	{
+		for (auto& renderCommand : mRenderCommands)
+		{
+			renderCommand->Execute(commandBuffer);
+		}
 	}
 }

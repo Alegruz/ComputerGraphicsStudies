@@ -34,8 +34,10 @@ namespace cgs::graphics::rhi
 
         CGS_INLINE constexpr const PhysicalDevice& GetPhysicalDevice() const noexcept { return mPhysicalDevice; }
         CGS_INLINE const SwapChain& GetSwapChain() const noexcept { return *mSwapChain; }
+        CGS_INLINE SwapChain& GetSwapChain() noexcept { return *mSwapChain; } // Accessor for the swap chain created by this device
         CGS_INLINE constexpr VkDevice GetVkDevice() const noexcept { return mDevice; } // Accessor for the Vulkan logical device handle
 		CGS_INLINE constexpr const std::vector<std::unique_ptr<CommandPool>>& GetCommandPools() const noexcept { return mCommandPools; } // Accessor for the command pools created by this device
+        CGS_INLINE constexpr std::vector<std::unique_ptr<CommandPool>>& GetCommandPools() noexcept { return mCommandPools; } // Accessor for the command pools created by this device
 		CGS_INLINE const CommandPool& GetMainCommandPool() const noexcept { return *mCommandPools[0]; }
 		CGS_INLINE CommandPool& GetMainCommandPool() noexcept { return *mCommandPools[0]; } // Accessor for the main command pool created by this device
 

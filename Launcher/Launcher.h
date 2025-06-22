@@ -46,7 +46,7 @@ namespace cgs
         std::filesystem::path mConfigFilePath;
         std::unique_ptr<core::Config> mConfig;
         std::unique_ptr<core::Config> mRendererConfig;
-        std::unique_ptr<graphics::rhi::Instance> mInstance; // Renderer Hardware Interface instance
+        std::unique_ptr<graphics::rhi::Instance> mInstance; // RendererManager Hardware Interface instance
 
         std::unique_ptr<Engine> mEngine;
 

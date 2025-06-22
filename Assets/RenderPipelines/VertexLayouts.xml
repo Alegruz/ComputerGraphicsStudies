@@ -1,0 +1,5 @@
+<VertexLayouts>
+    <VertexLayout Name="Position">
+        <Element SemanticName="POSITION" Format="R32G32B32_FLOAT"/>
+    </VertexLayout>
+</VertexLayouts>

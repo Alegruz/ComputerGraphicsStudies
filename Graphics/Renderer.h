@@ -6,93 +6,89 @@ namespace cgs::graphics
 	{
 		class CommandBuffer;
 		class Instance;
+		class PipelineBase;
 	}
 
-	class IRendererImplementation
+	enum class eRenderCommand : uint8_t
+	{
+		DRAW,
+		COUNT,
+	};
+
+	class IRenderCommand
 	{
 	public:
-		struct CreateInfo final
+		CGS_INLINE explicit IRenderCommand(const rhi::Instance& instance, const eRenderCommand type) noexcept
+			: mInstance(instance) // Initialize the RHI instance reference
+			, mType(type) // Initialize the render command type
 		{
-			rhi::Instance& Instance; // Reference to the RHI instance
-			std::string Name; // Name of the renderer implementation
-		};
+		}
+		CGS_INLINE virtual ~IRenderCommand() noexcept = default; // Virtual destructor for proper cleanup
 
-	public:
-		explicit IRendererImplementation(const CreateInfo& createInfo) noexcept;
-		virtual ~IRendererImplementation() noexcept = default;
-		virtual void Render(rhi::CommandBuffer&) noexcept = 0; // Render method to be implemented by derived classes
+		CGS_INLINE virtual void Execute(rhi::CommandBuffer& commandBuffer) noexcept = 0; // Pure virtual function to execute the render command
 
-		CGS_INLINE const std::string& GetName() const noexcept { return mName; } // Get the name of the renderer implementation
+		CGS_INLINE eRenderCommand GetType() const noexcept { return mType; } // Get the type of the render command
 
 	protected:
-		rhi::Instance& mInstance; // Reference to the RHI instance
-		std::string mName; // Name of the renderer implementation
+		const rhi::Instance& mInstance; // Reference to the RHI instance for accessing resources
+		eRenderCommand mType; // Type of the render command
 	};
 
-	class EmptyRendererImplementation final : public IRendererImplementation
+	template<eRenderCommand RENDER_COMMAND>
+	class RenderCommand final : public IRenderCommand
 	{
 	public:
-		struct CreateInfo final
+		CGS_INLINE explicit RenderCommand() noexcept
+			: IRenderCommand(RENDER_COMMAND) // Initialize the base class with the render command type
 		{
-			IRendererImplementation::CreateInfo BaseCreateInfo; // Base create info for the renderer implementation
-		};
-
-	public:
-		explicit EmptyRendererImplementation(const CreateInfo& createInfo) noexcept;
-		~EmptyRendererImplementation() noexcept = default;
-		void Render(rhi::CommandBuffer&) noexcept override;
+			static_assert(false, "RenderCommand must be specialized for a specific eRenderCommand type.");
+		}
+		CGS_INLINE ~RenderCommand() noexcept override = default; // Override the destructor for proper cleanup
+		void Execute(rhi::CommandBuffer& commandBuffer) noexcept override {}
 	};
 
-	template<typename T>
-	concept RendererImplementationType = std::derived_from<T, IRendererImplementation>;
+	// Specialization for DRAW command
+	template<>
+	class RenderCommand<eRenderCommand::DRAW> final : public IRenderCommand
+	{
+	public:
+		CGS_INLINE explicit RenderCommand(const rhi::Instance& instance, rhi::PipelineBase& pipeline) noexcept
+			: IRenderCommand(instance, eRenderCommand::DRAW) // Initialize the base class with DRAW type
+			, mPipeline(pipeline) // Initialize the pipeline reference
+		{
+		}
+		CGS_INLINE ~RenderCommand() noexcept override = default; // Override the destructor for proper cleanup
+		void Execute(rhi::CommandBuffer& commandBuffer) noexcept override;
+		CGS_INLINE rhi::PipelineBase& GetPipeline() noexcept { return mPipeline; } // Get the pipeline associated with this render command
+
+	private:
+		rhi::PipelineBase& mPipeline;
+	};
 
 	class Renderer final
 	{
 	public:
 		struct CreateInfo final
 		{
-			cgs::core::Config&&		Config; // Configuration for the renderer
-			cgs::core::ProjectInfo	ApplicationInfo;
-			void*					WindowHandle = nullptr; // Handle to the window for the renderer
+			rhi::Instance& Instance; // Reference to the RHI instance
+			std::filesystem::path RendererFilePath;
 		};
+	
+	public:
+		static std::unique_ptr<Renderer> CreateOrNull(CreateInfo& createInfo) noexcept;
 
 	public:
-		Renderer() = delete;
-		explicit Renderer(const CreateInfo& createInfo) noexcept;
+		explicit Renderer(rhi::Instance& mInstance) noexcept;
 		~Renderer() noexcept;
 
-		template<RendererImplementationType T>
-		void AddRenderer(T::CreateInfo& createInfo) noexcept;
+		CGS_INLINE const std::string& GetName() const noexcept { return mName; } // Get the name of the renderer implementation
 
-		void Render() noexcept;
+		void Render(rhi::CommandBuffer& commandBuffer) noexcept;
 
-	private:
-		cgs::core::Config mConfig; // Configuration for the renderer
-		std::unique_ptr<rhi::Instance> mInstance;
-		void* mWindowHandle = nullptr; // Handle to the window for the renderer
-
-		std::unordered_map<std::string, std::unique_ptr<IRendererImplementation>> mRendererImplementations; // Renderer implementations
-		std::vector<std::string> mRenderingOrder;
-		uint32_t mCurrentFrameIndex; // Current frame index for rendering
+	protected:
+		rhi::Instance& mInstance; // Reference to the RHI instance
+		std::string mName; // Name of the renderer implementation
+		std::unordered_map<std::string, std::unique_ptr<rhi::PipelineBase>> mPipelines; // Map of pipelines by name
+		std::vector<std::unique_ptr<IRenderCommand>> mRenderCommands; // List of render commands
 	};
-
-	CGS_INLINE IRendererImplementation::IRendererImplementation(const CreateInfo& createInfo) noexcept
-		: mInstance(createInfo.Instance)
-		, mName(createInfo.Name)
-	{
-	}
-
-	CGS_INLINE EmptyRendererImplementation::EmptyRendererImplementation(const CreateInfo& createInfo) noexcept
-		: IRendererImplementation(createInfo.BaseCreateInfo)
-	{
-	}
-
-	template<RendererImplementationType T>
-	void Renderer::AddRenderer(T::CreateInfo& createInfo) noexcept
-	{
-		static_assert(std::is_base_of_v<IRendererImplementation, T>, "Renderer implementation must derive from IRendererImplementation.");
-
-		auto rendererImpl = std::make_unique<T>(createInfo);
-		mRendererImplementations.emplace(rendererImpl->GetName(), std::move(rendererImpl));
-	}
 }
