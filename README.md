@@ -76,5 +76,5 @@ Replace x64-debug with x64-release to run the release binaries.
 
 ## Author
 
-[Minha Armada Ju (Alegruz)](https://alegruz.github.io/)
+[Minha Armada Ju (Alegruz)](https://alegruz.github.io/)<br>
 📧 alegruz@khu.ac.kr | [GitHub](https://github.com/Alegruz) | [LinkedIn](https://www.linkedin.com/in/alegruz)
