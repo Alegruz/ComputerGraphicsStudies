@@ -58,8 +58,18 @@ namespace cgs::core
     class Window
     {
     public:
+        struct CreateInfo final
+        {
+            ProjectInfo& CurrentProjectInfo; // Reference to the project information
+            uint32_t Width = 1920;
+            uint32_t Height = 1080;
+        };
+
+    public:
         Window() = delete;
-        explicit Window(const ProjectInfo& projectInfo) noexcept;
+        explicit Window(const CreateInfo& createInfo) noexcept;
+
+        void Show() const noexcept;// Show the window
 
         CGS_INLINE constexpr void* GetDisplay() const noexcept { return nullptr; } // Placeholder
         CGS_INLINE constexpr void* GetWindow() const noexcept { return nullptr; } // Placeholder

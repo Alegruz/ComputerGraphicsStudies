@@ -27,7 +27,7 @@ namespace cgs::graphics::rhi
         ~SwapChain() noexcept;
 
         SwapChain& operator=(const SwapChain&) = delete; // Copy assignment operator is deleted
-        SwapChain& operator=(SwapChain&&) noexcept = default; // Move assignment operator
+        SwapChain& operator=(SwapChain&&) noexcept = delete; // Move assignment operator
 
         uint32_t AcquireNextImage() const noexcept; // Acquire the next image from the swap chain
         void SetBackBufferAttachment(std::shared_ptr<Attachment>& backBufferAttachment) noexcept;

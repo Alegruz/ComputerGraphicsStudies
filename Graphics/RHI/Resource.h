@@ -20,7 +20,7 @@ namespace cgs::graphics::rhi
         virtual ~Resource() noexcept = default;
 
         Resource& operator=(const Resource&) = delete; // Copy assignment operator is deleted
-        Resource& operator=(Resource&&) noexcept = default; // Move assignment operator
+        Resource& operator=(Resource&&) noexcept = delete; // Move assignment operator
 
         CGS_INLINE constexpr const Device& GetDevice() const noexcept { return mDevice; } // Accessor for the device this resource is created from
         CGS_INLINE constexpr VkDeviceMemory GetVkDeviceMemory() const noexcept { return mDeviceMemory; } // Accessor for the device memory associated with this resource, if applicable

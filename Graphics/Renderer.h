@@ -38,13 +38,13 @@ namespace cgs::graphics
 	class RenderCommand final : public IRenderCommand
 	{
 	public:
-		CGS_INLINE explicit RenderCommand() noexcept
-			: IRenderCommand(RENDER_COMMAND) // Initialize the base class with the render command type
+		CGS_INLINE explicit RenderCommand(const rhi::Instance& instance) noexcept
+			: IRenderCommand(instance, RENDER_COMMAND) // Initialize the base class with the render command type
 		{
-			static_assert(false, "RenderCommand must be specialized for a specific eRenderCommand type.");
+			static_assert(RENDER_COMMAND != RENDER_COMMAND, "RenderCommand must be specialized for a specific eRenderCommand type.");
 		}
 		CGS_INLINE ~RenderCommand() noexcept override = default; // Override the destructor for proper cleanup
-		void Execute(rhi::CommandBuffer& commandBuffer) noexcept override {}
+		void Execute([[maybe_unused]] rhi::CommandBuffer& commandBuffer) noexcept override {}
 	};
 
 	// Specialization for DRAW command

@@ -17,13 +17,6 @@ namespace cgs::graphics::rhi
         , mQueue(createInfo.Queue)
     {
         assert(mQueue != VK_NULL_HANDLE);
-
-        VkFenceCreateInfo fenceCreateInfo =
-        {
-            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = VK_FENCE_CREATE_SIGNALED_BIT,
-        };
     }
     
     void Queue::Submit(const CommandBuffer& commandBuffer) const noexcept

@@ -41,7 +41,7 @@ namespace cgs::graphics::rhi
         CGS_INLINE constexpr bool IsBackBuffer() const noexcept { return mName == "BackBuffer"; } // Check if the attachment is a back buffer
     
     private:
-        const Instance& mInstance; // Reference to the RHI instance
+        [[maybe_unused]] const Instance& mInstance; // Reference to the RHI instance
         std::string mName; // Name of the attachment
 
         std::vector<std::unique_ptr<Image>> mColorAttachments; // Color attachment image for the back buffer

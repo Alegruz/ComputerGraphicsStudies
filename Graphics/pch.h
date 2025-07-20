@@ -2,6 +2,9 @@
 
 #include "Core/pch.h"
 
+#undef None
+#undef Bool
+
 #if defined(CGS_WIN32)
 #include <windows.h>
 #elif defined(CGS_LINUX)

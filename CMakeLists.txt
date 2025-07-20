@@ -15,7 +15,7 @@ project ("ComputerGraphicsStudies")
 if(WIN32)
   add_compile_definitions(VK_USE_PLATFORM_WIN32_KHR)
 elseif(UNIX)
-  add_compile_definitions(VK_USE_PLATFORM_XLIB_KHR)
+  add_compile_definitions(VK_USE_PLATFORM_WAYLAND_KHR)
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include)
