@@ -11,10 +11,13 @@ endif()
 
 project ("ComputerGraphicsStudies")
 
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
 # Platform-specific Vulkan defines
 if(WIN32)
   add_compile_definitions(VK_USE_PLATFORM_WIN32_KHR)
 elseif(UNIX)
+  # find_package(Wayland REQUIRED)
   add_compile_definitions(VK_USE_PLATFORM_WAYLAND_KHR)
 endif()
 

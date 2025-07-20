@@ -6,6 +6,7 @@
 #define NOMINMAX
 #include <windows.h>
 #elif defined(CGS_UNIX)
+#include <wayland-client.h> // Include Wayland client header for Unix platforms
 #endif // defined(CGS_WIN32)
 
 namespace cgs::core
@@ -66,13 +67,27 @@ namespace cgs::core
         };
 
     public:
+        static void RegistryGlobalHandler(void *data, wl_registry *registry, uint32_t name, const char *interface, uint32_t version) noexcept;
+        static void RegistryGlobalRemoveHandler(void *data, wl_registry *registry, uint32_t name) noexcept;
+
+    public:
         Window() = delete;
         explicit Window(const CreateInfo& createInfo) noexcept;
+        ~Window() noexcept;
 
         void Show() const noexcept;// Show the window
 
-        CGS_INLINE constexpr void* GetDisplay() const noexcept { return nullptr; } // Placeholder
-        CGS_INLINE constexpr void* GetWindow() const noexcept { return nullptr; } // Placeholder
+        CGS_INLINE constexpr void* GetInstance() const noexcept { return mDisplay; }
+        CGS_INLINE constexpr void* GetWindow() const noexcept { return mSurface; }
+
+    private:
+        static const wl_registry_listener smRegistryListener; // Wayland registry listener
+
+    private:
+        wl_display* mDisplay; // Wayland display
+        wl_registry* mRegistry; // Wayland registry
+        wl_compositor* mCompositor; // Wayland compositor
+        wl_surface* mSurface;
     };
 #else
 #error "Unsupported platform for Window implementation"

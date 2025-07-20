@@ -84,6 +84,7 @@ namespace cgs
         {
             .Config = std::move(rendererConfig),
             .ApplicationInfo = mProjectInfo,
+            .ProcessHandle = mWindow.GetInstance(), // Pass the process
             .WindowHandle = mWindow.GetWindow(), // Pass the window handle to the renderer
         };
 

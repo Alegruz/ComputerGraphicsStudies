@@ -1,5 +1,7 @@
 #include "Graphics/pch.h"
 
+#include "Core/Window.h"
+
 #include "Graphics/RHI/Device.h"
 
 #include "Graphics/RHI/CommandBuffer.h"
@@ -100,6 +102,12 @@ namespace cgs::graphics::rhi
             .Extent = { .width = width, .height = height }, // Default extent for the swap chain, can be adjusted later
         };
 
+        void* processHandle = instance.GetProcessHandle();
+        if (processHandle == nullptr)
+        {
+            CGS_LOG_ERROR("Process handle is null, cannot create surface.");
+            return;
+        }
         void* windowHandle = instance.GetWindowHandle();
 		if (windowHandle == nullptr)
 		{
@@ -113,7 +121,7 @@ namespace cgs::graphics::rhi
 			.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
 			.pNext = nullptr,
 			.flags = 0,
-			.hinstance = ::GetModuleHandle(nullptr), // Use the current module handle
+			.hinstance = reinterpret_cast<HINSTANCE>(processHandle), // Use the current module handle
 			.hwnd = reinterpret_cast<HWND>(windowHandle), // Cast the window handle to HWND
 		};
 
@@ -124,8 +132,20 @@ namespace cgs::graphics::rhi
 			return;
 		}
 #elif defined(CGS_UNIX)
-		// For Unix-like systems, you would typically use X11 or Wayland.
-		CGS_LOG_ERROR("Unix-like surface creation is not implemented yet.");
+        const VkWaylandSurfaceCreateInfoKHR waylandSurfaceCreateInfo =
+        {
+            .sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
+            .pNext = nullptr,
+            .flags = 0,
+            .display = static_cast<wl_display*>(processHandle), // Cast the window handle to wl_display
+            .surface = static_cast<wl_surface*>(windowHandle)   // Cast the process handle to wl_surface
+        };
+        vr = vkCreateWaylandSurfaceKHR(instance.GetVkInstance(), &waylandSurfaceCreateInfo, nullptr, &swapChainCreateInfo.Surface);
+        if (vr != VK_SUCCESS)
+        {
+            CGS_LOG_ERROR("Failed to create Vulkan Wayland surface: %d", vr);
+            return;
+        }
 #endif	// defined(CGS_WIN32)
 
         uint32_t frameBufferCount = 0;

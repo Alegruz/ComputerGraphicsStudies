@@ -221,6 +221,7 @@ namespace cgs::graphics::rhi
 		, mPhysicalDeviceGroups()
 		, mMainPhysicalDeviceGroupIndex(0)
 		, mDebugUtilsMessenger(VK_NULL_HANDLE)
+		, mProcessHandle(createInfo.ProcessHandle) // Store the process handle for the renderer
 		, mWindowHandle(createInfo.WindowHandle)
 	{
 		[[maybe_unused]] VkResult vr = volkInitialize();
@@ -329,9 +330,7 @@ namespace cgs::graphics::rhi
 #if defined(CGS_WIN32)
 			VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 #elif defined(CGS_UNIX)
-			// VK_KHR_XLIB_SURFACE_EXTENSION_NAME, // Uncomment if using Xlib for Unix
-			// VK_KHR_XCB_SURFACE_EXTENSION_NAME, // Uncomment if using XCB for Unix
-			// VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, // Uncomment if using Wayland for Unix
+			VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, // Uncomment if using Wayland for Unix
 #endif	// defined(CGS_WIN32)
 			VK_KHR_SURFACE_EXTENSION_NAME, // Required for all platforms
 		};

@@ -21,6 +21,7 @@ namespace cgs::graphics
 		{
 			cgs::core::Config&&		Config; // Configuration for the renderer
 			cgs::core::ProjectInfo	ApplicationInfo;
+			void*					ProcessHandle = nullptr; // Handle to the process
 			void*					WindowHandle = nullptr; // Handle to the window for the renderer
 		};
 
@@ -40,7 +41,8 @@ namespace cgs::graphics
 	private:
 		cgs::core::Config mConfig; // Configuration for the renderer
 		std::unique_ptr<rhi::Instance> mInstance;
-		void* mWindowHandle = nullptr; // Handle to the window for the renderer
+		void* mProcessHandle; // Handle to the process
+		void* mWindowHandle; // Handle to the window for the renderer
 
 		std::unordered_map<std::string, std::unique_ptr<Renderer>> mRenderers;
 		std::unique_ptr<RenderGraph> mRenderGraph; // Render graph for managing rendering operations

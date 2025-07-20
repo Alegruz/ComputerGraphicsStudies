@@ -21,6 +21,7 @@ namespace cgs::graphics
 	RendererManager::RendererManager(const CreateInfo& createInfo) noexcept
 		: mConfig(std::move(createInfo.Config))
 		, mInstance()
+		, mProcessHandle(createInfo.ProcessHandle) // Store the process handle for the renderer
 		, mWindowHandle(createInfo.WindowHandle) // Store the window handle for the renderer
 		, mRenderers() // Initialize the renderer implementations vector
 		, mRenderGraph() // Initialize the rendering order vector
@@ -34,6 +35,7 @@ namespace cgs::graphics
 		{
 			.Config = mConfig,
 			.ApplicationInfo = createInfo.ApplicationInfo,
+			.ProcessHandle = mProcessHandle, // Pass the process handle to the instance create info
 			.WindowHandle = mWindowHandle, // Pass the window handle to the instance create info
 		};
 

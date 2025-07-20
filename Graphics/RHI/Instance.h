@@ -30,6 +30,7 @@ namespace cgs::graphics::rhi
 				.pfnUserCallback = DebugUtilsMessengerCallback,
 				.pUserData = nullptr
 			};
+			void* ProcessHandle = nullptr; // Handle to the process
 			void* WindowHandle = nullptr; // Handle to the window for the renderer, if applicable
 			bool bCreateLogicalDevice = true; // Whether to create logical devices for the physical devices in this group
 		};
@@ -49,6 +50,7 @@ namespace cgs::graphics::rhi
 		CGS_INLINE constexpr const std::vector<std::unique_ptr<PhysicalDeviceGroup>>& GetPhysicalDeviceGroups() const noexcept { return mPhysicalDeviceGroups; } // Accessor for the physical device groups
 		CGS_INLINE const PhysicalDeviceGroup& GetMainPhysicalDeviceGroup() const noexcept { return *mPhysicalDeviceGroups[mMainPhysicalDeviceGroupIndex]; } // Accessor for the main physical device group
 		CGS_INLINE PhysicalDeviceGroup& GetMainPhysicalDeviceGroup() noexcept { return *mPhysicalDeviceGroups[mMainPhysicalDeviceGroupIndex]; } // Accessor for the main physical device group
+		CGS_INLINE constexpr void* GetProcessHandle() const noexcept { return mProcessHandle; } // Accessor for the process handle
 		CGS_INLINE constexpr void* GetWindowHandle() const noexcept { return mWindowHandle; } // Accessor for the window handle
 
 	private:
@@ -62,6 +64,7 @@ namespace cgs::graphics::rhi
 		std::vector<std::unique_ptr<PhysicalDeviceGroup>> mPhysicalDeviceGroups;
 		uint32_t mMainPhysicalDeviceGroupIndex; // Index of the main physical device group
 		VkDebugUtilsMessengerEXT mDebugUtilsMessenger; // Debug messenger for Vulkan validation layers
+		void* mProcessHandle; // Handle to the process
 		void* mWindowHandle; // Handle to the window for the renderer, if applicable
 	};
 }
