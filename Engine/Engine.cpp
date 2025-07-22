@@ -85,6 +85,7 @@ namespace cgs
             .EngineConfig = mConfig, // Pass the engine configuration to the renderer
             .RendererConfig = std::move(rendererConfig),
             .ApplicationInfo = mProjectInfo,
+            .ProcessHandle = mWindow.GetInstance(), // Pass the process
             .WindowHandle = mWindow.GetWindow(), // Pass the window handle to the renderer
         };
 

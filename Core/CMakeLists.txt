@@ -15,6 +15,12 @@ target_sources(Core
 
 target_include_directories(Core PUBLIC ${CMAKE_SOURCE_DIR})
 
+# if (UNIX)
+#     message(STATUS "Looking for Wayland...")
+#     target_include_directories(Core PRIVATE ${WAYLAND_INCLUDE_DIRS})
+#     target_link_libraries(Core PRIVATE ${WAYLAND_LIBRARIES})
+# endif()
+
 target_compile_definitions(Core PRIVATE Core_EXPORTS)
 
 target_precompile_headers(Core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/pch.h")

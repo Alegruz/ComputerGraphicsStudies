@@ -29,7 +29,7 @@ namespace cgs::graphics::rhi
         ~Image() noexcept;
 
         Image& operator=(const Image&) = delete; // Copy assignment operator is deleted
-        Image& operator=(Image&&) noexcept = default; // Move assignment operator
+        Image& operator=(Image&&) noexcept = delete; // Move assignment operator
 
         CGS_INLINE constexpr VkImage GetVkImage() const noexcept { return mImage; } // Accessor for the Vulkan image handle
 		CGS_INLINE constexpr VkImageView GetVkImageView() const noexcept { return mImageView; } // Accessor for the Vulkan image view handle, if applicable

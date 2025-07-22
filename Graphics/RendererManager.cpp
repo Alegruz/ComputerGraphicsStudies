@@ -23,6 +23,7 @@ namespace cgs::graphics
 		: mEngineConfig(createInfo.EngineConfig) // Store the engine configuration reference
 		, mConfig(std::move(createInfo.RendererConfig))
 		, mInstance()
+		, mProcessHandle(createInfo.ProcessHandle) // Store the process handle for the renderer
 		, mWindowHandle(createInfo.WindowHandle) // Store the window handle for the renderer
 		, mRenderers() // Initialize the renderer implementations vector
 		, mRenderGraph() // Initialize the rendering order vector
@@ -40,6 +41,7 @@ namespace cgs::graphics
 		{
 			.Config = mConfig,
 			.ApplicationInfo = createInfo.ApplicationInfo,
+			.ProcessHandle = mProcessHandle, // Pass the process handle to the instance create info
 			.WindowHandle = mWindowHandle, // Pass the window handle to the instance create info
 		};
 

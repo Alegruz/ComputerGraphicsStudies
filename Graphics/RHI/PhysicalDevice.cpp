@@ -109,7 +109,7 @@ namespace cgs::graphics::rhi
 #if defined(CGS_WIN32)
         const VkBool32 result = vkGetPhysicalDeviceWin32PresentationSupportKHR(mPhysicalDevice, queueFamilyIndex);
 #elif defined(CGS_UNIX)
-        const VkBool32 result = vkGetPhysicalDeviceXlibPresentationSupportKHR(mPhysicalDevice, queueFamilyIndex, nullptr);
+        const VkBool32 result = vkGetPhysicalDeviceWaylandPresentationSupportKHR(mPhysicalDevice, queueFamilyIndex, nullptr);
 #else
         CGS_LOG_ERROR("Presentation support is not implemented for this platform.");
         return false;

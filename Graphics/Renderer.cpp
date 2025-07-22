@@ -66,7 +66,7 @@ namespace cgs::graphics
 			.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, // Layout for the color attachment
 			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, // Clear the attachment at the start
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE, // Store the result
-			.clearValue = { 0.0f, 0.0f, 0.2f, 1.0f } // Clear value for the color attachment
+			.clearValue = { .color = { .float32 = { 0.0f, 0.0f, 0.2f, 1.0f } } } // Clear value for the color attachment
 		};
 
 		const uint32_t width = colorAttachment.GetWidth();
