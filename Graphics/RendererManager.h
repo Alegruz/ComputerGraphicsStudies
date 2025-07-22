@@ -9,9 +9,9 @@ namespace cgs::graphics
 		class Attachment;
 		class CommandBuffer;
 		class Instance;
-		class VertexLayout;
 	}
 
+	class Renderable;
 	class RenderGraph;
 
 	class RendererManager final
@@ -19,7 +19,8 @@ namespace cgs::graphics
 	public:
 		struct CreateInfo final
 		{
-			cgs::core::Config&&		Config; // Configuration for the renderer
+			const cgs::core::Config& EngineConfig; // Reference to the engine configuration
+			cgs::core::Config&&		RendererConfig; // Configuration for the renderer
 			cgs::core::ProjectInfo	ApplicationInfo;
 			void*					WindowHandle = nullptr; // Handle to the window for the renderer
 		};
@@ -33,11 +34,13 @@ namespace cgs::graphics
 
 	private:
 		void loadAttachments() noexcept;
+		void loadRenderables() noexcept;
 		void loadRenderers() noexcept;
 		void loadRenderGraph() noexcept;
 		void loadVertexLayouts() noexcept;
 
 	private:
+		const cgs::core::Config& mEngineConfig; // Reference to the engine configuration
 		cgs::core::Config mConfig; // Configuration for the renderer
 		std::unique_ptr<rhi::Instance> mInstance;
 		void* mWindowHandle = nullptr; // Handle to the window for the renderer
@@ -48,6 +51,7 @@ namespace cgs::graphics
 
 		std::filesystem::path mRenderPipelinesPath; // Path to the render pipelines directory
 		std::unordered_map<std::string, std::shared_ptr<rhi::Attachment>> mAttachments; // Map of attachments by name
-		std::unordered_map<std::string, std::unique_ptr<rhi::VertexLayout>> mVertexLayouts; // Map of vertex inputs by name
+		VertexLayoutsMap mVertexLayouts; // Map of vertex inputs by name
+		std::unordered_map<std::string, std::unique_ptr<Renderable>> mRenderables; // Map of renderables by name
 	};
 }

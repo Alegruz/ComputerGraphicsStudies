@@ -2,6 +2,7 @@
 
 #include "Graphics/RendererManager.h"
 
+#include "Graphics/Renderable.h"
 #include "Graphics/RenderGraph.h"
 #include "Graphics/RHI/Attachment.h"
 #include "Graphics/RHI/Device.h"
@@ -19,12 +20,17 @@
 namespace cgs::graphics
 {
 	RendererManager::RendererManager(const CreateInfo& createInfo) noexcept
-		: mConfig(std::move(createInfo.Config))
+		: mEngineConfig(createInfo.EngineConfig) // Store the engine configuration reference
+		, mConfig(std::move(createInfo.RendererConfig))
 		, mInstance()
 		, mWindowHandle(createInfo.WindowHandle) // Store the window handle for the renderer
 		, mRenderers() // Initialize the renderer implementations vector
 		, mRenderGraph() // Initialize the rendering order vector
 		, mCurrentFrameIndex(0) // Initialize the current frame index to 0
+		, mRenderPipelinesPath() // Initialize the render pipelines path
+		, mAttachments() // Initialize the attachments map
+		, mVertexLayouts() // Initialize the vertex inputs map
+		, mRenderables() // Initialize the renderables map
 	{
 		[[maybe_unused]] const std::filesystem::path& configFilePath = mConfig.GetConfigFilePath();
 		CGS_LOG_INFO("RendererManager created with configuration from: %s", configFilePath.string().c_str());
@@ -59,6 +65,7 @@ namespace cgs::graphics
 
 		loadAttachments(); // Load attachments from the specified path
 		loadVertexLayouts(); // Load vertex inputs from the specified path
+		loadRenderables(); // Load renderables from the specified path
 		loadRenderers(); // Load all renderer implementations from the specified path
 		loadRenderGraph(); // Load the render graph from the specified file
 	}
@@ -171,6 +178,65 @@ namespace cgs::graphics
 			else
 			{
 				CGS_LOG_ERROR("Failed to create attachment '%s' from node in file: %s", name.c_str(), attachmentsPath.string().c_str());
+			}
+		}
+	}
+
+	void RendererManager::loadRenderables() noexcept
+	{
+		std::string renderablesPathString;
+		bool bResult = mEngineConfig.GetSetting(CONFIG_RENDERABLES_PATH, renderablesPathString); // Retrieve the path to the renderers from the configuration
+		if (!bResult || renderablesPathString.empty())
+		{
+			CGS_LOG_ERROR("Renderers path not found in configuration. Using default path.");
+			renderablesPathString = "Assets/Renderables"; // Default path if not specified
+		}
+
+		std::filesystem::path renderablesPath(renderablesPathString);
+		if (!std::filesystem::exists(renderablesPath))
+		{
+			CGS_LOG_ERROR("Renderables path '%s' does not exist. Please check the configuration.", renderablesPath.string().c_str());
+			return; // Exit if the renderers path does not exist
+		}
+
+		std::vector<std::filesystem::path> modelPaths = Renderable::GetModelPaths(renderablesPath); // Get all model paths from the specified directory
+		
+		std::string renderableNameString;
+		bResult = mConfig.GetSetting(CONFIG_SELECTED_RENDERABLE, renderableNameString); // Retrieve the selected renderable name from the configuration
+		if (!bResult || renderableNameString.empty())
+		{
+			CGS_LOG_ERROR("Selected renderable name not found in configuration. Using first model as default.");
+			if (!modelPaths.empty())
+			{
+				renderableNameString = modelPaths.front().filename().string(); // Use the first model as default if not specified
+			}
+			else
+			{
+				CGS_LOG_ERROR("No models found in the specified renderables path: %s", renderablesPath.string().c_str());
+				return; // Exit if no models are found
+			}
+		}
+
+		for (const auto& modelPath : modelPaths)
+		{
+			if (modelPath.filename().string().find(renderableNameString) != std::string::npos) // Check if the model path contains the selected renderable name
+			{
+				Renderable::CreateInfo createInfo = 
+				{ 
+					.ModelPath = modelPath,
+					.VertexLayouts = mVertexLayouts, // Pass the vertex layouts map to the renderable
+				};
+				std::unique_ptr<Renderable> renderable = Renderable::CreateOrNull(createInfo);
+				if (renderable)
+				{
+					const std::string& renderableName = renderable->GetName();
+					mRenderables[renderableName] = std::move(renderable); // Store the renderable in the map
+					CGS_LOG_INFO("Renderable '%s' loaded successfully from path: %s", renderableName.c_str(), modelPath.string().c_str());
+				}
+				else
+				{
+					CGS_LOG_ERROR("Failed to create renderable from model path: %s", modelPath.string().c_str());
+				}
 			}
 		}
 	}

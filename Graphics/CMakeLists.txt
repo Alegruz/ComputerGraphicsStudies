@@ -7,6 +7,7 @@ configure_cgs_target(Graphics)
 target_sources(Graphics
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/pch.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Renderable.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/Renderer.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/RendererManager.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/RenderGraph.cpp"
@@ -33,9 +34,10 @@ target_include_directories(Graphics PUBLIC ${CMAKE_SOURCE_DIR}/External)
 target_include_directories(Graphics PUBLIC ${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include)
 
 target_link_libraries(Graphics PRIVATE pugixml gfx slang slang_rt)
-target_link_libraries(Graphics PUBLIC Core volk)
+target_link_libraries(Graphics PUBLIC Core volk rapidobj::rapidobj)
 target_compile_definitions(Graphics PRIVATE Graphics_EXPORTS)
 add_dependencies(Graphics Core)
+
 target_precompile_headers(Graphics PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/pch.h")
 
 add_custom_command(TARGET Graphics POST_BUILD

@@ -82,7 +82,8 @@ namespace cgs
         // Create the renderer with the provided project information
         graphics::RendererManager::CreateInfo rendererCreateInfo =
         {
-            .Config = std::move(rendererConfig),
+            .EngineConfig = mConfig, // Pass the engine configuration to the renderer
+            .RendererConfig = std::move(rendererConfig),
             .ApplicationInfo = mProjectInfo,
             .WindowHandle = mWindow.GetWindow(), // Pass the window handle to the renderer
         };

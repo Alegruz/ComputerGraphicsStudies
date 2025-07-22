@@ -15,6 +15,8 @@
 
 #include "pugixml.hpp"
 
+#include "rapidobj/rapidobj.hpp"
+
 namespace cgs
 {
     constexpr const char* CONFIG_RENDERER_CONFIG_FILE_PATH("RendererConfigFilePath");
@@ -28,17 +30,20 @@ namespace cgs
     constexpr const char* CONFIG_RENDERERS_PATH("RenderersPath");
     constexpr const char* CONFIG_RENDER_GRAPH_FILE_PATH("RenderGraphFilePath");
 	constexpr const char* CONFIG_RENDER_PIPELINES_PATH("RenderPipelinesPath");
+    constexpr const char* CONFIG_RENDERABLES_PATH("RenderablesPath");
+    constexpr const char* CONFIG_SELECTED_RENDERABLE("SelectedRenderable");
 
     namespace graphics
     {
         namespace rhi
         {
+            class CommandPool;
+            class Device;
             class Instance;
             class PhysicalDeviceGroup;
             class PhysicalDevice;
-            class Device;
-            class CommandPool;
             class QueueFamily;
+            class VertexLayout;
 
             CGS_INLINE constexpr const char* VkResultToString(VkResult result)
             {
@@ -247,5 +252,7 @@ namespace cgs
                 VkFormat SrgbFormat = VK_FORMAT_UNDEFINED; // SRGB format
             };
         } // namespace rhi
+
+        using VertexLayoutsMap = std::unordered_map<std::string, std::unique_ptr<rhi::VertexLayout>>;
     } // namespace graphics
 } // namespace cgs::graphics

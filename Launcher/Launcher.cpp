@@ -6,6 +6,7 @@
 #include "Core/Window.h"
 
 #include "Graphics/pch.h"
+#include "Graphics/Renderable.h"
 #include "Graphics/RHI/Device.h"
 #include "Graphics/RHI/Instance.h"
 #include "Graphics/RHI/PhysicalDevice.h"
@@ -296,6 +297,7 @@ namespace cgs
             mPhysicalDeviceGroupChoice = nullptr;
         }
         mPhysicalDeviceGroupChoice = new Fl_Choice(250, y, 250, 30, "Physical Device Group");
+        y += 50;
         const std::vector<std::unique_ptr<graphics::rhi::PhysicalDeviceGroup>>& physicalDeviceGroups = mInstance->GetPhysicalDeviceGroups(); // Create physical device groups
         for (size_t i = 0; i < physicalDeviceGroups.size(); ++i)
         {
@@ -306,6 +308,55 @@ namespace cgs
         mPhysicalDeviceGroupChoice->value(0); // Select the first device by default
         OnPhysicalDeviceGroupChange(mPhysicalDeviceGroupChoice, this); // Call the change handler to update the renderer config
 		mWindow->add(mPhysicalDeviceGroupChoice); // Add the combo box to the window
+
+		std::string renderablesPathString;
+		bool bResult = mConfig->GetSetting(CONFIG_RENDERABLES_PATH, renderablesPathString); // Retrieve the path to the renderers from the configuration
+		if (!bResult || renderablesPathString.empty())
+		{
+			CGS_LOG_ERROR("Renderers path not found in configuration. Using default path.");
+			renderablesPathString = "Assets/Renderables"; // Default path if not specified
+		}
+
+		std::filesystem::path renderablesPath(renderablesPathString);
+		if (!std::filesystem::exists(renderablesPath))
+		{
+			CGS_LOG_ERROR("Renderables path '%s' does not exist. Please check the configuration.", renderablesPath.string().c_str());
+			return; // Exit if the renderers path does not exist
+		}
+
+        std::vector<std::filesystem::path> modelPaths = graphics::Renderable::GetModelPaths(renderablesPath); // Get all model paths from the specified directory
+        // Create a combo box (Fl_Choice) for model selection
+        Fl_Choice* modelChoice = new Fl_Choice(250, y, 250, 30, "Model");
+        for (const auto& path : modelPaths)
+        {
+            modelChoice->add(path.filename().string().c_str());
+        }
+        modelChoice->value(0); // Select the first model by default
+        const std::string selectedModel = modelChoice->text();
+        mRendererConfig->SetSetting(CONFIG_SELECTED_RENDERABLE, selectedModel); // Store the selected model in the configuration
+
+        modelChoice->callback([](Fl_Widget* widget, void* pData)
+        {
+            if (pData == nullptr)
+            {
+                CGS_LOG_ERROR("pData must be a valid pointer to Launcher instance.");
+                return;
+            }
+
+            Launcher* launcher = static_cast<Launcher*>(pData);
+            Fl_Choice* choice = static_cast<Fl_Choice*>(widget);
+            if (choice == nullptr)
+            {
+                CGS_LOG_ERROR("Choice widget is null.");
+                return;
+            }
+
+            const std::string selectedModel = choice->text();
+            launcher->mRendererConfig->SetSetting(CONFIG_SELECTED_RENDERABLE, selectedModel); // Store the selected model in the configuration
+        }, this); // Set the callback for the combo box
+        mWindow->add(modelChoice);
+        y += 50;
+
 		mWindow->end(); // End the window layout
 
         uint32_t width = 1920; // Default width for the renderer window
