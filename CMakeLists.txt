@@ -22,6 +22,7 @@ include_directories(${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include)
 
 set(VULKAN_HEADERS_INSTALL_DIR "${CMAKE_SOURCE_DIR}/External/VulkanSDK/Include")
 
+add_subdirectory(External/rapidobj)
 add_subdirectory(External/pugixml)
 add_subdirectory(External/volk)
 add_subdirectory(External/fltk)
@@ -111,6 +112,7 @@ function(configure_cgs_target target)
   
   target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/External/slang/include)
   target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/External/pugixml/src)
+  target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/External/rapidobj/include)
 endfunction()
 
 add_library(gfx STATIC IMPORTED)
