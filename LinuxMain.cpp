@@ -267,7 +267,7 @@ PaintFilePopup(Popup& popup) noexcept
         FillRow(popup.Buffer, 1, hi);
     }
 
-    wl_surface_attach(popup.Surface, popup.Buffer, 0, 0);
+    wl_surface_attach(popup.Surface, popup.Buffer.Buffer, 0, 0);
     wl_surface_damage_buffer(popup.Surface, 0, 0, INT32_MAX, INT32_MAX);
     wl_surface_commit(popup.Surface);
 }
@@ -312,7 +312,6 @@ ShowFileMenuPopup(const int anchorX,
     xdg_positioner_destroy(pos);
 
     // popup listeners
-    static void (*noop)() = nullptr;
     auto popup_configure = [](void*, xdg_popup*, int32_t, int32_t, int32_t, int32_t) {};
     auto popup_done = [](void*, xdg_popup*) { DestroyPopup(gFilePopup); };
     static const xdg_popup_listener popLis = {
@@ -320,7 +319,7 @@ ShowFileMenuPopup(const int anchorX,
         /*popup_done*/ popup_done,
         /*repositioned*/ nullptr
     };
-    xdg_popup_add_listener(gFilePopup.popup, &popLis, nullptr);
+    xdg_popup_add_listener(gFilePopup.Popup, &popLis, nullptr);
 
     // xdg_surface for popup must ack configure
     auto xdg_popup_surface_configure = [](void*, xdg_surface* s, uint32_t serial) {
@@ -368,7 +367,7 @@ XdgSurfaceConfigure(void*,
 
     if (!gBackBuffer.Buffer || gBackBuffer.Width != width || gBackBuffer.Height != height)
     {
-        if (!CreateShmBuffer(gBackBuffer, width, height))
+        if (!CreateShmBuffer(gBackBuffer, width, height, 0xFF20AAAA))
         {
             std::fprintf(stderr, "Failed to create shm buffer\n");
             return;
@@ -476,7 +475,7 @@ PointerButton(void*,
               wl_pointer*, 
               uint32_t serial, 
               uint32_t /*time*/, 
-              uint32_t button, 
+              [[maybe_unused]] uint32_t button, 
               uint32_t state)
 {
     gLastButtonSerial = serial;
@@ -547,6 +546,13 @@ PointerAxisValue120(void*,
 static void 
 PointerFrame(void*, 
              wl_pointer*)
+{
+}
+static void
+PointerAxisRelativeDirection(void*, 
+                             wl_pointer*, 
+                             uint32_t, 
+                             uint32_t)
 {}
 
 static constexpr wl_pointer_listener gPointerListener = 
@@ -560,7 +566,8 @@ static constexpr wl_pointer_listener gPointerListener =
     .axis_source = PointerAxisSource,
     .axis_stop = PointerAxisStop,
     .axis_discrete = PointerAxisDiscrete,
-    .axis_value120 = PointerAxisValue120
+    .axis_value120 = PointerAxisValue120,
+    .axis_relative_direction = PointerAxisRelativeDirection
 };
 
 static void 
