@@ -2,6 +2,8 @@
 
 project(ComputerGraphicsStudies LANGUAGES C CXX)
 
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -20,6 +22,34 @@ if(WIN32)
 else()
     set(CGS_WINDOWS FALSE)
     set(CGS_LINUX TRUE)
+
+    # Wayland + pkg-config
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
+
+    # Where the protocol XML files live (xdg-shell.xml, etc.)
+    pkg_get_variable(WAYLAND_PROTOCOLS_DATADIR wayland-protocols pkgdatadir)
+    if(NOT WAYLAND_PROTOCOLS_DATADIR)
+        message(FATAL_ERROR "wayland-protocols not found via pkg-config")
+    endif()
+
+    # wayland-scanner (code generator)
+    find_program(WAYLAND_SCANNER NAMES wayland-scanner REQUIRED)
+
+    set(XDG_XML "${WAYLAND_PROTOCOLS_DATADIR}/stable/xdg-shell/xdg-shell.xml")
+    set(GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/wayland-protocols")
+
+    add_custom_command(
+        OUTPUT  "${GEN_DIR}/xdg-shell-client-protocol.h" "${GEN_DIR}/xdg-shell-protocol.c"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${GEN_DIR}"
+        COMMAND ${WAYLAND_SCANNER} client-header "${XDG_XML}" "${GEN_DIR}/xdg-shell-client-protocol.h"
+        COMMAND ${WAYLAND_SCANNER} private-code "${XDG_XML}" "${GEN_DIR}/xdg-shell-protocol.c"
+        DEPENDS "${XDG_XML}"
+        VERBATIM
+    )
+
+    add_library(xdg_shell OBJECT "${GEN_DIR}/xdg-shell-protocol.c")
+    target_include_directories(xdg_shell PUBLIC "${GEN_DIR}")
 endif()
 
 add_library(project_warnings INTERFACE)
@@ -40,7 +70,14 @@ target_link_options(project_sanitizers INTERFACE $<$<AND:$<NOT:$<CXX_COMPILER_ID
 if(CGS_WINDOWS)
     add_executable(ComputerGraphicsStudies Win32Main.cpp)
 elseif(CGS_LINUX)
-    add_executable(ComputerGraphicsStudies LinuxMain.cpp)
+    add_executable(ComputerGraphicsStudies 
+        LinuxMain.cpp
+        $<TARGET_OBJECTS:xdg_shell>
+        )
+    target_include_directories(ComputerGraphicsStudies PRIVATE ${WAYLAND_INCLUDE_DIRS})
+    target_link_libraries(ComputerGraphicsStudies PRIVATE ${WAYLAND_LIBRARIES})
+    target_link_libraries(ComputerGraphicsStudies PRIVATE PkgConfig::WAYLAND_CLIENT)
+    target_include_directories(ComputerGraphicsStudies PRIVATE "${GEN_DIR}")
 else()
     message(FATAL_ERROR "Unsupported platform")
 endif()
