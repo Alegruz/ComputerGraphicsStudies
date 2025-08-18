@@ -83,7 +83,8 @@ DestroyShmBuffer(ShmBuffer& shmBuffer) noexcept
 static bool
 CreateShmBuffer(ShmBuffer& shmBuffer,
                 int width,
-                int height) noexcept
+                int height, 
+                uint32_t colorARGB) noexcept
 {
     DestroyShmBuffer(shmBuffer);
     shmBuffer.Width = width;
@@ -118,12 +119,11 @@ CreateShmBuffer(ShmBuffer& shmBuffer,
 
     // Paint a solid color (opaque teal) so we see something.
     uint32_t* px = static_cast<uint32_t*>(shmBuffer.Data);
-    const uint32_t color = 0xFF20AAAA; // ARGB
     for (int y = 0; y < height; ++y)
     {
         for (int x = 0; x < width; ++x)
         {
-            px[y * (shmBuffer.Stride / 4) + x] = color;
+            px[y * (shmBuffer.Stride / 4) + x] = colorARGB;
         }
     }
     return true;
