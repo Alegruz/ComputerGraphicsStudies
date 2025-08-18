@@ -45,7 +45,7 @@ else()
     message(FATAL_ERROR "Unsupported platform")
 endif()
 
-set_target_properties(ComputerGraphicsStudies PROPERTIES OUTPUT_NAME "ComputerGraphicsStudies_${CMAKE_SYSTEM_NAME}_${CMAKE_CXX_COMPILER_ID}")
+set_target_properties(ComputerGraphicsStudies PROPERTIES OUTPUT_NAME "ComputerGraphicsStudies_${CMAKE_SYSTEM_NAME}_${CMAKE_CXX_COMPILER_ID}_${CMAKE_BUILD_TYPE}")
 
 target_link_libraries(ComputerGraphicsStudies PRIVATE project_warnings)
 if(ENABLE_SANITIZERS)
