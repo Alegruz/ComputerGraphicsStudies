@@ -55,6 +55,10 @@ jobs:
       # Optional: ensure MSVC environment is set (usually not needed on GH runners)
       # - uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Install dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwayland-dev
+
       - name: Configure (CMake preset)
         run: cmake --preset "${{ matrix.configure_preset }}"
 
