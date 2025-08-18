@@ -62,6 +62,62 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
             }
+        },
+        {
+            "name": "clang_ubuntu",
+            "hidden": true,
+            "displayName": "Clang 14.0.0 x86_64-pc-linux-gnu",
+            "description": "Using compilers: C = /usr/bin/clang, CXX = /usr/bin/clang++",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+                "CMAKE_C_COMPILER": "/usr/bin/clang",
+                "CMAKE_CXX_COMPILER": "/usr/bin/clang++"
+            }
+        },
+        {
+            "name": "clang_ubuntu-debug",
+            "displayName": "Clang 14.0.0 x86_64-pc-linux-gnu - Debug",
+            "inherits": "clang_ubuntu",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "clang_ubuntu-release",
+            "displayName": "Clang 14.0.0 x86_64-pc-linux-gnu - Release",
+            "inherits": "clang_ubuntu",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "gcc_ubuntu",
+            "hidden": true,
+            "displayName": "GCC 13.2.0 x86_64-linux-gnu",
+            "description": "Using compilers: C = /usr/bin/gcc, CXX = /usr/bin/g++",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+                "CMAKE_C_COMPILER": "/usr/bin/gcc",
+                "CMAKE_CXX_COMPILER": "/usr/bin/g++"
+            }
+        },
+        {
+            "name": "gcc_ubuntu-debug",
+            "displayName": "GCC 13.2.0 x86_64-linux-gnu - Debug",
+            "inherits": "gcc_ubuntu",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "gcc_ubuntu-release",
+            "displayName": "GCC 13.2.0 x86_64-linux-gnu - Release",
+            "inherits": "gcc_ubuntu",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
         }
     ],
     "buildPresets": [
@@ -87,6 +143,30 @@
             "name": "vs22_x64-release",
             "displayName": "Visual Studio Community 2022 Preview - amd64 - Release",
             "configurePreset": "vs22_x64-release",
+            "configuration": "Release"
+        },
+        {
+            "name": "clang_ubuntu-debug",
+            "displayName": "Clang 14.0.0 x86_64-pc-linux-gnu - Debug",
+            "configurePreset": "clang_ubuntu-debug",
+            "configuration": "Debug"
+        },
+        {
+            "name": "clang_ubuntu-release",
+            "displayName": "Clang 14.0.0 x86_64-pc-linux-gnu - Release",
+            "configurePreset": "clang_ubuntu-release",
+            "configuration": "Release"
+        },
+        {
+            "name": "gcc_ubuntu-debug",
+            "displayName": "GCC 13.2.0 x86_64-linux-gnu - Debug",
+            "configurePreset": "gcc_ubuntu-debug",
+            "configuration": "Debug"
+        },
+        {
+            "name": "gcc_ubuntu-release",
+            "displayName": "GCC 13.2.0 x86_64-linux-gnu - Release",
+            "configurePreset": "gcc_ubuntu-release",
             "configuration": "Release"
         }
     ]
