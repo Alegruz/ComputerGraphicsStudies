@@ -1,7 +1,0 @@
-<Attachments>
-    <Attachment Name="BackBuffer" IsFrameBuffered="true">
-        <SizeScale Width="1.0" Height="1.0"/>
-        <ColorFormat>B8G8R8A8_SRGB</ColorFormat>
-        <DepthFormat>D24_UNORM_S8_UINT</DepthFormat>
-    </Attachment>
-</Attachments>

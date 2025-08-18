@@ -1,8 +1,0 @@
-<Renderer Name="TestRenderer">
-    <Pipelines>
-        <Test/>
-    </Pipelines>
-    <Render>
-        <Draw Pipeline="Test"/>
-    </Render>
-</Renderer>

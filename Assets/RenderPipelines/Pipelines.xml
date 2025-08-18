@@ -1,8 +1,0 @@
-<Pipelines>
-    <GraphicsPipeline Name="Test">
-        <Attachment Name="BackBuffer"/>
-        <VertexLayout Name="Position"/>
-        <VertexShader FilePath="Test.slang" EntryPoint="VSMain"/>
-        <FragmentShader FilePath="Test.slang" EntryPoint="PSMain"/>
-    </GraphicsPipeline>
-</Pipelines>
