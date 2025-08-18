@@ -26,6 +26,28 @@ jobs:
             configure_preset: vs22_x64-release
             build_preset: vs22_x64-release
             configuration: Release
+          # Clang on Ubuntu
+          - name: Clang Ubuntu Debug
+            runner: ubuntu-latest
+            configure_preset: clang_ubuntu-debug
+            build_preset: clang_ubuntu-debug
+            configuration: Debug
+          - name: Clang Ubuntu Release
+            runner: ubuntu-latest
+            configure_preset: clang_ubuntu-release
+            build_preset: clang_ubuntu-release
+            configuration: Release
+          # GCC on Ubuntu
+          - name: GCC Ubuntu Debug
+            runner: ubuntu-latest
+            configure_preset: gcc_ubuntu-debug
+            build_preset: gcc_ubuntu-debug
+            configuration: Debug
+          - name: GCC Ubuntu Release
+            runner: ubuntu-latest
+            configure_preset: gcc_ubuntu-release
+            build_preset: gcc_ubuntu-release
+            configuration: Release
 
     steps:
       - uses: actions/checkout@v4
