@@ -15,18 +15,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # VS 2019
-          - name: VS2019 Debug
-            runner: windows-2019
-            configure_preset: vs19_x64-debug
-            build_preset: vs19_x64-debug
-            configuration: Debug
-          - name: VS2019 Release
-            runner: windows-2019
-            configure_preset: vs19_x64-release
-            build_preset: vs19_x64-release
-            configuration: Release
-
           # VS 2022
           - name: VS2022 Debug
             runner: windows-latest   # windows-latest has VS 2022
