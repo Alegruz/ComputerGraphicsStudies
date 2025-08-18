@@ -6,7 +6,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int commandShow)
+int WINAPI wWinMain([[maybe_unused]] HINSTANCE instance, HINSTANCE, [[maybe_unused]] PWSTR commandLine, [[maybe_unused]] int commandShow)
 {
     return 0;
 }
