@@ -1,0 +1,62 @@
+name: CMake (Windows, Presets)
+
+on:
+  push:
+    branches: [ "develop" ]
+  pull_request:
+    branches: [ "develop" ]
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # VS 2019
+          - name: VS2019 Debug
+            runner: windows-2019
+            configure_preset: vs19_x64-debug
+            build_preset: vs19_x64-debug
+            configuration: Debug
+          - name: VS2019 Release
+            runner: windows-2019
+            configure_preset: vs19_x64-release
+            build_preset: vs19_x64-release
+            configuration: Release
+
+          # VS 2022
+          - name: VS2022 Debug
+            runner: windows-latest   # windows-latest has VS 2022
+            configure_preset: vs22_x64-debug   # (ok to use vs22_x64 too)
+            build_preset: vs22_x64-debug
+            configuration: Debug
+          - name: VS2022 Release
+            runner: windows-latest
+            configure_preset: vs22_x64-release
+            build_preset: vs22_x64-release
+            configuration: Release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Optional: ensure MSVC environment is set (usually not needed on GH runners)
+      # - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure (CMake preset)
+        run: cmake --preset "${{ matrix.configure_preset }}"
+
+      - name: Build (CMake build preset)
+        run: cmake --build --preset "${{ matrix.build_preset }}"
+
+      - name: Test (ctest)
+        shell: pwsh
+        run: |
+          # Compute the preset's build directory exactly as in your presets:
+          $buildDir = Join-Path $PWD "out/build/${{ matrix.build_preset }}"
+          if (-not (Test-Path $buildDir)) {
+            Write-Error "Build directory not found: $buildDir"
+          }
+          ctest --test-dir "$buildDir" -C "${{ matrix.configuration }}" --output-on-failure
