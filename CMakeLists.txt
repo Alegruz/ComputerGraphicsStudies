@@ -11,6 +11,8 @@ set(CMAKE_C_STANDARD 17)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+option(ENABLE_PCH "Enable precompiled headers" ON)
+
 if(WIN32)
     set(CGS_WINDOWS TRUE)
     set(CGS_LINUX FALSE)
@@ -80,6 +82,24 @@ elseif(CGS_LINUX)
     target_include_directories(ComputerGraphicsStudies PRIVATE "${GEN_DIR}")
 else()
     message(FATAL_ERROR "Unsupported platform")
+endif()
+
+target_include_directories(ComputerGraphicsStudies PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+
+if(ENABLE_PCH)
+    target_precompile_headers(ComputerGraphicsStudies PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/pch.hpp>"
+    )
+endif()
+
+if(MSVC)
+    target_compile_definitions(ComputerGraphicsStudies PRIVATE CGS_COMPILER_MSVC)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_definitions(ComputerGraphicsStudies PRIVATE CGS_COMPILER_CLANG)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_definitions(ComputerGraphicsStudies PRIVATE CGS_COMPILER_GCC)
+else()
+    message(FATAL_ERROR "Unsupported compiler")
 endif()
 
 set_target_properties(ComputerGraphicsStudies PROPERTIES OUTPUT_NAME "ComputerGraphicsStudies_${CMAKE_SYSTEM_NAME}_${CMAKE_CXX_COMPILER_ID}_${CMAKE_BUILD_TYPE}")

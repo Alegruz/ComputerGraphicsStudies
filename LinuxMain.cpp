@@ -1,20 +1,7 @@
 // WaylandMain.cpp
 #if defined(CGS_LINUX) // build this file only for your Linux/Wayland target
 
-#include <wayland-client.h>
-
-#include <climits>   // INT32_MAX
-#include <cstdio>
-#include <cstring>
-#include <cstdint>
-
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <unistd.h>
-
-
-// Generated from wayland-protocols' xdg-shell.xml (see CMake notes below)
-#include "xdg-shell-client-protocol.h"
+#include "pch.hpp"
 
 static bool gIsRunning = true;
 
