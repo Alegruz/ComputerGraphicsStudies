@@ -80,7 +80,7 @@
         {
             "name": "vs22_x64-debug",
             "displayName": "Visual Studio Community 2022 Preview - amd64 - Debug",
-            "configurePreset": "vs22_x64",
+            "configurePreset": "vs22_x64-debug",
             "configuration": "Debug"
         },
         {
