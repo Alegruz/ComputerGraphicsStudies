@@ -157,51 +157,86 @@ struct Popup
 // recent list (labels only; hook up real MRU later)
 static std::vector<std::string> gRecent = {};
 
-static void 
+
+static cairo_t*
+BeginCairo(ShmBuffer& buffer,
+           cairo_surface_t** outSurface) {
+    auto* surface = cairo_image_surface_create_for_data(
+        static_cast<unsigned char*>(buffer.Data),
+        CAIRO_FORMAT_ARGB32, buffer.Width, buffer.Height, buffer.Stride);
+    *outSurface = surface;
+    cairo_t* cr = cairo_create(surface);
+    // Crisp text
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_BEST);
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+    return cr;
+}
+
+static void
+EndCairo(cairo_t* cairo, cairo_surface_t* surface) {
+    cairo_surface_flush(surface);
+    cairo_destroy(cairo);
+    cairo_surface_destroy(surface);
+}
+
+static void
+DrawCenteredText(cairo_t* cr,
+                 const char* text,
+                 int x, 
+                 int y, 
+                 int w, 
+                 int h,
+                 double r, 
+                 double g, 
+                 double b) 
+{
+    cairo_set_source_rgb(cr, r, g, b);
+    cairo_set_font_size(cr, 13.0);
+    cairo_text_extents_t te;
+    cairo_font_extents_t fe;
+    cairo_text_extents(cr, text, &te);
+    cairo_font_extents(cr, &fe);
+    // center in rect; y is baseline
+    double tx = x + (w - te.width) / 2.0 - te.x_bearing;
+    double ty = y + (h - fe.height) / 2.0 + fe.ascent;
+    cairo_move_to(cr, tx, ty);
+    cairo_show_text(cr, text);
+}
+
+
+static void
 PaintMainSurface() noexcept
 {
     if (gBackBuffer.Data == nullptr) 
     {
         return;
     }
-    uint32_t* px = static_cast<uint32_t*>(gBackBuffer.Data);
-    const int width = gBackBuffer.Width;
-    const int height = gBackBuffer.Height;
-    const int pitch = gBackBuffer.Stride / 4;
 
-    // background (teal)
-    const uint32_t bg = 0xFF20AAAA;
-    for (int y = 0; y < height; ++y)
-    {
-        for (int x = 0; x < width; ++x)
-        {
-            px[y * pitch + x] = bg;
-        }
-    }
+    cairo_surface_t* surface = nullptr;
+    cairo_t* cairo = BeginCairo(gBackBuffer, &surface);
 
-    // menubar (dark)
-    static constexpr uint32_t bar = 0xFF202024;
-    for (int y = 0; y < std::min(MENU_BAR_H, height); ++y)
-    {
-        for (int x = 0; x < width; ++x)
-        {
-            px[y * pitch + x] = bar;
-        }
-    }
+    // Background
+    cairo_set_source_rgba(cairo, 0.125, 0.667, 0.667, 1.0); // teal
+    cairo_rectangle(cairo, 0, 0, gBackBuffer.Width, gBackBuffer.Height);
+    cairo_fill(cairo);
 
-    // "File" button region (slightly lighter when hovered)
-    const bool hot = (gPointerY >= 0 && gPointerY < MENU_BAR_H && gPointerX >= 8 && gPointerX < (8 + FILE_BTN_W));
-    const uint32_t btn = hot ? 0xFF3A3A44 : 0xFF2A2A34;
-    for (int y = 4; y < MENU_BAR_H-4; ++y)
-    {
-        for (int x = 8; x < 8 + FILE_BTN_W; ++x)
-        {
-            if (y < height && x < width) 
-            {
-                px[y * pitch + x] = btn;
-            }
-        }
-    }
+    // Menubar
+    cairo_set_source_rgba(cairo, 0.125, 0.125, 0.141, 1.0); // dark
+    cairo_rectangle(cairo, 0, 0, gBackBuffer.Width, MENU_BAR_H);
+    cairo_fill(cairo);
+
+    // "File" button
+    const bool hot = (gPointerY >= 0 && gPointerY < MENU_BAR_H &&
+        gPointerX >= 8 && gPointerX < (8 + FILE_BTN_W));
+    if (hot) cairo_set_source_rgba(cairo, 0.227, 0.227, 0.267, 1.0);
+    else     cairo_set_source_rgba(cairo, 0.165, 0.165, 0.204, 1.0);
+    cairo_rectangle(cairo, 8, 4, FILE_BTN_W, MENU_BAR_H - 8);
+    cairo_fill(cairo);
+
+    // Button label
+    DrawCenteredText(cairo, "File", 8, 4, FILE_BTN_W, MENU_BAR_H - 8, 0.9, 0.9, 0.9);
+
+    EndCairo(cairo, surface);
 }
 
 static void 
@@ -231,41 +266,40 @@ DestroyPopup(Popup& popup) noexcept
     popup = Popup{};
 }
 
-static void 
-FillRow(ShmBuffer& inoutBuffer, 
-        const int row, 
-        const uint32_t color) noexcept
+void RowRect(cairo_t& cairo, 
+             const int row, 
+             const double r, 
+             const double g, 
+             const double b) noexcept
 {
-    uint32_t* px = static_cast<uint32_t*>(inoutBuffer.Data);
-    const int pitch = inoutBuffer.Stride / 4;
-    const int y0 = row * 24, y1 = y0 + 24;
-    for (int y = y0; y < y1; ++y)
-    {
-        for (int x = 0; x < inoutBuffer.Width; ++x)
-        {
-            px[y * pitch + x] = color;
-        }
-    }
+    cairo_set_source_rgb(&cairo, r, g, b);
+    cairo_rectangle(&cairo, 0, row * 24, gFilePopup.Width, 24);
+    cairo_fill(&cairo);
 }
 
-static void 
+static void
 PaintFilePopup(Popup& popup) noexcept
 {
-    // simple 2-row menu: [0] Open..., [1] Open Recent
-    static constexpr uint32_t bg = 0xFFF0F0F0;
-    static constexpr uint32_t hi = 0xFFE0E6F8;
-    const int width = popup.Width;
-    const int height = popup.Height;
-    CreateShmBuffer(popup.Buffer, width, height, bg);
+    CreateShmBuffer(popup.Buffer, popup.Width, popup.Height, 0xFFF0F0F0);
 
-    if (popup.HotIndex == 0) 
+    cairo_surface_t* surface = nullptr;
+    cairo_t* cairo = BeginCairo(popup.Buffer, &surface);
+
+    // rows + hover
+    if (popup.HotIndex == 0)
     {
-        FillRow(popup.Buffer, 0, hi);
+        RowRect(*cairo, 0, 0.878, 0.902, 0.973);
     }
-    if (popup.HotIndex == 1) 
+    if (popup.HotIndex == 1)
     {
-        FillRow(popup.Buffer, 1, hi);
+        RowRect(*cairo, 1, 0.878, 0.902, 0.973);
     }
+
+    // text
+    DrawCenteredText(cairo, "Open...", 8, 0, popup.Width - 16, 24, 0.05, 0.05, 0.05);
+    DrawCenteredText(cairo, "Open Recent", 8, 24, popup.Width - 16, 24, 0.05, 0.05, 0.05);
+
+    EndCairo(cairo, surface);
 
     wl_surface_attach(popup.Surface, popup.Buffer.Buffer, 0, 0);
     wl_surface_damage_buffer(popup.Surface, 0, 0, INT32_MAX, INT32_MAX);
@@ -322,11 +356,15 @@ ShowFileMenuPopup(const int anchorX,
     xdg_popup_add_listener(gFilePopup.Popup, &popLis, nullptr);
 
     // xdg_surface for popup must ack configure
-    auto xdg_popup_surface_configure = [](void*, xdg_surface* s, uint32_t serial) {
+    auto xdg_popup_surface_configure = [](void*, xdg_surface* s, uint32_t serial) 
+    {
         xdg_surface_ack_configure(s, serial);
         PaintFilePopup(gFilePopup);
     };
-    static const xdg_surface_listener xsLis = { xdg_popup_surface_configure };
+    static const xdg_surface_listener xsLis =
+    {
+        .configure = xdg_popup_surface_configure
+    };
     xdg_surface_add_listener(gFilePopup.XSurface, &xsLis, nullptr);
 
     // Take an implicit grab so outside clicks dismiss the popup:
@@ -418,7 +456,7 @@ XdgToplevelWmCapabilities(void*,
 {
 }
 
-static const xdg_toplevel_listener gTopLevelListener =
+static constexpr xdg_toplevel_listener gTopLevelListener =
 {
     .configure = XdgToplevelConfigure,
     .close = XdgToplevelClose,
@@ -430,12 +468,12 @@ static const xdg_toplevel_listener gTopLevelListener =
 static void 
 PointerEnter(void*, 
              wl_pointer*, 
-             uint32_t serial, 
+             [[maybe_unused]] uint32_t serial, 
              wl_surface*, 
              wl_fixed_t sx, 
              wl_fixed_t sy) 
 {
-    gLastButtonSerial = serial;
+    // gLastButtonSerial = serial;
     gPointerX = wl_fixed_to_int(sx);
     gPointerY = wl_fixed_to_int(sy);
     PaintMainSurface(); CommitMainSurface();
@@ -444,10 +482,10 @@ PointerEnter(void*,
 static void 
 PointerLeave(void*, 
              wl_pointer*, 
-             uint32_t serial, 
+             [[maybe_unused]] uint32_t serial, 
              wl_surface*)
 {
-    gLastButtonSerial = serial;
+    // gLastButtonSerial = serial;
     gPointerX = gPointerY = -1;
     PaintMainSurface(); CommitMainSurface();
 }

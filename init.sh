@@ -1,1 +1,1 @@
-sudo apt-get update && sudo apt-get install -y libwayland-dev wayland-protocols
+sudo apt-get update && sudo apt-get install -y libwayland-dev wayland-protocols libcairo2-dev

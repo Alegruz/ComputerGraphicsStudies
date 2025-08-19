@@ -30,6 +30,7 @@
 
 #include "pch.hpp"
 
+#include <cairo/cairo.h>
 #include <wayland-client.h>
 
 #include <climits>   // INT32_MAX
