@@ -57,7 +57,7 @@ jobs:
 
       - name: Install dependencies
         if: runner.os == 'Linux'
-        run: ./init.sh
+        run: chmod +x init.sh && ./init.sh
 
       - name: Configure (CMake preset)
         run: cmake --preset "${{ matrix.configure_preset }}"
