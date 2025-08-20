@@ -261,6 +261,7 @@ namespace cli
         INVALID,
         HELP,
         VERSION,
+        INPUT_RESOURCE,
     };
     
     struct OptionInfo final
@@ -277,7 +278,8 @@ namespace cli
     static std::unordered_map<std::wstring, OptionInfo> gOptionsMap =
     {
         { L"--help", { .LongOption = L"--help", .ShortOption = L"-h", .Type = eOptionType::HELP, .Description = L"Show help information." } },
-        { L"--version", { .LongOption = L"--version", .ShortOption = L"-v", .Type = eOptionType::VERSION, .Description = L"Show version information." } }
+        { L"--version", { .LongOption = L"--version", .ShortOption = L"-v", .Type = eOptionType::VERSION, .Description = L"Show version information." } },
+        { L"--input-resource", { .LongOption = L"--input-resource", .ShortOption = L"-i", .Type = eOptionType::INPUT_RESOURCE, .Description = L"Path to the input model file." } }
     };
 }
 
@@ -304,6 +306,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
 
     bool isOptionFound = false;
     const wchar* commandLineCurrentPtr = commandLine;
+    std::vector<std::wstring> arguments;
     while (commandLineCurrentPtr != nullptr && *commandLineCurrentPtr != L'\0')
     {
         const bool isWhiteSpace = std::iswspace(*commandLineCurrentPtr);
@@ -324,6 +327,18 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
 
         // Process the argument
         const std::wstring_view argument(argumentStart, argumentEnd);
+        arguments.push_back(std::wstring(argument));
+    }
+
+    const size_t numArguments = arguments.size();
+    for(size_t argumentIndex = 0; argumentIndex < numArguments; ++argumentIndex)
+    {
+        const std::wstring& argument = arguments[argumentIndex];
+        if(argument.empty())
+        {
+            continue;
+        }
+
         const bool isOption = argument.starts_with(L'-');
         if(isOption == true)
         {
@@ -351,11 +366,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
                         {
                             optInfo.HelpDescription += L"{";
                             const size_t numValues = optInfo.PossibleValues.size();
-                            for(size_t i = 0; i < numValues; ++i)
+                            for(size_t valueIndex = 0; valueIndex < numValues; ++valueIndex)
                             {
-                                const std::wstring& value = optInfo.PossibleValues[i];
+                                const std::wstring& value = optInfo.PossibleValues[valueIndex];
                                 optInfo.HelpDescription += value;
-                                if(i < numValues - 1)
+                                if(valueIndex < numValues - 1)
                                 {
                                     optInfo.HelpDescription += L",";
                                 }
@@ -373,7 +388,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
                         }
                         optInfo.HelpDescription += optInfo.Description;
                     }
-                    OutputDebugString(optInfo.HelpDescription.c_str());
                 }
             }
                 break;
@@ -383,6 +397,19 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
                 wchar_t versionString[32] = { 0, };
                 swprintf(versionString, sizeof(versionString) / sizeof(wchar_t), L"Version: %d.%d.%d.%d", GET_API_VERSION_VARIANT(cgs::API_VERSION), GET_API_VERSION_MAJOR(cgs::API_VERSION), GET_API_VERSION_MINOR(cgs::API_VERSION), GET_API_VERSION_PATCH(cgs::API_VERSION));
                 OutputDebugString(versionString);
+            }
+                break;
+            case cli::eOptionType::INPUT_RESOURCE:
+            {
+                if(argumentIndex + 1 >= numArguments)
+                {
+                    isOptionFound = false;
+                    MessageBox(NULL, TEXT("Input resource path is missing."), TEXT("Error"), MB_OK | MB_ICONERROR);
+                    break;
+                }
+
+                const std::wstring optionArgument = arguments[argumentIndex + 1];
+                gRecentFiles.push_back(optionArgument);
             }
                 break;
             case cli::eOptionType::INVALID:
