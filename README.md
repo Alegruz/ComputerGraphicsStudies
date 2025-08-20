@@ -30,3 +30,5 @@ Target platforms (sorted by priority):
 ## Development Log
 
 - **[2025.08.18]**: base code with the main entry function per platforms.
+- **[2025.08.19]**: base window code
+- **[2025.08.20]**: command line parser draft
