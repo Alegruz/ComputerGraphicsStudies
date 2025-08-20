@@ -117,3 +117,7 @@ if(CGS_WINDOWS)
 elseif(CGS_LINUX)
     target_compile_definitions(ComputerGraphicsStudies PRIVATE CGS_LINUX)
 endif()
+
+add_custom_command(TARGET ComputerGraphicsStudies POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:ComputerGraphicsStudies>" "${CMAKE_CURRENT_LIST_DIR}/${CMAKE_PROJECT_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
+)

@@ -1,11 +1,24 @@
 #pragma once
 
-#include "Common.h"
-
 #include <algorithm>
+#include <cstdint>
+#include <cwctype>
 #include <filesystem>
 #include <string>
 #include <vector>
+#include <unordered_map>
+
+using wchar = wchar_t;
+
+using uint8 = uint8_t;
+using uint16 = uint16_t;
+using uint32 = uint32_t;
+using uint64 = uint64_t;
+
+using int8 = int8_t;
+using int16 = int16_t;
+using int32 = int32_t;
+using int64 = int64_t;
 
 #if defined(CGS_WINDOWS)
 #if !defined(UNICODE)
@@ -46,3 +59,5 @@
 // Generated from wayland-protocols' xdg-shell.xml (see CMake notes below)
 #include "xdg-shell-client-protocol.h"
 #endif  // defined(CGS_LINUX)
+
+#include "Common.h"

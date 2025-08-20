@@ -15,7 +15,8 @@ PrintErrorMessage() noexcept
 }
 
 // -------------------- Menu IDs & MRU config --------------------
-enum : UINT {
+enum : UINT 
+{
     IDM_FILE_OPEN          = 1001,
     IDM_FILE_RECENT_BASE   = 1100,   // contiguous block for recent entries
     IDM_FILE_RECENT_MAX    = 10      // how many you want to show
@@ -253,14 +254,155 @@ public:
     }
 };
 
+namespace cli
+{
+    enum class eOptionType : uint8
+    {
+        INVALID,
+        HELP,
+        VERSION,
+    };
+    
+    struct OptionInfo final
+    {
+        const wchar* LongOption = nullptr;
+        const wchar* ShortOption = nullptr;
+        eOptionType Type = eOptionType::INVALID;
+        std::wstring DataType;
+        std::vector<std::wstring> PossibleValues;
+        std::wstring Description;
+        std::wstring HelpDescription;
+    };
+
+    static std::unordered_map<std::wstring, OptionInfo> gOptionsMap =
+    {
+        { L"--help", { .LongOption = L"--help", .ShortOption = L"-h", .Type = eOptionType::HELP, .Description = L"Show help information." } },
+        { L"--version", { .LongOption = L"--version", .ShortOption = L"-v", .Type = eOptionType::VERSION, .Description = L"Show version information." } }
+    };
+}
+
 /// @brief The entry point for a Windows application.
 /// @param instance the handle to an instance or handle to a module. The operating system uses this value to identify the executable or EXE when it's loaded in memory. Certain Windows functions need the instance handle, for example to load icons or bitmaps.
 /// @param
 /// @param commandLine the command-line arguments as a Unicode string.
 /// @param commandShowFlag a flag that indicates whether the main application window is minimized, maximized, or shown normally.
 /// @return The exit value of the application.
-int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, [[maybe_unused]] PWSTR commandLine, [[maybe_unused]] int commandShowFlag)
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_unused]] int commandShowFlag)
 {
+    std::vector<cli::OptionInfo> optionInfos;
+    optionInfos.reserve(cli::gOptionsMap.size());
+    for(const auto& iter : cli::gOptionsMap)
+    {
+        const cli::OptionInfo& optionInfo = iter.second;
+        optionInfos.push_back(optionInfo);
+    }
+
+    for(const auto& optionInfo : optionInfos)
+    {
+        cli::gOptionsMap[optionInfo.ShortOption] = optionInfo;
+    }
+
+    bool isOptionFound = false;
+    const wchar* commandLineCurrentPtr = commandLine;
+    while (commandLineCurrentPtr != nullptr && *commandLineCurrentPtr != L'\0')
+    {
+        const bool isWhiteSpace = std::iswspace(*commandLineCurrentPtr);
+        if (isWhiteSpace)
+        {
+            // Skip whitespace
+            ++commandLineCurrentPtr;
+            continue;
+        }
+
+        // Parse the command line argument
+        const wchar* argumentStart = commandLineCurrentPtr;
+        while (*commandLineCurrentPtr != L'\0' && !std::iswspace(*commandLineCurrentPtr))
+        {
+            ++commandLineCurrentPtr;
+        }
+        const wchar* argumentEnd = commandLineCurrentPtr;
+
+        // Process the argument
+        const std::wstring_view argument(argumentStart, argumentEnd);
+        const bool isOption = argument.starts_with(L'-');
+        if(isOption == true)
+        {
+            const cli::OptionInfo& optionInfo = cli::gOptionsMap[std::wstring(argument)];
+            isOptionFound = true;
+            switch (optionInfo.Type)
+            {
+            case cli::eOptionType::HELP:
+            {
+                MessageBoxW(NULL, optionInfo.HelpDescription.c_str(), L"Help", MB_OK);
+                for(auto& iter : cli::gOptionsMap)
+                {
+                    cli::OptionInfo& optInfo = iter.second;
+                    if(optInfo.HelpDescription.empty() == true)
+                    {
+                        static constexpr size_t NUM_OPTION_SPACES = 32;
+                        optInfo.HelpDescription = optInfo.ShortOption;
+                        optInfo.HelpDescription += L", ";
+                        optInfo.HelpDescription += optInfo.LongOption;
+                        if(optInfo.DataType.empty() == false)
+                        {
+                            optInfo.HelpDescription += L" <" + optInfo.DataType + L">";
+                        }
+                        else if(optInfo.PossibleValues.empty() == false)
+                        {
+                            optInfo.HelpDescription += L"{";
+                            const size_t numValues = optInfo.PossibleValues.size();
+                            for(size_t i = 0; i < numValues; ++i)
+                            {
+                                const std::wstring& value = optInfo.PossibleValues[i];
+                                optInfo.HelpDescription += value;
+                                if(i < numValues - 1)
+                                {
+                                    optInfo.HelpDescription += L",";
+                                }
+                            }
+                            optInfo.HelpDescription += L"}";
+                        }
+                        else
+                        {
+                            // Invalid option info
+                            MessageBox(NULL, TEXT("Invalid option info."), TEXT("Error"), MB_OK | MB_ICONERROR);
+                        }
+                        if(optInfo.HelpDescription.size() < NUM_OPTION_SPACES)
+                        {
+                            optInfo.HelpDescription.append(NUM_OPTION_SPACES - optInfo.HelpDescription.size(), L' ');
+                        }
+                        optInfo.HelpDescription += optInfo.Description;
+                    }
+                    OutputDebugString(optInfo.HelpDescription.c_str());
+                }
+            }
+                break;
+            case cli::eOptionType::VERSION:
+            {
+                MessageBoxW(NULL, L"Version information is not yet implemented.", L"Version", MB_OK);
+                wchar_t versionString[32] = { 0, };
+                swprintf(versionString, sizeof(versionString) / sizeof(wchar_t), L"Version: %d.%d.%d.%d", GET_API_VERSION_VARIANT(cgs::API_VERSION), GET_API_VERSION_MAJOR(cgs::API_VERSION), GET_API_VERSION_MINOR(cgs::API_VERSION), GET_API_VERSION_PATCH(cgs::API_VERSION));
+                OutputDebugString(versionString);
+            }
+                break;
+            case cli::eOptionType::INVALID:
+                [[fallthrough]];
+            default:
+                isOptionFound = false;
+                MessageBoxW(NULL, L"Invalid command line option.", L"Error", MB_OK | MB_ICONERROR);
+                break;
+            }
+        }
+    }
+    
+    if(isOptionFound == false)
+    {
+        OutputDebugString(L"No command line options found.\n");
+        OutputDebugString(L"Exiting application.\n");
+        return 0;
+    }
+    
+
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     if (FAILED(hr))
     {

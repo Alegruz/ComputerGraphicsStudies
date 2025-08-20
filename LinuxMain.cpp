@@ -17,13 +17,13 @@ static wl_shm* gShm = nullptr;   // <-- SHM
 // Input (for popups & clicks)
 static wl_seat*        gSeat       = nullptr;
 static wl_pointer*     gPointer    = nullptr;
-static uint32_t        gLastButtonSerial = 0;
+static uint32        gLastButtonSerial = 0;
 static int             gPointerX   = 0;
 static int             gPointerY   = 0;
 
 // Pending (suggested) size from toplevel.configure
-static int32_t gPendingWidth = 0;
-static int32_t gPendingHeight = 0;
+static int32 gPendingWidth = 0;
+static int32 gPendingHeight = 0;
 
 // ---- Very small SHM helper ----
 struct ShmBuffer {
@@ -84,7 +84,7 @@ static bool
 CreateShmBuffer(ShmBuffer& shmBuffer,
                 int width,
                 int height, 
-                uint32_t colorARGB) noexcept
+                uint32 colorARGB) noexcept
 {
     DestroyShmBuffer(shmBuffer);
     shmBuffer.Width = width;
@@ -118,7 +118,7 @@ CreateShmBuffer(ShmBuffer& shmBuffer,
     shmBuffer.Data = data;
 
     // Paint a solid color (opaque teal) so we see something.
-    uint32_t* px = static_cast<uint32_t*>(shmBuffer.Data);
+    uint32* px = static_cast<uint32*>(shmBuffer.Data);
     for (int y = 0; y < height; ++y)
     {
         for (int x = 0; x < width; ++x)
@@ -135,7 +135,7 @@ static constexpr int MENU_BAR_H = 28;
 static constexpr int FILE_BTN_W = 64; // clickable "File" area (we don't render text here)
 
 // "Commands" like on Win32:
-enum : uint32_t 
+enum : uint32 
 {
     IDM_FILE_OPEN         = 1001,
     IDM_FILE_OPEN_RECENT  = 1002
@@ -307,7 +307,7 @@ PaintFilePopup(Popup& popup) noexcept
 }
 
 static void 
-HandleMenuCommand(uint32_t id) noexcept
+HandleMenuCommand(uint32 id) noexcept
 {
     if (id == IDM_FILE_OPEN) 
     {
@@ -346,7 +346,7 @@ ShowFileMenuPopup(const int anchorX,
     xdg_positioner_destroy(pos);
 
     // popup listeners
-    auto popup_configure = [](void*, xdg_popup*, int32_t, int32_t, int32_t, int32_t) {};
+    auto popup_configure = [](void*, xdg_popup*, int32, int32, int32, int32) {};
     auto popup_done = [](void*, xdg_popup*) { DestroyPopup(gFilePopup); };
     static const xdg_popup_listener popLis = {
         /*configure*/ popup_configure,
@@ -356,7 +356,7 @@ ShowFileMenuPopup(const int anchorX,
     xdg_popup_add_listener(gFilePopup.Popup, &popLis, nullptr);
 
     // xdg_surface for popup must ack configure
-    auto xdg_popup_surface_configure = [](void*, xdg_surface* s, uint32_t serial) 
+    auto xdg_popup_surface_configure = [](void*, xdg_surface* s, uint32 serial) 
     {
         xdg_surface_ack_configure(s, serial);
         PaintFilePopup(gFilePopup);
@@ -380,7 +380,7 @@ ShowFileMenuPopup(const int anchorX,
 static void
 XdgWmBasePing(void*,
               xdg_wm_base* wm,
-              uint32_t serial)
+              uint32 serial)
 {
     xdg_wm_base_pong(wm, serial);
 }
@@ -394,7 +394,7 @@ static const xdg_wm_base_listener gWmBaseListener =
 static void
 XdgSurfaceConfigure(void*,
                     xdg_surface* surf,
-                    uint32_t serial)
+                    uint32 serial)
 {
     // Must ack every configure
     xdg_surface_ack_configure(surf, serial);
@@ -425,8 +425,8 @@ static const xdg_surface_listener gXdgSurfaceListener =
 static void
 XdgToplevelConfigure(void*,
                      xdg_toplevel*,
-                     int32_t width,
-                     int32_t height,
+                     int32 width,
+                     int32 height,
                      wl_array* /*states*/)
 {
     gPendingWidth = width;
@@ -444,8 +444,8 @@ XdgToplevelClose(void*,
 static void
 XdgToplevelConfigureBound(void*,
                           xdg_toplevel*,
-                          int32_t,
-                          int32_t)
+                          int32,
+                          int32)
 {
 }
 
@@ -468,7 +468,7 @@ static constexpr xdg_toplevel_listener gTopLevelListener =
 static void 
 PointerEnter(void*, 
              wl_pointer*, 
-             [[maybe_unused]] uint32_t serial, 
+             [[maybe_unused]] uint32 serial, 
              wl_surface*, 
              wl_fixed_t sx, 
              wl_fixed_t sy) 
@@ -482,7 +482,7 @@ PointerEnter(void*,
 static void 
 PointerLeave(void*, 
              wl_pointer*, 
-             [[maybe_unused]] uint32_t serial, 
+             [[maybe_unused]] uint32 serial, 
              wl_surface*)
 {
     // gLastButtonSerial = serial;
@@ -493,7 +493,7 @@ PointerLeave(void*,
 static void 
 PointerMotion(void*, 
               wl_pointer*, 
-              uint32_t /*time*/, 
+              uint32 /*time*/, 
               wl_fixed_t sx, 
               wl_fixed_t sy)
 {
@@ -511,10 +511,10 @@ PointerMotion(void*,
 static void 
 PointerButton(void*, 
               wl_pointer*, 
-              uint32_t serial, 
-              uint32_t /*time*/, 
-              [[maybe_unused]] uint32_t button, 
-              uint32_t state)
+              uint32 serial, 
+              uint32 /*time*/, 
+              [[maybe_unused]] uint32 button, 
+              uint32 state)
 {
     gLastButtonSerial = serial;
     const bool pressed = (state == WL_POINTER_BUTTON_STATE_PRESSED);
@@ -553,33 +553,33 @@ PointerButton(void*,
 static void
 PointerAxis(void*, 
             wl_pointer*, 
-            uint32_t, 
-            uint32_t, 
+            uint32, 
+            uint32, 
             wl_fixed_t)
 {}
 
 static void 
 PointerAxisSource(void*, 
                   wl_pointer*, 
-                  uint32_t)
+                  uint32)
 {}
 static void 
 PointerAxisStop(void*, 
                 wl_pointer*, 
-                uint32_t, 
-                uint32_t)
+                uint32, 
+                uint32)
 {}
 static void 
 PointerAxisDiscrete(void*, 
                     wl_pointer*, 
-                    uint32_t, 
-                    int32_t)
+                    uint32, 
+                    int32)
 {}
 static void 
 PointerAxisValue120(void*, 
                    wl_pointer*, 
-                   uint32_t, 
-                   int32_t)
+                   uint32, 
+                   int32)
 {}
 static void 
 PointerFrame(void*, 
@@ -589,8 +589,8 @@ PointerFrame(void*,
 static void
 PointerAxisRelativeDirection(void*, 
                              wl_pointer*, 
-                             uint32_t, 
-                             uint32_t)
+                             uint32, 
+                             uint32)
 {}
 
 static constexpr wl_pointer_listener gPointerListener = 
@@ -611,7 +611,7 @@ static constexpr wl_pointer_listener gPointerListener =
 static void 
 SeatCapabilities(void*, 
                  wl_seat* seat, 
-                 uint32_t caps) 
+                 uint32 caps) 
 {
     const bool wantPointer = caps & WL_SEAT_CAPABILITY_POINTER;
     if (wantPointer && !gPointer) 
@@ -639,9 +639,9 @@ static constexpr wl_seat_listener gSeatListener =
 static void
 RegistryGlobal(void*,
                 wl_registry* reg,
-                uint32_t name,
+                uint32 name,
                 const char* interface,
-                [[maybe_unused]] uint32_t version)
+                [[maybe_unused]] uint32 version)
 {
     if (std::strcmp(interface, wl_compositor_interface.name) == 0)
     {
@@ -668,7 +668,7 @@ RegistryGlobal(void*,
 static void
 RegistryGlobalRemove(void*,
                      wl_registry*,
-                     uint32_t) 
+                     uint32) 
 {
 }
 

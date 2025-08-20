@@ -1,0 +1,13 @@
+{
+  "version": "0.2.1",
+  "defaults": {},
+  "configurations": [
+    {
+      "type": "default",
+      "project": "CMakeLists.txt",
+      "projectTarget": "ComputerGraphicsStudies_Windows_MSVC_Debug.exe (Debug\\ComputerGraphicsStudies_Windows_MSVC_Debug.exe)",
+      "name": "ComputerGraphicsStudies_Windows_MSVC_Debug.exe (Debug\\ComputerGraphicsStudies_Windows_MSVC_Debug.exe)",
+      "args": ["-v"]
+    }
+  ]
+}
