@@ -39,7 +39,7 @@ public:
 
     CGS_INLINE ~File()
     {
-        if (mFileHandle != INVALID_HANDLE_VALUE)
+        if (mFileHandle != NULL)
         {
             const BOOL result = CloseHandle(mFileHandle);
             if (result == FALSE)
