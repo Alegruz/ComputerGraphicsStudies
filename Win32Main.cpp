@@ -283,6 +283,237 @@ namespace cli
     };
 }
 
+namespace cgs
+{
+    enum class eCoordinateSpace : uint8
+    {
+        DEFAULT,
+        OBJECT = DEFAULT,
+        LOCAL = DEFAULT,
+        WORLD,
+        VIEW,
+        PERSPECTIVE,
+        SCREEN,
+        NORMALIZED_DEVICE_COORDINATE,
+    };
+
+    struct float3 final
+    {
+        float X = 0.0f;
+        float Y = 0.0f;
+        float Z = 0.0f;
+
+        CGS_INLINE constexpr float& operator[](size_t index) noexcept
+        {
+            return *(&X + index);
+        }
+
+        CGS_INLINE constexpr float operator[](size_t index) const noexcept
+        {
+            return *(&X + index);
+        }
+    };
+
+    CGS_INLINE constexpr float3 operator+(const float3& lhs, const float3& rhs) noexcept
+    {
+        return float3{ lhs.X + rhs.X, lhs.Y + rhs.Y, lhs.Z + rhs.Z };
+    }
+
+    CGS_INLINE constexpr float3 operator-(const float3& lhs, const float3& rhs) noexcept
+    {
+        return float3{ lhs.X - rhs.X, lhs.Y - rhs.Y, lhs.Z - rhs.Z };
+    }
+
+    CGS_INLINE constexpr float Dot(const float3& lhs, const float3& rhs) noexcept
+    {
+        return lhs.X * rhs.X + lhs.Y * rhs.Y + lhs.Z * rhs.Z;
+    }
+
+    CGS_INLINE constexpr float3 Cross(const float3& lhs, const float3& rhs) noexcept
+    {
+        return float3{
+            lhs.Y * rhs.Z - lhs.Z * rhs.Y,
+            lhs.Z * rhs.X - lhs.X * rhs.Z,
+            lhs.X * rhs.Y - lhs.Y * rhs.X
+        };
+    }
+
+    CGS_INLINE constexpr float3 ComputeBarycentricCoordinates(const float3& v0, const float3& v1, const float3& v2, const float3& point) noexcept
+    {
+        const float area = 0.5f * Dot(Cross(v1 - v0, v2 - v0), float3{ 0.0f, 0.0f, 1.0f });
+        const float alpha = 0.5f * Dot(Cross(v2 - v1, point - v1), float3{ 0.0f, 0.0f, 1.0f }) / area;
+        const float beta = 0.5f * Dot(Cross(v0 - v2, point - v2), float3{ 0.0f, 0.0f, 1.0f }) / area;
+        const float gamma = 1.0f - alpha - beta;
+
+        return float3{ alpha, beta, gamma };
+    }
+
+    template<eCoordinateSpace SPACE>
+    using Coordinate = float3;
+
+    template<eCoordinateSpace SPACE>
+    class TriangleMesh final
+    {
+    public:
+        CGS_INLINE constexpr TriangleMesh() = default;
+        CGS_INLINE constexpr TriangleMesh(const Coordinate<SPACE>& v0, const Coordinate<SPACE>& v1, const Coordinate<SPACE>& v2) noexcept
+            : mVertices{ v0, v1, v2 } {}
+        CGS_INLINE constexpr TriangleMesh(const TriangleMesh& mesh) noexcept
+            : mVertices{ mesh.mVertices[0], mesh.mVertices[1], mesh.mVertices[2] }  {}
+        CGS_INLINE constexpr TriangleMesh(TriangleMesh&&) noexcept = default;
+        CGS_INLINE ~TriangleMesh() noexcept = default;
+
+        CGS_INLINE constexpr TriangleMesh& operator=(const TriangleMesh& mesh) noexcept
+        {
+            if (this != &mesh)
+            {
+                mVertices[0] = mesh.mVertices[0];
+                mVertices[1] = mesh.mVertices[1];
+                mVertices[2] = mesh.mVertices[2];
+            }
+            return *this;
+        }
+        CGS_INLINE constexpr TriangleMesh& operator=(TriangleMesh&&) noexcept = default;
+        CGS_INLINE constexpr const Coordinate<SPACE>& GetVertex(size_t index) const noexcept
+        {
+            return mVertices[index];
+        }
+    
+    private:
+        Coordinate<SPACE> mVertices[3];
+    };
+
+    template<eCoordinateSpace SPACE>
+    CGS_INLINE constexpr Coordinate<SPACE> ComputeBarycentricCoordinates(const TriangleMesh<SPACE>& mesh, const float3& point) noexcept
+    {
+        const float3& v0 = mesh.GetVertex(0);
+        const float3& v1 = mesh.GetVertex(1);
+        const float3& v2 = mesh.GetVertex(2);
+        
+        return ComputeBarycentricCoordinates(v0, v1, v2, point);
+    }
+
+    class Texture final
+    {
+    public:
+        CGS_INLINE constexpr Texture() noexcept = default;
+        CGS_INLINE constexpr Texture(const uint32 width, const uint32 height) noexcept
+            : Texture(width, height, 0) {}
+        CGS_INLINE constexpr Texture(const uint32 width, const uint32 height, const byte initialValue) noexcept
+            : mWidth(width), mHeight(height), mData(width * height * 4, initialValue) {}
+        CGS_INLINE constexpr Texture(const Texture&) noexcept = default;
+        CGS_INLINE constexpr Texture(Texture&&) noexcept = default;
+        CGS_INLINE ~Texture() noexcept = default;
+
+        CGS_INLINE constexpr Texture& operator=(const Texture&) noexcept = default;
+        CGS_INLINE constexpr Texture& operator=(Texture&&) noexcept = default;
+
+        CGS_INLINE constexpr uint32 GetWidth() const noexcept { return mWidth; }
+        CGS_INLINE constexpr uint32 GetHeight() const noexcept { return mHeight; }
+        CGS_INLINE constexpr const byte* GetData() const noexcept { return mData.data(); }
+
+        CGS_INLINE constexpr bool SetFragmentValue(const uint32 x, const uint32 y, const byte r, const byte g, const byte b, const byte a) noexcept
+        {
+            if (x < mWidth && y < mHeight)
+            {
+                const size_t index = (y * mWidth + x) * 4;
+                mData[index + 0] = r;
+                mData[index + 1] = g;
+                mData[index + 2] = b;
+                mData[index + 3] = a;
+                return true;
+            }
+            return false;
+        }
+
+    private:
+        uint32 mWidth = 0;
+        uint32 mHeight = 0;
+        std::vector<byte> mData;
+    };
+
+    enum class eRasterizationMethod : uint8
+    {
+        DEFAULT,
+        BARYCENTRIC = DEFAULT,
+    };
+
+    template<eCoordinateSpace SPACE, eRasterizationMethod METHOD = eRasterizationMethod::DEFAULT>
+    static void
+    Rasterize(Texture& outTexture, const std::vector<TriangleMesh<SPACE>>& meshes) noexcept
+    {
+        const uint32 width = outTexture.GetWidth();
+        const uint32 height = outTexture.GetHeight();
+
+        for (const TriangleMesh<SPACE>& mesh : meshes)
+        {
+            if constexpr (METHOD == eRasterizationMethod::BARYCENTRIC)
+            {
+                for(uint32 y = 0; y < height; ++y)
+                {
+                    for(uint32 x = 0; x < width; ++x)
+                    {
+                        if constexpr (SPACE == eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE)
+                        {
+                            const Coordinate<eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE> point{ 
+                                static_cast<float>(x) / static_cast<float>(width) * 2.0f - 1.0f, 
+                                static_cast<float>(y) / static_cast<float>(height) * 2.0f - 1.0f, 
+                                0.0f 
+                            };
+                            const Coordinate<eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE> barycentricCoords = ComputeBarycentricCoordinates(mesh, point);
+                            const bool isInTriangle = 0.0f <= barycentricCoords.X && barycentricCoords.X <= 1.0f &&
+                                                      0.0f <= barycentricCoords.Y && barycentricCoords.Y <= 1.0f &&
+                                                      0.0f <= barycentricCoords.Z && barycentricCoords.Z <= 1.0f;
+                            if(isInTriangle)
+                            {
+                                // Simple rasterization logic: set every pixel to a color
+                                // In a real application, you would perform actual rasterization here
+                                outTexture.SetFragmentValue(x, y, 255, 0, 0, 255); // Set to red
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    static void
+    Present(HWND window, const Texture& backBuffer) noexcept
+    {
+        BITMAPINFO bitmapInfo =
+        {
+            .bmiHeader = 
+            BITMAPINFOHEADER
+            {
+                .biSize = sizeof(BITMAPINFOHEADER),
+                .biWidth = static_cast<LONG>(backBuffer.GetWidth()),
+                .biHeight = static_cast<LONG>(backBuffer.GetHeight()),
+                .biPlanes = 1,
+                .biBitCount = 32,
+                .biCompression = BI_RGB,
+                .biSizeImage = 0,
+                .biXPelsPerMeter = 0,
+                .biYPelsPerMeter = 0,
+                .biClrUsed = 0,
+                .biClrImportant = 0,
+            },
+            .bmiColors = 
+            { 
+                RGBQUAD
+                {
+                    .rgbBlue = 0,
+                    .rgbGreen = 0,
+                    .rgbRed = 0,
+                    .rgbReserved = 0,
+                }
+            },
+        };
+        HDC deviceContext = GetDC(window);
+        StretchDIBits(deviceContext, 0, 0, backBuffer.GetWidth(), backBuffer.GetHeight(), 0, 0, backBuffer.GetWidth(), backBuffer.GetHeight(), backBuffer.GetData(), &bitmapInfo, DIB_RGB_COLORS, SRCCOPY);
+        ReleaseDC(window, deviceContext);
+    }
+}
+
 /// @brief The entry point for a Windows application.
 /// @param instance the handle to an instance or handle to a module. The operating system uses this value to identify the executable or EXE when it's loaded in memory. Certain Windows functions need the instance handle, for example to load icons or bitmaps.
 /// @param
@@ -348,7 +579,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
             {
             case cli::eOptionType::HELP:
             {
-                MessageBoxW(NULL, optionInfo.HelpDescription.c_str(), L"Help", MB_OK);
+                MessageBox(NULL, optionInfo.HelpDescription.c_str(), L"Help", MB_OK);
                 for(auto& iter : cli::gOptionsMap)
                 {
                     cli::OptionInfo& optInfo = iter.second;
@@ -416,7 +647,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
                 [[fallthrough]];
             default:
                 isOptionFound = false;
-                MessageBoxW(NULL, L"Invalid command line option.", L"Error", MB_OK | MB_ICONERROR);
+                MessageBox(NULL, L"Invalid command line option.", L"Error", MB_OK | MB_ICONERROR);
                 break;
             }
         }
@@ -461,13 +692,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
         return GetLastError();
     }
 
+    cgs::Texture backBuffer(1920, 1080);
+
     const LPCTSTR className = windowClass.lpszClassName;
     const LPCTSTR windowName = TEXT("Computer Graphics Studies");
     const DWORD windowStyle = WS_VISIBLE;
     const int windowX = 0;
     const int windowY = 0;
-    const int windowWidth = CW_USEDEFAULT;
-    const int windowHeight = CW_USEDEFAULT;
+    const int windowWidth = backBuffer.GetWidth();
+    const int windowHeight = backBuffer.GetHeight();
     const HWND window = CreateWindow(
         className,
         windowName,
@@ -499,6 +732,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
                 DispatchMessage(&message);
             }
         }
+
+        const cgs::TriangleMesh<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE> mesh(cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ -1.0f, -1.0f, 0.0f },
+                                                              cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ 1.0f, -1.0f, 0.0f },
+                                                              cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ 0.0f, 1.0f, 0.0f });
+        const std::vector<cgs::TriangleMesh<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>> meshes = { mesh };
+        cgs::Rasterize(backBuffer, meshes);
+        cgs::Present(window, backBuffer);
     }
 
     if(accelerators)

@@ -8,6 +8,8 @@
 #include <vector>
 #include <unordered_map>
 
+using byte = uint8_t;
+
 using wchar = wchar_t;
 
 using uint8 = uint8_t;
