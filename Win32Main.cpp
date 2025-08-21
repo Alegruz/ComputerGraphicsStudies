@@ -378,7 +378,14 @@ namespace cgs
         {
             return mVertices[index];
         }
-    
+        CGS_INLINE constexpr void SetVertex(size_t index, const Coordinate<SPACE>& vertex) noexcept
+        {
+            if (index < 3)
+            {
+                mVertices[index] = vertex;
+            }
+        }
+
     private:
         Coordinate<SPACE> mVertices[3];
     };
@@ -412,6 +419,7 @@ namespace cgs
         CGS_INLINE constexpr uint32 GetHeight() const noexcept { return mHeight; }
         CGS_INLINE constexpr const byte* GetData() const noexcept { return mData.data(); }
 
+        CGS_INLINE constexpr void Clear() noexcept { std::fill(mData.begin(), mData.end(), 0); }
         CGS_INLINE constexpr bool SetFragmentValue(const uint32 x, const uint32 y, const byte r, const byte g, const byte b, const byte a) noexcept
         {
             if (x < mWidth && y < mHeight)
@@ -721,6 +729,17 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
 
     HACCEL accelerators = CreateAccelerators();
 
+    float deltaTimeInMs = 0.0f;
+    float vertexAnimationVelocity = 0.01f;
+    cgs::TriangleMesh<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE> mesh(cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ -1.0f, -1.0f, 0.0f },
+                                                            cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ 1.0f, -1.0f, 0.0f },
+                                                            cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ 0.0f, 1.0f, 0.0f });
+    LARGE_INTEGER startTime;
+    LARGE_INTEGER endTime;
+    LARGE_INTEGER elapsedMicroseconds;
+    LARGE_INTEGER frequency;
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&startTime);
     while(gIsRunning == true)
     {
         MSG message = { 0 };
@@ -733,12 +752,24 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
             }
         }
 
-        const cgs::TriangleMesh<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE> mesh(cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ -1.0f, -1.0f, 0.0f },
-                                                              cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ 1.0f, -1.0f, 0.0f },
-                                                              cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ 0.0f, 1.0f, 0.0f });
+        cgs::float3 vertex = mesh.GetVertex(2);
+        vertex.X += vertexAnimationVelocity * deltaTimeInMs;
+        if(vertex.X > 1.0f)
+        {
+            vertexAnimationVelocity = -vertexAnimationVelocity;
+        }
+        else if(vertex.X < -1.0f)
+        {
+            vertexAnimationVelocity = -vertexAnimationVelocity;
+        }
+        mesh.SetVertex(2, vertex);
         const std::vector<cgs::TriangleMesh<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>> meshes = { mesh };
+        backBuffer.Clear();
         cgs::Rasterize(backBuffer, meshes);
         cgs::Present(window, backBuffer);
+        QueryPerformanceCounter(&endTime);
+        elapsedMicroseconds.QuadPart = (endTime.QuadPart - startTime.QuadPart) * 1000000 / frequency.QuadPart;
+        deltaTimeInMs = elapsedMicroseconds.QuadPart / 1000.0f;
     }
 
     if(accelerators)
