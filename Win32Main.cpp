@@ -419,7 +419,7 @@ namespace cgs
         CGS_INLINE constexpr uint32 GetHeight() const noexcept { return mHeight; }
         CGS_INLINE constexpr const byte* GetData() const noexcept { return mData.data(); }
 
-        CGS_INLINE constexpr void Clear() noexcept { std::fill(mData.begin(), mData.end(), 0); }
+        CGS_INLINE constexpr void Clear() noexcept { std::fill(mData.begin(), mData.end(), static_cast<byte>(0)); }
         CGS_INLINE constexpr bool SetFragmentValue(const uint32 x, const uint32 y, const byte r, const byte g, const byte b, const byte a) noexcept
         {
             if (x < mWidth && y < mHeight)
