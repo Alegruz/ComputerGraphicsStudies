@@ -28,9 +28,6 @@
 
 
 #if defined(CGS_LINUX) // build this file only for your Linux/Wayland target
-
-#include "pch.hpp"
-
 #include <cairo/cairo.h>
 #include <wayland-client.h>
 #include <poll.h>
