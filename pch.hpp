@@ -47,6 +47,7 @@ using int64 = int64_t;
 
 #include <cairo/cairo.h>
 #include <wayland-client.h>
+#include <poll.h>
 
 #include <climits>   // INT32_MAX
 #include <cstdio>

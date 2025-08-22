@@ -4,11 +4,16 @@
 
 #include "CommandLineParser.h"
 
+#include "Renderer.hpp"
+
+#include <iostream>
+
 static bool gIsRunning = true;
 
 namespace cgs
 {
     std::vector<std::filesystem::path> gRecentFiles;
+    Texture gBackBuffer(1600, 900);
 }
 
 // Wayland objects we need
@@ -20,20 +25,20 @@ static wl_surface* gSurface = nullptr;
 static xdg_surface* gXdgSurface = nullptr;
 static xdg_toplevel* gTopLevel = nullptr;
 static wl_shm* gShm = nullptr;   // <-- SHM
+static wl_callback* gFrameCallback = nullptr;
+
+static bool gIsFrameReady = true;
 
 // Input (for popups & clicks)
-static wl_seat*        gSeat       = nullptr;
-static wl_pointer*     gPointer    = nullptr;
-static uint32        gLastButtonSerial = 0;
-static int             gPointerX   = 0;
-static int             gPointerY   = 0;
-
-// Pending (suggested) size from toplevel.configure
-static int32 gPendingWidth = 0;
-static int32 gPendingHeight = 0;
+static wl_seat*         gSeat       = nullptr;
+static wl_pointer*      gPointer    = nullptr;
+static uint32           gLastButtonSerial = 0;
+static int              gPointerX   = 0;
+static int              gPointerY   = 0;
 
 // ---- Very small SHM helper ----
-struct ShmBuffer {
+struct ShmBuffer final
+{
     wl_buffer*  Buffer = nullptr;
     void*       Data = nullptr;
     int         Width = 0;
@@ -41,7 +46,7 @@ struct ShmBuffer {
     int         Stride = 0;
     size_t      Size = 0;
 };
-static ShmBuffer gBackBuffer;
+static ShmBuffer gShmBuffer;
 
 static int
 CreateShmFile(size_t size) noexcept
@@ -136,252 +141,20 @@ CreateShmBuffer(ShmBuffer& shmBuffer,
     return true;
 }
 
-// =================== Simple Menubar + Popup ===================
-// We draw a top bar and create a dropdown popup using xdg_popup.
-static constexpr int MENU_BAR_H = 28;
-static constexpr int FILE_BTN_W = 64; // clickable "File" area (we don't render text here)
-
-// "Commands" like on Win32:
-enum : uint32 
-{
-    IDM_FILE_OPEN         = 1001,
-    IDM_FILE_OPEN_RECENT  = 1002
-};
-
-// Popup state
-struct Popup 
-{
-    wl_surface*     Surface = nullptr;
-    xdg_surface*    XSurface = nullptr;
-    xdg_popup*      Popup = nullptr;
-    ShmBuffer       Buffer;
-    int             Width = 160;
-    int             Height = 2 * 24;   // two items
-    int             HotIndex = -1;
-    bool            IsVisible = false;
-} gFilePopup;
-
 // recent list (labels only; hook up real MRU later)
 static std::vector<std::string> gRecent = {};
 
-
-static cairo_t*
-BeginCairo(ShmBuffer& buffer,
-           cairo_surface_t** outSurface) {
-    auto* surface = cairo_image_surface_create_for_data(
-        static_cast<unsigned char*>(buffer.Data),
-        CAIRO_FORMAT_ARGB32, buffer.Width, buffer.Height, buffer.Stride);
-    *outSurface = surface;
-    cairo_t* cr = cairo_create(surface);
-    // Crisp text
-    cairo_set_antialias(cr, CAIRO_ANTIALIAS_BEST);
-    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-    return cr;
-}
-
 static void
-EndCairo(cairo_t* cairo, cairo_surface_t* surface) {
-    cairo_surface_flush(surface);
-    cairo_destroy(cairo);
-    cairo_surface_destroy(surface);
-}
-
-static void
-DrawCenteredText(cairo_t* cr,
-                 const char* text,
-                 int x, 
-                 int y, 
-                 int w, 
-                 int h,
-                 double r, 
-                 double g, 
-                 double b) 
+OnFrameDone(void*,
+            wl_callback* callBack,
+            uint32)
 {
-    cairo_set_source_rgb(cr, r, g, b);
-    cairo_set_font_size(cr, 13.0);
-    cairo_text_extents_t te;
-    cairo_font_extents_t fe;
-    cairo_text_extents(cr, text, &te);
-    cairo_font_extents(cr, &fe);
-    // center in rect; y is baseline
-    double tx = x + (w - te.width) / 2.0 - te.x_bearing;
-    double ty = y + (h - fe.height) / 2.0 + fe.ascent;
-    cairo_move_to(cr, tx, ty);
-    cairo_show_text(cr, text);
+    wl_callback_destroy(callBack);
+    gFrameCallback = nullptr;
+    gIsFrameReady = true;
 }
 
-
-static void
-PaintMainSurface() noexcept
-{
-    if (gBackBuffer.Data == nullptr) 
-    {
-        return;
-    }
-
-    cairo_surface_t* surface = nullptr;
-    cairo_t* cairo = BeginCairo(gBackBuffer, &surface);
-
-    // Background
-    cairo_set_source_rgba(cairo, 0.125, 0.667, 0.667, 1.0); // teal
-    cairo_rectangle(cairo, 0, 0, gBackBuffer.Width, gBackBuffer.Height);
-    cairo_fill(cairo);
-
-    // Menubar
-    cairo_set_source_rgba(cairo, 0.125, 0.125, 0.141, 1.0); // dark
-    cairo_rectangle(cairo, 0, 0, gBackBuffer.Width, MENU_BAR_H);
-    cairo_fill(cairo);
-
-    // "File" button
-    const bool hot = (gPointerY >= 0 && gPointerY < MENU_BAR_H &&
-        gPointerX >= 8 && gPointerX < (8 + FILE_BTN_W));
-    if (hot) cairo_set_source_rgba(cairo, 0.227, 0.227, 0.267, 1.0);
-    else     cairo_set_source_rgba(cairo, 0.165, 0.165, 0.204, 1.0);
-    cairo_rectangle(cairo, 8, 4, FILE_BTN_W, MENU_BAR_H - 8);
-    cairo_fill(cairo);
-
-    // Button label
-    DrawCenteredText(cairo, "File", 8, 4, FILE_BTN_W, MENU_BAR_H - 8, 0.9, 0.9, 0.9);
-
-    EndCairo(cairo, surface);
-}
-
-static void 
-CommitMainSurface() noexcept
-{
-    wl_surface_attach(gSurface, gBackBuffer.Buffer, 0, 0);
-    wl_surface_damage_buffer(gSurface, 0, 0, INT32_MAX, INT32_MAX);
-    wl_surface_commit(gSurface);
-}
-
-static void 
-DestroyPopup(Popup& popup) noexcept
-{
-    if (popup.Popup)
-    {
-        xdg_popup_destroy(popup.Popup);
-    }
-    if (popup.XSurface)
-    {
-        xdg_surface_destroy(popup.XSurface);
-    }
-    if (popup.Surface)
-    {
-        wl_surface_destroy(popup.Surface);
-    }
-    DestroyShmBuffer(popup.Buffer);
-    popup = Popup{};
-}
-
-void RowRect(cairo_t& cairo, 
-             const int row, 
-             const double r, 
-             const double g, 
-             const double b) noexcept
-{
-    cairo_set_source_rgb(&cairo, r, g, b);
-    cairo_rectangle(&cairo, 0, row * 24, gFilePopup.Width, 24);
-    cairo_fill(&cairo);
-}
-
-static void
-PaintFilePopup(Popup& popup) noexcept
-{
-    CreateShmBuffer(popup.Buffer, popup.Width, popup.Height, 0xFFF0F0F0);
-
-    cairo_surface_t* surface = nullptr;
-    cairo_t* cairo = BeginCairo(popup.Buffer, &surface);
-
-    // rows + hover
-    if (popup.HotIndex == 0)
-    {
-        RowRect(*cairo, 0, 0.878, 0.902, 0.973);
-    }
-    if (popup.HotIndex == 1)
-    {
-        RowRect(*cairo, 1, 0.878, 0.902, 0.973);
-    }
-
-    // text
-    DrawCenteredText(cairo, "Open...", 8, 0, popup.Width - 16, 24, 0.05, 0.05, 0.05);
-    DrawCenteredText(cairo, "Open Recent", 8, 24, popup.Width - 16, 24, 0.05, 0.05, 0.05);
-
-    EndCairo(cairo, surface);
-
-    wl_surface_attach(popup.Surface, popup.Buffer.Buffer, 0, 0);
-    wl_surface_damage_buffer(popup.Surface, 0, 0, INT32_MAX, INT32_MAX);
-    wl_surface_commit(popup.Surface);
-}
-
-static void 
-HandleMenuCommand(uint32 id) noexcept
-{
-    if (id == IDM_FILE_OPEN) 
-    {
-        // TODO: implement file dialog via xdg-desktop-portal (DBus).
-        std::fprintf(stderr, "[Wayland] File -> Open... (TODO: portal)\n");
-    } 
-    else if (id == IDM_FILE_OPEN_RECENT) 
-    {
-        std::fprintf(stderr, "[Wayland] File -> Open Recent (items=%zu)\n", gRecent.size());
-        // TODO: create a second popup to the right listing gRecent
-    }
-}
-
-static void 
-ShowFileMenuPopup(const int anchorX, 
-                  const int anchorY) noexcept
-{
-    DestroyPopup(gFilePopup);
-
-    // create child surface for popup
-    gFilePopup.Surface  = wl_compositor_create_surface(gCompositor);
-    gFilePopup.XSurface = xdg_wm_base_get_xdg_surface(gWmBase, gFilePopup.Surface);
-
-    // positioner: anchor under the File button rect
-    xdg_positioner* pos = xdg_wm_base_create_positioner(gWmBase);
-    xdg_positioner_set_size(pos, gFilePopup.Width, gFilePopup.Height);
-    xdg_positioner_set_anchor_rect(pos, anchorX, anchorY, FILE_BTN_W, MENU_BAR_H);
-    xdg_positioner_set_anchor(pos, XDG_POSITIONER_ANCHOR_BOTTOM_LEFT);
-    xdg_positioner_set_gravity(pos, XDG_POSITIONER_GRAVITY_BOTTOM_LEFT);
-    xdg_positioner_set_offset(pos, 0, 0);
-
-    gFilePopup.Popup = xdg_surface_get_popup(
-        gFilePopup.XSurface,
-        gXdgSurface, // parent is the toplevel's xdg_surface
-        pos);
-    xdg_positioner_destroy(pos);
-
-    // popup listeners
-    auto popup_configure = [](void*, xdg_popup*, int32, int32, int32, int32) {};
-    auto popup_done = [](void*, xdg_popup*) { DestroyPopup(gFilePopup); };
-    static const xdg_popup_listener popLis = {
-        /*configure*/ popup_configure,
-        /*popup_done*/ popup_done,
-        /*repositioned*/ nullptr
-    };
-    xdg_popup_add_listener(gFilePopup.Popup, &popLis, nullptr);
-
-    // xdg_surface for popup must ack configure
-    auto xdg_popup_surface_configure = [](void*, xdg_surface* s, uint32 serial) 
-    {
-        xdg_surface_ack_configure(s, serial);
-        PaintFilePopup(gFilePopup);
-    };
-    static const xdg_surface_listener xsLis =
-    {
-        .configure = xdg_popup_surface_configure
-    };
-    xdg_surface_add_listener(gFilePopup.XSurface, &xsLis, nullptr);
-
-    // Take an implicit grab so outside clicks dismiss the popup:
-    if (gSeat && gLastButtonSerial != 0) {
-        xdg_popup_grab(gFilePopup.Popup, gSeat, gLastButtonSerial);
-    }
-
-    gFilePopup.IsVisible = true;
-    wl_surface_commit(gFilePopup.Surface); // will trigger configure -> paint
-}
+static constexpr wl_callback_listener gFrameListener = { .done = OnFrameDone };
 
 // ----- xdg_wm_base (ping/pong) -----
 static void
@@ -407,20 +180,17 @@ XdgSurfaceConfigure(void*,
     xdg_surface_ack_configure(surf, serial);
 
     // Determine a size to draw. Compositor may suggest 0,0; pick a default.
-    const int width = (gPendingWidth > 0) ? gPendingWidth : 800;
-    const int height = (gPendingHeight > 0) ? gPendingHeight : 600;
+    const int width = static_cast<int>(cgs::gBackBuffer.GetWidth());
+    const int height = static_cast<int>(cgs::gBackBuffer.GetHeight());
 
-    if (!gBackBuffer.Buffer || gBackBuffer.Width != width || gBackBuffer.Height != height)
+    if (!gShmBuffer.Buffer || gShmBuffer.Width != width || gShmBuffer.Height != height)
     {
-        if (!CreateShmBuffer(gBackBuffer, width, height, 0xFF20AAAA))
+        if (!CreateShmBuffer(gShmBuffer, width, height, 0xFF20AAAA))
         {
             std::fprintf(stderr, "Failed to create shm buffer\n");
             return;
         }
     }
-
-    PaintMainSurface();
-    CommitMainSurface();
 }
 
 static const xdg_surface_listener gXdgSurfaceListener =
@@ -432,13 +202,10 @@ static const xdg_surface_listener gXdgSurfaceListener =
 static void
 XdgToplevelConfigure(void*,
                      xdg_toplevel*,
-                     int32 width,
-                     int32 height,
+                     int32 /* width */,
+                     int32 /* height */,
                      wl_array* /*states*/)
-{
-    gPendingWidth = width;
-    gPendingHeight = height;
-}
+{}
 
 static void
 XdgToplevelClose(void*,
@@ -483,7 +250,6 @@ PointerEnter(void*,
     // gLastButtonSerial = serial;
     gPointerX = wl_fixed_to_int(sx);
     gPointerY = wl_fixed_to_int(sy);
-    PaintMainSurface(); CommitMainSurface();
 }
 
 static void 
@@ -494,7 +260,6 @@ PointerLeave(void*,
 {
     // gLastButtonSerial = serial;
     gPointerX = gPointerY = -1;
-    PaintMainSurface(); CommitMainSurface();
 }
 
 static void 
@@ -506,13 +271,6 @@ PointerMotion(void*,
 {
     gPointerX = wl_fixed_to_int(sx);
     gPointerY = wl_fixed_to_int(sy);
-    // update popup hover if visible
-    if (gFilePopup.IsVisible)
-    {
-        // popup relative coords: just re-evaluate from global pointer under the anchor
-        // here we do nothing fancy; hover is recomputed when we paint after button press
-    }
-    PaintMainSurface(); CommitMainSurface();
 }
 
 static void 
@@ -521,40 +279,9 @@ PointerButton(void*,
               uint32 serial, 
               uint32 /*time*/, 
               [[maybe_unused]] uint32 button, 
-              uint32 state)
+              uint32 /*state*/)
 {
     gLastButtonSerial = serial;
-    const bool pressed = (state == WL_POINTER_BUTTON_STATE_PRESSED);
-    const int  x = gPointerX, y = gPointerY;
-
-    // Click on "File" area -> open popup
-    if (pressed && y >= 0 && y < MENU_BAR_H && x >= 8 && x < (8 + FILE_BTN_W))
-    {
-        ShowFileMenuPopup(/*anchorX*/8, /*anchorY*/MENU_BAR_H);
-        return;
-    }
-
-    // If popup is visible, handle selection on release
-    if (!pressed && gFilePopup.IsVisible)
-    {
-        // Rough hit-test in popup local coords: we don't track absolute popup pos;
-        // since it's anchored directly under the File button, use that.
-        const int px = x - 8;       // same anchor as ShowFileMenuPopup()
-        const int py = y - MENU_BAR_H;
-        if (px >= 0 && px < gFilePopup.Width && py >= 0 && py < gFilePopup.Height)
-        {
-            const int idx = py / 24;
-            if (idx == 0) 
-            {
-                HandleMenuCommand(IDM_FILE_OPEN);
-            }
-            if (idx == 1) 
-            {
-                HandleMenuCommand(IDM_FILE_OPEN_RECENT);
-            }
-        }
-        DestroyPopup(gFilePopup);
-    }
 }
 
 static void
@@ -685,6 +412,41 @@ static const wl_registry_listener gRegistryListener =
     .global_remove = RegistryGlobalRemove
 };
 
+namespace cgs
+{
+    static void
+    Present(const Texture& backBuffer)
+    {
+        const uint32 width = backBuffer.GetWidth();
+        const uint32 height = backBuffer.GetHeight();
+        for (uint32 y = 0; y < height; y++)
+        {
+            byte* destinationRow = static_cast<byte*>(gShmBuffer.Data) + ((height - 1 - y) * static_cast<uint32_t>(gShmBuffer.Stride));
+            for (uint32 x = 0; x < width; x++)
+            {
+                const Rgba8 fragment = backBuffer.GetFragment(x, y);
+                const Rgba8 fragmentAfterPremultiplyingAlpha =
+                {
+                    .R = static_cast<byte>(fragment.R * fragment.A / 255),
+                    .G = static_cast<byte>(fragment.G * fragment.A / 255),
+                    .B = static_cast<byte>(fragment.B * fragment.A / 255),
+                    .A = 255
+                };
+                destinationRow[4 * x + 0] = fragmentAfterPremultiplyingAlpha.B;
+                destinationRow[4 * x + 1] = fragmentAfterPremultiplyingAlpha.G;
+                destinationRow[4 * x + 2] = fragmentAfterPremultiplyingAlpha.R;
+                destinationRow[4 * x + 3] = fragmentAfterPremultiplyingAlpha.A;
+            }
+        }
+
+        wl_surface_attach(gSurface, gShmBuffer.Buffer, 0, 0);
+        wl_surface_damage_buffer(gSurface, 0, 0, static_cast<int32_t>(width), static_cast<int32_t>(height));
+        wl_surface_commit(gSurface);
+
+        wl_display_flush(gDisplay); // send all queued requests
+    }
+}
+
 int
 main(int argc, char** argv)
 {
@@ -732,15 +494,87 @@ main(int argc, char** argv)
     wl_surface_commit(gSurface);
     wl_display_roundtrip(gDisplay);
 
+    float deltaTimeInMs = 0.0f;
+    float vertexAnimationVelocity = 0.001f;
+    cgs::TriangleMesh<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE> mesh(cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ -1.0f, -1.0f, 0.0f },
+        cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ 1.0f, -1.0f, 0.0f },
+        cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ 0.0f, 1.0f, 0.0f });
     // Event loop (like PeekMessage/DispatchMessage)
-    while (gIsRunning && wl_display_dispatch(gDisplay) != -1)
+    timespec startTime;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &startTime);
+    while (gIsRunning)
     {
-        // no-op; callbacks above do the work
+        // Pump pending events (non-blocking)
+    // Drain any queued callbacks first
+        wl_display_dispatch_pending(gDisplay);
+
+        // Prepare to poll the Wayland fd for new events
+        while (wl_display_prepare_read(gDisplay) != 0)
+        {
+            // Another thread (or previous loop) queued events; drain them
+            wl_display_dispatch_pending(gDisplay);
+        }
+        wl_display_flush(gDisplay);
+
+        pollfd pfd =
+        {
+            .fd = wl_display_get_fd(gDisplay),
+            .events = POLLIN,
+            .revents = 0
+        };
+        // If we’re waiting for the next vblank callback, we can block a bit
+        const int timeoutInMs = gIsFrameReady ? 0 : 16;          // tune as you like
+        const int ret = poll(&pfd, 1, timeoutInMs);
+
+        if (ret > 0 && (pfd.revents & POLLIN))
+        {
+            wl_display_read_events(gDisplay);           // pulls new events
+        }
+        else
+        {
+            wl_display_cancel_read(gDisplay);           // nothing to read
+        }
+        wl_display_dispatch_pending(gDisplay);          // deliver to handlers
+        if (!gIsRunning)
+        {
+            break;                         // handled Alt+F4 → close
+        }
+
+        // ---- Render only when compositor is ready (smooth pacing) ----
+        if (gIsFrameReady == false)
+        {
+            continue;
+        }
+        gIsFrameReady = false;
+
+
+        gFrameCallback = wl_surface_frame(gSurface);
+        wl_callback_add_listener(gFrameCallback, &gFrameListener, nullptr);
+
+        cgs::float3 vertex = mesh.GetVertex(2);
+        vertex.X += vertexAnimationVelocity * deltaTimeInMs;
+        if (vertex.X > 1.0f)
+        {
+            vertexAnimationVelocity = -vertexAnimationVelocity;
+        }
+        else if (vertex.X < -1.0f)
+        {
+            vertexAnimationVelocity = -vertexAnimationVelocity;
+        }
+        mesh.SetVertex(2, vertex);
+        const std::vector<cgs::TriangleMesh<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>> meshes = { mesh };
+        cgs::gBackBuffer.Clear();
+        cgs::Rasterize(cgs::gBackBuffer, meshes);
+        cgs::Present(cgs::gBackBuffer);
+
+        timespec endTime;
+        clock_gettime(CLOCK_MONOTONIC_RAW, &endTime);
+        deltaTimeInMs = static_cast<float>(endTime.tv_sec - startTime.tv_sec) * 1000.0f + static_cast<float>(endTime.tv_nsec - startTime.tv_nsec) * 1e-6f;
+        startTime = endTime;
     }
 
     // Cleanup
-    DestroyPopup(gFilePopup);
-    DestroyShmBuffer(gBackBuffer);
+    DestroyShmBuffer(gShmBuffer);
     if (gTopLevel)
     {
         xdg_toplevel_destroy(gTopLevel);
