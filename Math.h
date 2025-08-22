@@ -1,10 +1,10 @@
 #pragma once
 
-#include <cstdint>
+#include "Common.h"
 
 namespace cgs
 {
-    enum class eCoordinateSpace : uint8_t
+    enum class eCoordinateSpace : uint8
     {
         DEFAULT,
         OBJECT = DEFAULT,
