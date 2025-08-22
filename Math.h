@@ -1,6 +1,5 @@
 #pragma once
 
-
 namespace cgs
 {
     enum class eCoordinateSpace : uint8

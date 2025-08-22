@@ -18,6 +18,20 @@
 #define GET_API_VERSION_MINOR(version) (((version) >> 12U) & 0x3FFU)
 #define GET_API_VERSION_PATCH(version) (((version) >> 0U) & 0xFFFU)
 
+using byte = uint8_t;
+
+using wchar = wchar_t;
+
+using uint8 = uint8_t;
+using uint16 = uint16_t;
+using uint32 = uint32_t;
+using uint64 = uint64_t;
+
+using int8 = int8_t;
+using int16 = int16_t;
+using int32 = int32_t;
+using int64 = int64_t;
+
 namespace cgs
 {
     constexpr uint32 API_VERSION = MAKE_API_VERSION(0, 0, 0, 0);
