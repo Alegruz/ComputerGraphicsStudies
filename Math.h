@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pch.hpp"
+#include "Common.h"
 
 namespace cgs
 {
