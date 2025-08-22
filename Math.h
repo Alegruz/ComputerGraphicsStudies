@@ -1,8 +1,5 @@
 #pragma once
 
-#include "pch.hpp"
-#include "Common.h"
-
 namespace cgs
 {
     enum class eCoordinateSpace : uint8

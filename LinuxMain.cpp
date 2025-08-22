@@ -2,8 +2,9 @@
 
 #include "pch.hpp"
 
-#include "CommandLineParser.h"
+#include "Math.h"
 
+#include "CommandLineParser.h"
 #include "Renderer.hpp"
 
 #include <iostream>

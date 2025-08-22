@@ -1,6 +1,8 @@
 #if defined(CGS_WINDOWS)
 #include "pch.hpp"
 
+#include "Math.h"
+
 #include "CommandLineParser.h"
 #include "Renderer.hpp"
 
