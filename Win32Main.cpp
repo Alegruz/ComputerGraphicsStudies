@@ -1,6 +1,6 @@
-#if defined(CGS_WINDOWS)
 #include "pch.hpp"
 
+#if defined(CGS_WINDOWS)
 #include "Math.h"
 
 #include "CommandLineParser.h"
