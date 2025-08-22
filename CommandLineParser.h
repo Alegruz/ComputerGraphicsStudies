@@ -17,7 +17,7 @@ namespace cgs
         using CharType = wchar;
         using StringType = std::wstring;
         using StringViewType = std::wstring_view;
-        CGS_INLINE static constexpr bool IsSpace(CharType ch) noexcept { return std::iswspace(ch); }
+        CGS_INLINE static bool IsSpace(CharType ch) noexcept { return std::iswspace(ch); }
 #elif defined(CGS_LINUX)
         using CharType = char;
         using StringType = std::string;

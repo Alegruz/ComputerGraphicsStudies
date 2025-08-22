@@ -88,17 +88,17 @@ RebuildRecentMenu(HWND hwnd) noexcept
     for (int i = GetMenuItemCount(gRecentMenu) - 1; i >= 0; --i)
         DeleteMenu(gRecentMenu, i, MF_BYPOSITION);
 
-    if (gRecentFiles.empty()) 
+    if (cgs::gRecentFiles.empty()) 
     {
         AppendMenu(gRecentMenu, MF_STRING | MF_DISABLED, IDM_FILE_RECENT_BASE, TEXT("(Empty)"));
     } 
     else 
     {
-        const size_t count = std::min(gRecentFiles.size(), static_cast<size_t>(IDM_FILE_RECENT_MAX));
+        const size_t count = std::min(cgs::gRecentFiles.size(), static_cast<size_t>(IDM_FILE_RECENT_MAX));
         for (size_t i = 0; i < count; ++i) 
         {
             const UINT id = IDM_FILE_RECENT_BASE + static_cast<UINT>(i);
-            AppendMenuW(gRecentMenu, MF_STRING, id, gRecentFiles[i].c_str());
+            AppendMenuW(gRecentMenu, MF_STRING, id, cgs::gRecentFiles[i].c_str());
         }
     }
     DrawMenuBar(hwnd);
@@ -109,15 +109,15 @@ AddRecentFile(HWND hwnd,
               const std::wstring& path) noexcept
 {
     // move-to-front unique
-    auto it = std::find(gRecentFiles.begin(), gRecentFiles.end(), path);
-    if (it != gRecentFiles.end()) 
+    auto it = std::find(cgs::gRecentFiles.begin(), cgs::gRecentFiles.end(), path);
+    if (it != cgs::gRecentFiles.end()) 
     {
-        gRecentFiles.erase(it);
+        cgs::gRecentFiles.erase(it);
     }
-    gRecentFiles.insert(gRecentFiles.begin(), path);
-    if (gRecentFiles.size() > IDM_FILE_RECENT_MAX) 
+    cgs::gRecentFiles.insert(cgs::gRecentFiles.begin(), path);
+    if (cgs::gRecentFiles.size() > IDM_FILE_RECENT_MAX) 
     {
-        gRecentFiles.resize(IDM_FILE_RECENT_MAX);
+        cgs::gRecentFiles.resize(IDM_FILE_RECENT_MAX);
     }
     RebuildRecentMenu(hwnd);
 }
@@ -222,9 +222,9 @@ WindowProcedure(HWND window,
         if (id >= IDM_FILE_RECENT_BASE && id < IDM_FILE_RECENT_BASE + IDM_FILE_RECENT_MAX) 
         {
             size_t idx = id - IDM_FILE_RECENT_BASE;
-            if (idx < gRecentFiles.size()) 
+            if (idx < cgs::gRecentFiles.size()) 
             {
-                const std::wstring& path = gRecentFiles[idx];
+                const std::wstring& path = cgs::gRecentFiles[idx];
                 MessageBoxW(window, path.c_str(), L"Open Recent", MB_OK); // TODO: actually open
             }
             return 0;
