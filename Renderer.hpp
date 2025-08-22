@@ -5,7 +5,7 @@
 namespace cgs
 {
     template<eCoordinateSpace SPACE, eRasterizationMethod METHOD /*= eRasterizationMethod::DEFAULT*/>
-    static void
+    void
     Rasterize(Texture& outTexture, const std::vector<TriangleMesh<SPACE>>& meshes) noexcept
     {
         const uint32 width = outTexture.GetWidth();
