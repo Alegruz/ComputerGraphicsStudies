@@ -38,3 +38,5 @@ namespace cgs
 
     extern std::vector<std::filesystem::path> gRecentFiles;
 }
+
+#include "Core/Math.h"
