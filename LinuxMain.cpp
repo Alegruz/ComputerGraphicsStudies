@@ -2,7 +2,14 @@
 
 #include "pch.hpp"
 
+#include "CommandLineParser.h"
+
 static bool gIsRunning = true;
+
+namespace cgs
+{
+    std::vector<std::filesystem::path> gRecentFiles;
+}
 
 // Wayland objects we need
 static wl_display* gDisplay = nullptr;
@@ -679,8 +686,15 @@ static const wl_registry_listener gRegistryListener =
 };
 
 int
-main(void)
+main(int argc, char** argv)
 {
+    cgs::CommandLineParser commandLineParser(argc, argv);
+    const bool isOptionFound = commandLineParser.ParseArguments();
+    if (isOptionFound == false)
+    {
+        return 0;
+    }
+
     // Connect to compositor
     gDisplay = wl_display_connect(nullptr);
     if (!gDisplay)

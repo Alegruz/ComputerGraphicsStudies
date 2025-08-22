@@ -57,6 +57,7 @@ using int64 = int64_t;
 #include <sys/mman.h>
 #include <unistd.h>
 
+#define TEXT(str) (str)
 
 // Generated from wayland-protocols' xdg-shell.xml (see CMake notes below)
 #include "xdg-shell-client-protocol.h"

@@ -21,4 +21,6 @@
 namespace cgs
 {
     constexpr uint32 API_VERSION = MAKE_API_VERSION(0, 0, 0, 0);
+
+    extern std::vector<std::filesystem::path> gRecentFiles;
 }

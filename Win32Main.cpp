@@ -1,6 +1,8 @@
 #if defined(CGS_WINDOWS)
 #include "pch.hpp"
 
+#include "CommandLineParser.h"
+
 static bool gIsRunning = true;
 
 /// @brief Prints the last error message.
@@ -72,7 +74,11 @@ static HMENU gMenuBar    = NULL;
 static HMENU gFileMenu   = NULL;
 static HMENU gRecentMenu = NULL;
 static File gCurrentFile;
-static std::vector<std::filesystem::path> gRecentFiles;
+
+namespace cgs
+{
+    std::vector<std::filesystem::path> gRecentFiles;
+}
 
 // -------------------- MRU submenu rebuild --------------------
 static void
@@ -253,35 +259,6 @@ public:
         CoUninitialize();
     }
 };
-
-namespace cli
-{
-    enum class eOptionType : uint8
-    {
-        INVALID,
-        HELP,
-        VERSION,
-        INPUT_RESOURCE,
-    };
-    
-    struct OptionInfo final
-    {
-        const wchar* LongOption = nullptr;
-        const wchar* ShortOption = nullptr;
-        eOptionType Type = eOptionType::INVALID;
-        std::wstring DataType;
-        std::vector<std::wstring> PossibleValues;
-        std::wstring Description;
-        std::wstring HelpDescription;
-    };
-
-    static std::unordered_map<std::wstring, OptionInfo> gOptionsMap =
-    {
-        { L"--help", { .LongOption = L"--help", .ShortOption = L"-h", .Type = eOptionType::HELP, .Description = L"Show help information." } },
-        { L"--version", { .LongOption = L"--version", .ShortOption = L"-v", .Type = eOptionType::VERSION, .Description = L"Show version information." } },
-        { L"--input-resource", { .LongOption = L"--input-resource", .ShortOption = L"-i", .Type = eOptionType::INPUT_RESOURCE, .Description = L"Path to the input model file." } }
-    };
-}
 
 namespace cgs
 {
@@ -530,138 +507,14 @@ namespace cgs
 /// @return The exit value of the application.
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_unused]] int commandShowFlag)
 {
-    std::vector<cli::OptionInfo> optionInfos;
-    optionInfos.reserve(cli::gOptionsMap.size());
-    for(const auto& iter : cli::gOptionsMap)
+    cgs::CommandLineParser commandLineParser(commandLine);
+    const bool isOptionFound = commandLineParser.ParseArguments();
+    if (isOptionFound == false)
     {
-        const cli::OptionInfo& optionInfo = iter.second;
-        optionInfos.push_back(optionInfo);
-    }
-
-    for(const auto& optionInfo : optionInfos)
-    {
-        cli::gOptionsMap[optionInfo.ShortOption] = optionInfo;
-    }
-
-    bool isOptionFound = false;
-    const wchar* commandLineCurrentPtr = commandLine;
-    std::vector<std::wstring> arguments;
-    while (commandLineCurrentPtr != nullptr && *commandLineCurrentPtr != L'\0')
-    {
-        const bool isWhiteSpace = std::iswspace(*commandLineCurrentPtr);
-        if (isWhiteSpace)
-        {
-            // Skip whitespace
-            ++commandLineCurrentPtr;
-            continue;
-        }
-
-        // Parse the command line argument
-        const wchar* argumentStart = commandLineCurrentPtr;
-        while (*commandLineCurrentPtr != L'\0' && !std::iswspace(*commandLineCurrentPtr))
-        {
-            ++commandLineCurrentPtr;
-        }
-        const wchar* argumentEnd = commandLineCurrentPtr;
-
-        // Process the argument
-        const std::wstring_view argument(argumentStart, argumentEnd);
-        arguments.push_back(std::wstring(argument));
-    }
-
-    const size_t numArguments = arguments.size();
-    for(size_t argumentIndex = 0; argumentIndex < numArguments; ++argumentIndex)
-    {
-        const std::wstring& argument = arguments[argumentIndex];
-        if(argument.empty())
-        {
-            continue;
-        }
-
-        const bool isOption = argument.starts_with(L'-');
-        if(isOption == true)
-        {
-            const cli::OptionInfo& optionInfo = cli::gOptionsMap[std::wstring(argument)];
-            isOptionFound = true;
-            switch (optionInfo.Type)
-            {
-            case cli::eOptionType::HELP:
-            {
-                MessageBox(NULL, optionInfo.HelpDescription.c_str(), L"Help", MB_OK);
-                for(auto& iter : cli::gOptionsMap)
-                {
-                    cli::OptionInfo& optInfo = iter.second;
-                    if(optInfo.HelpDescription.empty() == true)
-                    {
-                        static constexpr size_t NUM_OPTION_SPACES = 32;
-                        optInfo.HelpDescription = optInfo.ShortOption;
-                        optInfo.HelpDescription += L", ";
-                        optInfo.HelpDescription += optInfo.LongOption;
-                        if(optInfo.DataType.empty() == false)
-                        {
-                            optInfo.HelpDescription += L" <" + optInfo.DataType + L">";
-                        }
-                        else if(optInfo.PossibleValues.empty() == false)
-                        {
-                            optInfo.HelpDescription += L"{";
-                            const size_t numValues = optInfo.PossibleValues.size();
-                            for(size_t valueIndex = 0; valueIndex < numValues; ++valueIndex)
-                            {
-                                const std::wstring& value = optInfo.PossibleValues[valueIndex];
-                                optInfo.HelpDescription += value;
-                                if(valueIndex < numValues - 1)
-                                {
-                                    optInfo.HelpDescription += L",";
-                                }
-                            }
-                            optInfo.HelpDescription += L"}";
-                        }
-                        else
-                        {
-                            // Invalid option info
-                            MessageBox(NULL, TEXT("Invalid option info."), TEXT("Error"), MB_OK | MB_ICONERROR);
-                        }
-                        if(optInfo.HelpDescription.size() < NUM_OPTION_SPACES)
-                        {
-                            optInfo.HelpDescription.append(NUM_OPTION_SPACES - optInfo.HelpDescription.size(), L' ');
-                        }
-                        optInfo.HelpDescription += optInfo.Description;
-                    }
-                }
-            }
-                break;
-            case cli::eOptionType::VERSION:
-            {
-                MessageBoxW(NULL, L"Version information is not yet implemented.", L"Version", MB_OK);
-                wchar_t versionString[32] = { 0, };
-                swprintf(versionString, sizeof(versionString) / sizeof(wchar_t), L"Version: %d.%d.%d.%d", GET_API_VERSION_VARIANT(cgs::API_VERSION), GET_API_VERSION_MAJOR(cgs::API_VERSION), GET_API_VERSION_MINOR(cgs::API_VERSION), GET_API_VERSION_PATCH(cgs::API_VERSION));
-                OutputDebugString(versionString);
-            }
-                break;
-            case cli::eOptionType::INPUT_RESOURCE:
-            {
-                if(argumentIndex + 1 >= numArguments)
-                {
-                    isOptionFound = false;
-                    MessageBox(NULL, TEXT("Input resource path is missing."), TEXT("Error"), MB_OK | MB_ICONERROR);
-                    break;
-                }
-
-                const std::wstring optionArgument = arguments[argumentIndex + 1];
-                gRecentFiles.push_back(optionArgument);
-            }
-                break;
-            case cli::eOptionType::INVALID:
-                [[fallthrough]];
-            default:
-                isOptionFound = false;
-                MessageBox(NULL, L"Invalid command line option.", L"Error", MB_OK | MB_ICONERROR);
-                break;
-            }
-        }
+        return 0;
     }
     
-    if(isOptionFound == false)
+    if (isOptionFound == false)
     {
         OutputDebugString(L"No command line options found.\n");
         OutputDebugString(L"Exiting application.\n");

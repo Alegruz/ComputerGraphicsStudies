@@ -71,10 +71,11 @@ target_compile_options(project_sanitizers INTERFACE $<$<AND:$<NOT:$<CXX_COMPILER
 target_link_options(project_sanitizers INTERFACE $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<CONFIG:Debug>>:-fsanitize=address,undefined>)
 
 if(CGS_WINDOWS)
-    add_executable(ComputerGraphicsStudies Win32Main.cpp)
+    add_executable(ComputerGraphicsStudies Win32Main.cpp CommandLineParser.cpp)
 elseif(CGS_LINUX)
     add_executable(ComputerGraphicsStudies 
         LinuxMain.cpp
+        CommandLineParser.cpp
         $<TARGET_OBJECTS:xdg_shell>
         )
     target_include_directories(ComputerGraphicsStudies PRIVATE ${WAYLAND_INCLUDE_DIRS})
