@@ -10,54 +10,70 @@ namespace cgs
         byte A = 255;
     };
 
-    template<eCoordinateSpace SPACE>
-    class TriangleMesh final
+    enum class eHandnessType : uint8
     {
-    public:
-        CGS_INLINE constexpr TriangleMesh() = default;
-        CGS_INLINE constexpr TriangleMesh(const Coordinate<SPACE>& v0, const Coordinate<SPACE>& v1, const Coordinate<SPACE>& v2) noexcept
-            : mVertices{ v0, v1, v2 } {}
-        CGS_INLINE constexpr TriangleMesh(const TriangleMesh& mesh) noexcept
-            : mVertices{ mesh.mVertices[0], mesh.mVertices[1], mesh.mVertices[2] } {}
-        CGS_INLINE constexpr TriangleMesh(TriangleMesh&&) noexcept = default;
-        CGS_INLINE ~TriangleMesh() noexcept = default;
-
-        CGS_INLINE constexpr TriangleMesh& operator=(const TriangleMesh& mesh) noexcept
-        {
-            if (this != &mesh)
-            {
-                mVertices[0] = mesh.mVertices[0];
-                mVertices[1] = mesh.mVertices[1];
-                mVertices[2] = mesh.mVertices[2];
-            }
-            return *this;
-        }
-        CGS_INLINE constexpr TriangleMesh& operator=(TriangleMesh&&) noexcept = default;
-        CGS_INLINE constexpr const Coordinate<SPACE>& GetVertex(size_t index) const noexcept
-        {
-            return mVertices[index];
-        }
-        CGS_INLINE constexpr void SetVertex(size_t index, const Coordinate<SPACE>& vertex) noexcept
-        {
-            if (index < 3)
-            {
-                mVertices[index] = vertex;
-            }
-        }
-
-    private:
-        Coordinate<SPACE> mVertices[3];
+        LEFT,
+        RIGHT,
     };
 
-    template<eCoordinateSpace SPACE>
-    CGS_INLINE constexpr Coordinate<SPACE> ComputeBarycentricCoordinates(const TriangleMesh<SPACE>& mesh, const float3& point) noexcept
+    enum class eWindingType : uint8
     {
-        const float3& v0 = mesh.GetVertex(0);
-        const float3& v1 = mesh.GetVertex(1);
-        const float3& v2 = mesh.GetVertex(2);
+        COUNTER_CLOCKWISE,
+        CLOCKWISE,
+    };
 
-        return ComputeBarycentricCoordinates(v0, v1, v2, point);
-    }
+    class VertexBuffer final
+    {
+    public:
+        struct CreateInfo final
+        {
+            eHandnessType HandnessType = eHandnessType::LEFT;
+            eWindingType WindingType = eWindingType::COUNTER_CLOCKWISE;
+            uint32 StrideInBytes = 0;
+            std::vector<byte>&& Data;
+        };
+
+    public:
+        CGS_INLINE constexpr VertexBuffer() noexcept = default;
+        CGS_INLINE constexpr VertexBuffer(CreateInfo&& createInfo) noexcept
+            : mHandnessType(createInfo.HandnessType)
+            , mWindingType(createInfo.WindingType)
+            , mStrideInBytes(createInfo.StrideInBytes)
+            , mData(std::move(createInfo.Data))
+        {
+        }
+        CGS_INLINE ~VertexBuffer() noexcept = default;
+
+        CGS_INLINE constexpr void SetHandnessType(const eHandnessType handnessType) noexcept { mHandnessType = handnessType; }
+        CGS_INLINE constexpr void SetWindingType(const eWindingType windingType) noexcept { mWindingType = windingType; }
+        template<typename T>
+        [[nodiscard]] bool AddVertex(const T& vertex) noexcept;
+        template<typename T>
+        void GetVertexOrNull(const T*& outVertex, const uint16 index) const noexcept;
+
+    private:
+        eHandnessType mHandnessType;
+        eWindingType mWindingType;
+        uint32 mStrideInBytes;
+        std::vector<byte> mData;
+    };
+
+    class Geometry final
+    {
+    public:
+        CGS_INLINE constexpr Geometry() noexcept = default;
+        CGS_INLINE ~Geometry() noexcept = default;
+
+        CGS_INLINE constexpr void SetVertexBuffer(VertexBuffer&& vertexBuffer) noexcept { mVertexBuffer = std::move(vertexBuffer); }
+        CGS_INLINE constexpr void SetIndices(std::vector<uint16>&& indices) noexcept { mIndices = std::move(indices); }
+
+        CGS_INLINE constexpr const VertexBuffer& GetVertexBuffer() const noexcept { return mVertexBuffer; }
+        CGS_INLINE constexpr const std::vector<uint16>& GetIndices() const noexcept { return mIndices; }
+
+    private:
+        VertexBuffer mVertexBuffer;
+        std::vector<uint16> mIndices;
+    };
 
     class Texture final
     {
@@ -120,5 +136,5 @@ namespace cgs
 
     template<eCoordinateSpace SPACE, eRasterizationMethod METHOD = eRasterizationMethod::DEFAULT>
     void
-    Rasterize(Texture& outTexture, const std::vector<TriangleMesh<SPACE>>& meshes) noexcept;
+    Rasterize(Texture& outTexture, const std::vector<Geometry>& geometries) noexcept;
 }

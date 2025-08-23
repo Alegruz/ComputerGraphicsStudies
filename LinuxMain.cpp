@@ -492,11 +492,26 @@ main(int argc, char** argv)
     wl_surface_commit(gSurface);
     wl_display_roundtrip(gDisplay);
 
-    float deltaTimeInMs = 0.0f;
-    float vertexAnimationVelocity = 0.001f;
-    cgs::TriangleMesh<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE> mesh(cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ -1.0f, -1.0f, 0.0f },
-        cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ 1.0f, -1.0f, 0.0f },
-        cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ 0.0f, 1.0f, 0.0f });
+    [[maybe_unused]] float deltaTimeInMs = 0.0f;
+    cgs::VertexBuffer singleTriangleVertexBuffer(
+        cgs::VertexBuffer::CreateInfo{
+            .HandnessType = cgs::eHandnessType::LEFT,
+            .WindingType = cgs::eWindingType::COUNTER_CLOCKWISE,
+            .StrideInBytes = sizeof(cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>),
+            .Data = std::vector<byte>{}
+        }
+    );
+    [[maybe_unused]] bool result = singleTriangleVertexBuffer.AddVertex(cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ -1.0f, -1.0f, 0.0f });
+    result = singleTriangleVertexBuffer.AddVertex(cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ 1.0f, -1.0f, 0.0f });
+    result = singleTriangleVertexBuffer.AddVertex(cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ 0.0f, 1.0f, 0.0f });
+
+    std::cerr << "hi" << std::endl;
+
+    cgs::Geometry singleTriangleGeometry;
+    singleTriangleGeometry.SetVertexBuffer(std::move(singleTriangleVertexBuffer));
+    // Set indices for the triangle
+    singleTriangleGeometry.SetIndices(std::vector<uint16>{ 0, 1, 2 });
+
     // Event loop (like PeekMessage/DispatchMessage)
     timespec startTime;
     clock_gettime(CLOCK_MONOTONIC_RAW, &startTime);
@@ -549,20 +564,9 @@ main(int argc, char** argv)
         gFrameCallback = wl_surface_frame(gSurface);
         wl_callback_add_listener(gFrameCallback, &gFrameListener, nullptr);
 
-        cgs::float3 vertex = mesh.GetVertex(2);
-        vertex.X += vertexAnimationVelocity * deltaTimeInMs;
-        if (vertex.X > 1.0f)
-        {
-            vertexAnimationVelocity = -vertexAnimationVelocity;
-        }
-        else if (vertex.X < -1.0f)
-        {
-            vertexAnimationVelocity = -vertexAnimationVelocity;
-        }
-        mesh.SetVertex(2, vertex);
-        const std::vector<cgs::TriangleMesh<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>> meshes = { mesh };
+        const std::vector<cgs::Geometry> geometries = { singleTriangleGeometry };
         cgs::gBackBuffer.Clear();
-        cgs::Rasterize(cgs::gBackBuffer, meshes);
+        cgs::Rasterize<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>(cgs::gBackBuffer, geometries);
         cgs::Present(cgs::gBackBuffer);
 
         timespec endTime;
