@@ -7,6 +7,8 @@
 
 namespace cgs
 {
+    std::vector<ThreadInfo> gShaderThreads;
+
     static Camera gMainCamera;
     static float4x4 gViewMatrix;
     static float4x4 gProjectionMatrix;
@@ -422,5 +424,77 @@ namespace cgs
         };
 
         return outputColor;
+    }
+
+    void*
+    Render(void* arg) noexcept
+    {
+        if(arg == nullptr)
+        {
+            assert(false && "RenderInfo argument is null");
+            return nullptr;
+        }
+
+        const RenderInfo& renderInfo = *static_cast<RenderInfo*>(arg);
+        renderInfo.outBackBuffer.Clear();
+        Rasterize(renderInfo.outBackBuffer, renderInfo.geometries);
+        return nullptr;
+    }
+
+    void*
+    SubRasterize(void* arg) noexcept
+    {
+        if (arg == nullptr)
+        {
+            assert(false && "SubRasterizeInfo argument is null");
+            return nullptr;
+        }
+
+        SubRasterizeInfo& inoutInfo = *static_cast<SubRasterizeInfo*>(arg);
+        if(inoutInfo.InoutThreadInfo == nullptr)
+        {
+            assert(false && "SubRasterizeInfo argument has null ThreadInfo");
+            return nullptr;
+        }
+
+        const uint32 width = inoutInfo.InoutTexture.GetWidth();
+        const uint32 height = inoutInfo.InoutTexture.GetHeight();
+
+        for (uint32 y = inoutInfo.MinY; y < inoutInfo.MaxY; ++y)
+        {
+            for (uint32 x = inoutInfo.MinX; x < inoutInfo.MaxX; ++x)
+            {
+                const Coordinate<eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE> point{
+                    static_cast<float>(x) / static_cast<float>(width) * 2.0f - 1.0f,
+                    static_cast<float>(y) / static_cast<float>(height) * 2.0f - 1.0f,
+                    0.0f
+                };
+                const float3 barycentricCoords = ComputeBarycentricCoordinates(inoutInfo.V0.NdcPosition, inoutInfo.V1.NdcPosition, inoutInfo.V2.NdcPosition, point);
+                const bool isInTriangle = 0.0f <= barycentricCoords.X && barycentricCoords.X <= 1.0f &&
+                    0.0f <= barycentricCoords.Y && barycentricCoords.Y <= 1.0f &&
+                    0.0f <= barycentricCoords.Z && barycentricCoords.Z <= 1.0f;
+                if (isInTriangle)
+                {
+                    // Simple rasterization logic: set every pixel to a color
+                    // In a real application, you would perform actual rasterization here
+                    CornellBoxFragmentShaderInput fsInput =
+                    {
+                        .VSOutput =
+                        {
+                            .NdcPosition = point,
+                            .WsPosition = inoutInfo.V0.WsPosition * barycentricCoords.X + inoutInfo.V1.WsPosition * barycentricCoords.Y + inoutInfo.V2.WsPosition * barycentricCoords.Z,
+                            .Normal = inoutInfo.V0.Normal * barycentricCoords.X + inoutInfo.V1.Normal * barycentricCoords.Y + inoutInfo.V2.Normal * barycentricCoords.Z,
+                        },
+                        .Color = inoutInfo.CurrentGeometry.GetColor(),
+                        .EmissiveGeometry = inoutInfo.EmissiveGeometry,
+                    };
+                    const Rgba8 fragmentValue = CornellBoxFragmentShader(fsInput);
+                    inoutInfo.InoutTexture.SetFragmentValue(x, y, fragmentValue.R, fragmentValue.G, fragmentValue.B, fragmentValue.A);
+                }
+            }
+        }
+
+        inoutInfo.InoutThreadInfo->IsFinished.store(true);
+        return nullptr;
     }
 }

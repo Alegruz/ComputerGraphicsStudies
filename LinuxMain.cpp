@@ -12,6 +12,7 @@ namespace cgs
 {
     std::vector<std::filesystem::path> gRecentFiles;
     Texture gBackBuffer(1600, 900);
+    static pthread_t gRenderThread;
 }
 
 // Wayland objects we need
@@ -496,6 +497,12 @@ main(int argc, char** argv)
     std::vector<cgs::Geometry> cornellBox;
     cgs::CreateCornellBoxScene(cornellBox);
 
+    cgs::RenderInfo renderInfo
+    {
+        .outBackBuffer = cgs::gBackBuffer,
+        .geometries = cornellBox
+    };
+
     // Event loop (like PeekMessage/DispatchMessage)
     timespec startTime;
     clock_gettime(CLOCK_MONOTONIC_RAW, &startTime);
@@ -548,9 +555,13 @@ main(int argc, char** argv)
         gFrameCallback = wl_surface_frame(gSurface);
         wl_callback_add_listener(gFrameCallback, &gFrameListener, nullptr);
 
-        cgs::gBackBuffer.Clear();
-        cgs::Rasterize(cgs::gBackBuffer, cornellBox);
-        cgs::Present(cgs::gBackBuffer);
+        const int error = pthread_create(&cgs::gRenderThread, nullptr, &cgs::Render, &renderInfo);
+        if(error == 0)
+        {
+            [[maybe_unused]] void* returnValue = nullptr;
+            pthread_join(cgs::gRenderThread, &returnValue);
+            cgs::Present(cgs::gBackBuffer);
+        }
 
         timespec endTime;
         clock_gettime(CLOCK_MONOTONIC_RAW, &endTime);

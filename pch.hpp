@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cstdint>
 #include <cwctype>
@@ -33,6 +34,7 @@
 #include <cairo/cairo.h>
 #include <wayland-client.h>
 #include <poll.h>
+#include <pthread.h>
 
 #include <climits>   // INT32_MAX
 #include <cstdio>
@@ -41,6 +43,7 @@
 
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/sysinfo.h>
 #include <unistd.h>
 
 #define TEXT(str) (str)

@@ -53,6 +53,10 @@ else()
 
     add_library(xdg_shell OBJECT "${GEN_DIR}/xdg-shell-protocol.c")
     target_include_directories(xdg_shell PUBLIC "${GEN_DIR}")
+
+    # Prefer -pthread over -lpthread when available
+    set(THREADS_PREFER_PTHREAD_FLAG ON)
+    find_package(Threads REQUIRED)
 endif()
 
 add_library(project_warnings INTERFACE)
@@ -88,6 +92,7 @@ elseif(CGS_LINUX)
     target_link_libraries(ComputerGraphicsStudies PRIVATE PkgConfig::WAYLAND_CLIENT)
     target_include_directories(ComputerGraphicsStudies PRIVATE "${GEN_DIR}")
     target_link_libraries(ComputerGraphicsStudies PRIVATE PkgConfig::CAIRO)
+    target_link_libraries(ComputerGraphicsStudies PRIVATE Threads::Threads)
 else()
     message(FATAL_ERROR "Unsupported platform")
 endif()

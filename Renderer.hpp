@@ -4,10 +4,86 @@
 
 namespace cgs
 {
+    struct ThreadInfo final
+    {
+        pthread_t ThreadId;
+        std::atomic<bool> IsFinished;
+
+        CGS_INLINE constexpr
+        ThreadInfo() noexcept
+            : ThreadId(0), IsFinished(false)
+        {}
+        CGS_INLINE constexpr
+        ThreadInfo(const ThreadInfo& other) noexcept
+            : ThreadId(other.ThreadId), IsFinished(other.IsFinished.load())
+        {}
+        CGS_INLINE constexpr
+        ThreadInfo(ThreadInfo&& other) noexcept
+            : ThreadId(other.ThreadId), IsFinished(other.IsFinished.load())
+        {
+            other.ThreadId = 0;
+            other.IsFinished.store(false);
+        }
+        CGS_INLINE
+        ~ThreadInfo() noexcept = default;
+
+        CGS_INLINE constexpr ThreadInfo&
+        operator=(const ThreadInfo& other) noexcept
+        {
+            if(this != &other)
+            {
+                ThreadId = other.ThreadId;
+                IsFinished.store(other.IsFinished.load());
+            }
+            return *this;
+        }
+        CGS_INLINE constexpr ThreadInfo&
+        operator=(ThreadInfo&& other) noexcept
+        {
+            if(this != &other)
+            {
+                ThreadId = other.ThreadId;
+                IsFinished.store(other.IsFinished.load());
+
+                other.ThreadId = 0;
+                other.IsFinished.store(false);
+            }
+            return *this;
+        }
+    };
+
+    extern std::vector<ThreadInfo> gShaderThreads;
+
+    struct SubRasterizeInfo final
+    {
+        ThreadInfo* InoutThreadInfo;
+
+        Texture& InoutTexture;
+        const Geometry& CurrentGeometry;
+        const Geometry& EmissiveGeometry;
+
+        const CornellBoxVertexShaderOutput& V0;
+        const CornellBoxVertexShaderOutput& V1;
+        const CornellBoxVertexShaderOutput& V2;
+        uint32 MinX = 0;
+        uint32 MaxX = 0;
+        uint32 MinY = 0;
+        uint32 MaxY = 0;
+    };
+
+    void*
+    SubRasterize(void* arg) noexcept;
+
     template<eRasterizationMethod METHOD /*= eRasterizationMethod::DEFAULT*/>
     void
     Rasterize(Texture& outTexture, const std::vector<Geometry>& geometries) noexcept
     {
+        if (gShaderThreads.empty() == true)
+        {
+            const int availableProcessorsCount = get_nprocs() - 2;  // Leave 2 cores free
+            gShaderThreads.resize(static_cast<size_t>(availableProcessorsCount));
+        }
+
         const uint32 width = outTexture.GetWidth();
         const uint32 height = outTexture.GetHeight();
 
@@ -20,11 +96,13 @@ namespace cgs
                 break;
             }
         }
-        if(emissiveGeometryOrNull == nullptr)
+        
+        if (emissiveGeometryOrNull == nullptr)
         {
             assert(false && "No emissive geometry found in the scene");
             return;
         }
+        
         const Geometry& emissiveGeometry = *emissiveGeometryOrNull;
 
         for (const Geometry& geometry : geometries)
@@ -54,36 +132,92 @@ namespace cgs
 
                 if constexpr (METHOD == eRasterizationMethod::BARYCENTRIC)
                 {
-                    for (uint32 y = 0; y < height; ++y)
+                    constexpr uint32 TILE_SIZE = 64;
+                    const uint32 tilesCountX = (width + TILE_SIZE - 1) / TILE_SIZE;
+                    const uint32 tilesCountY = (height + TILE_SIZE - 1) / TILE_SIZE;
+
+                    std::vector<SubRasterizeInfo> subRasterizeInfos;
+                    subRasterizeInfos.reserve(tilesCountX * tilesCountY);
+
+                    for(uint32 tileYIndex = 0; tileYIndex < tilesCountY; ++tileYIndex)
                     {
-                        for (uint32 x = 0; x < width; ++x)
+                        const uint32 minY = tileYIndex * TILE_SIZE;
+                        uint32 maxY = minY + TILE_SIZE;
+                        if(maxY > height)
                         {
-                            const Coordinate<eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE> point{
-                                static_cast<float>(x) / static_cast<float>(width) * 2.0f - 1.0f,
-                                static_cast<float>(y) / static_cast<float>(height) * 2.0f - 1.0f,
-                                0.0f
-                            };
-                            const float3 barycentricCoords = ComputeBarycentricCoordinates(v0.NdcPosition, v1.NdcPosition, v2.NdcPosition, point);
-                            const bool isInTriangle = 0.0f <= barycentricCoords.X && barycentricCoords.X <= 1.0f &&
-                                0.0f <= barycentricCoords.Y && barycentricCoords.Y <= 1.0f &&
-                                0.0f <= barycentricCoords.Z && barycentricCoords.Z <= 1.0f;
-                            if (isInTriangle)
+                            maxY = height;
+                        }
+
+                        for(uint32 tileXIndex = 0; tileXIndex < tilesCountX; ++tileXIndex)
+                        {
+                            const uint32 minX = tileXIndex * TILE_SIZE;
+                            uint32 maxX = minX + TILE_SIZE;
+                            if(maxX > width)
                             {
-                                // Simple rasterization logic: set every pixel to a color
-                                // In a real application, you would perform actual rasterization here
-                                CornellBoxFragmentShaderInput fsInput =
+                                maxX = width;
+                            }
+
+                            subRasterizeInfos.push_back(
+                                SubRasterizeInfo
                                 {
-                                    .VSOutput =
-                                    {
-                                        .NdcPosition = point,
-                                        .WsPosition = v0.WsPosition * barycentricCoords.X + v1.WsPosition * barycentricCoords.Y + v2.WsPosition * barycentricCoords.Z,
-                                        .Normal = v0.Normal * barycentricCoords.X + v1.Normal * barycentricCoords.Y + v2.Normal * barycentricCoords.Z,
-                                    },
-                                    .Color = geometry.GetColor(),
+                                    .InoutTexture = outTexture,
+                                    .CurrentGeometry = geometry,
                                     .EmissiveGeometry = emissiveGeometry,
-                                };
-                                const Rgba8 fragmentValue = CornellBoxFragmentShader(fsInput);
-                                outTexture.SetFragmentValue(x, y, fragmentValue.R, fragmentValue.G, fragmentValue.B, fragmentValue.A);
+                                    .V0 = v0,
+                                    .V1 = v1,
+                                    .V2 = v2,
+                                    .MinX = minX,
+                                    .MaxX = maxX,
+                                    .MinY = minY,
+                                    .MaxY = maxY,
+                                }
+                            );
+                        }
+                    }
+
+                    uint32 finishedTileCount = 0;
+                    uint32 tileIndexToProcess = 0;
+                    uint32 activeThreadsCount = 0;
+                    const uint32 maximumActiveThreadsCount = static_cast<uint32>(gShaderThreads.size());
+                    if(maximumActiveThreadsCount == 0)
+                    {
+                        assert(false && "No available threads for rasterization");
+                        return;
+                    }
+
+                    while (finishedTileCount < subRasterizeInfos.size())
+                    {
+                        for(uint32 threadIndex = 0; threadIndex < gShaderThreads.size(); ++threadIndex)
+                        {
+                            ThreadInfo& threadInfo = gShaderThreads[threadIndex];
+                            const bool isValidThread = threadInfo.ThreadId != 0;
+                            const bool isFinished = isValidThread && threadInfo.IsFinished.load();
+                            if (isValidThread == false || isFinished)
+                            {
+                                if(isFinished)
+                                {
+                                    [[maybe_unused]] void* threadResult = nullptr;
+                                    pthread_join(threadInfo.ThreadId, &threadResult);
+                                    threadInfo.ThreadId = 0;
+                                    --activeThreadsCount;
+                                    ++finishedTileCount;
+                                }
+
+                                if (tileIndexToProcess < subRasterizeInfos.size() && activeThreadsCount < maximumActiveThreadsCount)
+                                {
+                                    subRasterizeInfos[tileIndexToProcess].InoutThreadInfo = &threadInfo;
+                                    threadInfo.IsFinished.store(false);
+                                    const int error = pthread_create(&threadInfo.ThreadId, nullptr, &SubRasterize, &subRasterizeInfos[tileIndexToProcess]);
+                                    if (error != 0)
+                                    {
+                                        assert(false && "Failed to create rasterization thread");                                    
+                                    }
+                                    else
+                                    {
+                                        ++activeThreadsCount;
+                                        ++tileIndexToProcess;
+                                    }
+                                }
                             }
                         }
                     }

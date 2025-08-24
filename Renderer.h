@@ -266,4 +266,13 @@ namespace cgs
     
     Rgba8
     CornellBoxFragmentShader(const CornellBoxFragmentShaderInput& input) noexcept;
+
+    struct RenderInfo final
+    {
+        Texture& outBackBuffer;
+        const std::vector<Geometry>& geometries;
+    };
+
+    void*
+    Render(void* arg) noexcept;
 }
