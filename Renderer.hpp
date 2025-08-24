@@ -4,54 +4,6 @@
 
 namespace cgs
 {
-    struct ThreadInfo final
-    {
-        pthread_t ThreadId;
-        std::atomic<bool> IsFinished;
-
-        CGS_INLINE constexpr
-        ThreadInfo() noexcept
-            : ThreadId(0), IsFinished(false)
-        {}
-        CGS_INLINE constexpr
-        ThreadInfo(const ThreadInfo& other) noexcept
-            : ThreadId(other.ThreadId), IsFinished(other.IsFinished.load())
-        {}
-        CGS_INLINE constexpr
-        ThreadInfo(ThreadInfo&& other) noexcept
-            : ThreadId(other.ThreadId), IsFinished(other.IsFinished.load())
-        {
-            other.ThreadId = 0;
-            other.IsFinished.store(false);
-        }
-        CGS_INLINE
-        ~ThreadInfo() noexcept = default;
-
-        CGS_INLINE constexpr ThreadInfo&
-        operator=(const ThreadInfo& other) noexcept
-        {
-            if(this != &other)
-            {
-                ThreadId = other.ThreadId;
-                IsFinished.store(other.IsFinished.load());
-            }
-            return *this;
-        }
-        CGS_INLINE constexpr ThreadInfo&
-        operator=(ThreadInfo&& other) noexcept
-        {
-            if(this != &other)
-            {
-                ThreadId = other.ThreadId;
-                IsFinished.store(other.IsFinished.load());
-
-                other.ThreadId = 0;
-                other.IsFinished.store(false);
-            }
-            return *this;
-        }
-    };
-
     extern std::vector<ThreadInfo> gShaderThreads;
 
     struct SubRasterizeInfo final

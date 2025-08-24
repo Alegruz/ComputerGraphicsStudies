@@ -79,7 +79,7 @@ static File gCurrentFile;
 namespace cgs
 {
     std::vector<std::filesystem::path> gRecentFiles;
-    Texture gBackBuffer(1920, 1080);
+    std::vector<Texture> gBackBuffers(BACK_BUFFERS_COUNT, Texture(1920, 1080));
 }
 
 // -------------------- MRU submenu rebuild --------------------
@@ -360,8 +360,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
     const DWORD windowStyle = WS_VISIBLE;
     const int windowX = 0;
     const int windowY = 0;
-    const int windowWidth = cgs::gBackBuffer.GetWidth();
-    const int windowHeight = cgs::gBackBuffer.GetHeight();
+    const int windowWidth = cgs::gBackBuffers[0].GetWidth();
+    const int windowHeight = cgs::gBackBuffers[0].GetHeight();
     const HWND window = CreateWindow(
         className,
         windowName,
@@ -404,9 +404,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
             }
         }
 
-        cgs::gBackBuffer.Clear();
-        cgs::Rasterize(cgs::gBackBuffer, cornellBox);
-        cgs::Present(window, cgs::gBackBuffer);
+        cgs::gBackBuffers[0].Clear();
+        cgs::Rasterize(cgs::gBackBuffers[0], cornellBox);
+        cgs::Present(window, cgs::gBackBuffers[0]);
         QueryPerformanceCounter(&endTime);
         elapsedMicroseconds.QuadPart = (endTime.QuadPart - startTime.QuadPart) * 1000000 / frequency.QuadPart;
         startTime = endTime;

@@ -182,7 +182,8 @@ namespace cgs
         std::vector<byte> mData;
     };
 
-    extern cgs::Texture gBackBuffer;
+    constexpr uint32 BACK_BUFFERS_COUNT = 3;
+    extern std::vector<cgs::Texture> gBackBuffers;
 
     enum class eRasterizationMethod : uint8
     {
@@ -267,10 +268,126 @@ namespace cgs
     Rgba8
     CornellBoxFragmentShader(const CornellBoxFragmentShaderInput& input) noexcept;
 
+    struct ThreadInfo final
+    {
+        pthread_t ThreadId;
+        std::atomic<bool> IsFinished;
+
+        CGS_INLINE constexpr
+        ThreadInfo() noexcept
+            : ThreadId(0), IsFinished(false)
+        {}
+        CGS_INLINE constexpr
+        ThreadInfo(const ThreadInfo& other) noexcept
+            : ThreadId(other.ThreadId), IsFinished(other.IsFinished.load())
+        {}
+        CGS_INLINE constexpr
+        ThreadInfo(ThreadInfo&& other) noexcept
+            : ThreadId(other.ThreadId), IsFinished(other.IsFinished.load())
+        {
+            other.ThreadId = 0;
+            other.IsFinished.store(false);
+        }
+        CGS_INLINE
+        ~ThreadInfo() noexcept = default;
+
+        CGS_INLINE constexpr ThreadInfo&
+        operator=(const ThreadInfo& other) noexcept
+        {
+            if(this != &other)
+            {
+                ThreadId = other.ThreadId;
+                IsFinished.store(other.IsFinished.load());
+            }
+            return *this;
+        }
+        CGS_INLINE constexpr ThreadInfo&
+        operator=(ThreadInfo&& other) noexcept
+        {
+            if(this != &other)
+            {
+                ThreadId = other.ThreadId;
+                IsFinished.store(other.IsFinished.load());
+
+                other.ThreadId = 0;
+                other.IsFinished.store(false);
+            }
+            return *this;
+        }
+    };
+
     struct RenderInfo final
     {
-        Texture& outBackBuffer;
-        const std::vector<Geometry>& geometries;
+        enum class eRenderState : uint8
+        {
+            IDLE,
+            DEFAULT = IDLE,
+            RENDERING,
+            FINISHED
+        };
+        std::atomic<eRenderState> RenderState;
+        Texture* InoutBackBuffer;
+        const std::vector<Geometry>* Geometries;
+
+        CGS_INLINE constexpr
+        RenderInfo(Texture& inoutBackBuffer, const std::vector<Geometry>& geometries)
+            : RenderState(eRenderState::IDLE), InoutBackBuffer(&inoutBackBuffer), Geometries(&geometries)
+        {
+        }
+        CGS_INLINE constexpr
+        RenderInfo(const RenderInfo& other) noexcept
+            : RenderState(other.RenderState.load()),
+              InoutBackBuffer(other.InoutBackBuffer),
+              Geometries(other.Geometries)
+        {
+        }
+        CGS_INLINE constexpr
+        RenderInfo(RenderInfo&& other) noexcept
+            : RenderState(other.RenderState.load()),
+              InoutBackBuffer(other.InoutBackBuffer),
+              Geometries(other.Geometries)
+        {
+            other.RenderState.store(eRenderState::IDLE);
+            other.InoutBackBuffer = nullptr;
+            other.Geometries = nullptr;
+        }
+        CGS_INLINE constexpr
+        ~RenderInfo() noexcept = default;
+
+        CGS_INLINE constexpr RenderInfo&
+        operator=(const RenderInfo& other) noexcept
+        {
+            if (this != &other)
+            {
+                RenderState.store(other.RenderState.load());
+                InoutBackBuffer = other.InoutBackBuffer;
+                Geometries = other.Geometries;
+            }
+            return *this;
+        }
+        CGS_INLINE constexpr RenderInfo&
+        operator=(RenderInfo&& other) noexcept
+        {
+            if (this != &other)
+            {
+                RenderState.store(other.RenderState.load());
+                InoutBackBuffer = other.InoutBackBuffer;
+                Geometries = other.Geometries;
+
+                other.RenderState.store(eRenderState::IDLE);
+                other.InoutBackBuffer = nullptr;
+                other.Geometries = nullptr;
+            }
+            return *this;
+        }
+    };
+
+    struct RenderThreadInfo final
+    {
+        ThreadInfo ThreadInfo;
+        std::atomic<uint32> CurrentFrameIndex;
+        std::vector<RenderInfo> RenderInfoPerFrame;
+        std::atomic<bool> IsFinished;
     };
 
     void*

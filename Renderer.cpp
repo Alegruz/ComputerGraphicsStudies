@@ -435,9 +435,28 @@ namespace cgs
             return nullptr;
         }
 
-        const RenderInfo& renderInfo = *static_cast<RenderInfo*>(arg);
-        renderInfo.outBackBuffer.Clear();
-        Rasterize(renderInfo.outBackBuffer, renderInfo.geometries);
+        RenderThreadInfo& renderThreadInfo = *static_cast<RenderThreadInfo*>(arg);
+        while (renderThreadInfo.IsFinished.load() == false)
+        {
+            const uint32 currentFrameIndex = renderThreadInfo.CurrentFrameIndex.load();
+            if (currentFrameIndex > BACK_BUFFERS_COUNT)
+            {
+                assert(false && "CurrentFrameIndex exceeded BACK_BUFFERS_COUNT");
+                renderThreadInfo.IsFinished.store(true);
+                return nullptr;
+            }
+
+            RenderInfo& renderInfo = renderThreadInfo.RenderInfoPerFrame[renderThreadInfo.CurrentFrameIndex];
+            if(renderInfo.RenderState.load() == RenderInfo::eRenderState::IDLE)
+            {
+                renderInfo.RenderState.store(RenderInfo::eRenderState::RENDERING);
+                renderInfo.InoutBackBuffer->Clear();
+                Rasterize(*renderInfo.InoutBackBuffer, *renderInfo.Geometries);
+            }
+            renderInfo.RenderState.store(RenderInfo::eRenderState::FINISHED);
+            renderThreadInfo.CurrentFrameIndex.store((currentFrameIndex + 1) % BACK_BUFFERS_COUNT);
+        }
+        renderThreadInfo.IsFinished.store(true);
         return nullptr;
     }
 

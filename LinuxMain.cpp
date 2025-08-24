@@ -11,8 +11,8 @@ static bool gIsRunning = true;
 namespace cgs
 {
     std::vector<std::filesystem::path> gRecentFiles;
-    Texture gBackBuffer(1600, 900);
-    static pthread_t gRenderThread;
+    std::vector<Texture> gBackBuffers(BACK_BUFFERS_COUNT, Texture(1600, 900));
+    static RenderThreadInfo gRenderThread;
 }
 
 // Wayland objects we need
@@ -179,8 +179,8 @@ XdgSurfaceConfigure(void*,
     xdg_surface_ack_configure(surf, serial);
 
     // Determine a size to draw. Compositor may suggest 0,0; pick a default.
-    const int width = static_cast<int>(cgs::gBackBuffer.GetWidth());
-    const int height = static_cast<int>(cgs::gBackBuffer.GetHeight());
+    const int width = static_cast<int>(cgs::gBackBuffers[0].GetWidth());
+    const int height = static_cast<int>(cgs::gBackBuffers[0].GetHeight());
 
     if (!gShmBuffer.Buffer || gShmBuffer.Width != width || gShmBuffer.Height != height)
     {
@@ -497,13 +497,15 @@ main(int argc, char** argv)
     std::vector<cgs::Geometry> cornellBox;
     cgs::CreateCornellBoxScene(cornellBox);
 
-    cgs::RenderInfo renderInfo
+    cgs::gRenderThread.RenderInfoPerFrame.reserve(cgs::BACK_BUFFERS_COUNT);
+    for(uint32 frameIndex = 0; frameIndex < cgs::BACK_BUFFERS_COUNT; frameIndex++)
     {
-        .outBackBuffer = cgs::gBackBuffer,
-        .geometries = cornellBox
-    };
+        cgs::RenderInfo renderInfo(cgs::gBackBuffers[frameIndex], cornellBox);
+        cgs::gRenderThread.RenderInfoPerFrame.push_back(renderInfo);
+    }
 
     // Event loop (like PeekMessage/DispatchMessage)
+    uint32 frameIndex = 0;
     timespec startTime;
     clock_gettime(CLOCK_MONOTONIC_RAW, &startTime);
     while (gIsRunning)
@@ -545,22 +547,42 @@ main(int argc, char** argv)
         }
 
         // ---- Render only when compositor is ready (smooth pacing) ----
-        if (gIsFrameReady == false)
-        {
-            continue;
-        }
-        gIsFrameReady = false;
+        // if (gIsFrameReady == false)
+        // {
+        //     continue;
+        // }
+        // gIsFrameReady = false;
 
 
         gFrameCallback = wl_surface_frame(gSurface);
         wl_callback_add_listener(gFrameCallback, &gFrameListener, nullptr);
 
-        const int error = pthread_create(&cgs::gRenderThread, nullptr, &cgs::Render, &renderInfo);
-        if(error == 0)
+        if(cgs::gRenderThread.ThreadInfo.ThreadId == 0)
         {
-            [[maybe_unused]] void* returnValue = nullptr;
-            pthread_join(cgs::gRenderThread, &returnValue);
-            cgs::Present(cgs::gBackBuffer);
+            const int error = pthread_create(&cgs::gRenderThread.ThreadInfo.ThreadId, nullptr, &cgs::Render, &cgs::gRenderThread);
+            if(error != 0)
+            {
+                assert(false && "Failed to create render thread");
+            }
+            frameIndex = (frameIndex + 1) % cgs::BACK_BUFFERS_COUNT;
+        }
+        else
+        {
+            cgs::RenderInfo::eRenderState currentFrameRenderState = cgs::gRenderThread.RenderInfoPerFrame[frameIndex].RenderState.load();
+            if(currentFrameRenderState == cgs::RenderInfo::eRenderState::RENDERING)
+            {
+                while (currentFrameRenderState != cgs::RenderInfo::eRenderState::FINISHED)
+                {
+                    currentFrameRenderState = cgs::gRenderThread.RenderInfoPerFrame[frameIndex].RenderState.load();
+                }
+                cgs::Present(*cgs::gRenderThread.RenderInfoPerFrame[frameIndex].InoutBackBuffer);
+                cgs::gRenderThread.RenderInfoPerFrame[frameIndex].RenderState.store(cgs::RenderInfo::eRenderState::IDLE);
+                frameIndex = (frameIndex + 1) % cgs::BACK_BUFFERS_COUNT;
+            }
+            else if (currentFrameRenderState == cgs::RenderInfo::eRenderState::IDLE)
+            {
+                frameIndex = (frameIndex + 1) % cgs::BACK_BUFFERS_COUNT;
+            }
         }
 
         timespec endTime;
@@ -568,6 +590,8 @@ main(int argc, char** argv)
         deltaTimeInMs = static_cast<float>(endTime.tv_sec - startTime.tv_sec) * 1000.0f + static_cast<float>(endTime.tv_nsec - startTime.tv_nsec) * 1e-6f;
         startTime = endTime;
     }
+    cgs::gRenderThread.IsFinished.store(true);
+    pthread_join(cgs::gRenderThread.ThreadInfo.ThreadId, nullptr);
 
     // Cleanup
     DestroyShmBuffer(gShmBuffer);
