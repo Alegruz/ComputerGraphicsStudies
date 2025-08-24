@@ -383,21 +383,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
     HACCEL accelerators = CreateAccelerators();
 
     [[maybe_unused]] float deltaTimeInMs = 0.0f;
-    cgs::VertexBuffer singleTriangleVertexBuffer(
-        cgs::VertexBuffer::CreateInfo{
-            .HandnessType = cgs::eHandnessType::LEFT,
-            .WindingType = cgs::eWindingType::COUNTER_CLOCKWISE,
-            .StrideInBytes = sizeof(cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>),
-            .Data = std::vector<byte>{}
-        }
-    );
-    [[maybe_unused]] bool result = singleTriangleVertexBuffer.AddVertex(cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ -1.0f, -1.0f, 0.0f });
-    result = singleTriangleVertexBuffer.AddVertex(cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ 1.0f, -1.0f, 0.0f });
-    result = singleTriangleVertexBuffer.AddVertex(cgs::Coordinate<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>{ 0.0f, 1.0f, 0.0f });
-    cgs::Geometry singleTriangleGeometry;
-    singleTriangleGeometry.SetVertexBuffer(std::move(singleTriangleVertexBuffer));
-    // Set indices for the triangle
-    singleTriangleGeometry.SetIndices(std::vector<uint16>{ 0, 1, 2 });
+    std::vector<cgs::Geometry> cornellBox;
+    cgs::CreateCornellBoxScene(cornellBox);
+
     LARGE_INTEGER startTime;
     LARGE_INTEGER endTime;
     LARGE_INTEGER elapsedMicroseconds;
@@ -416,9 +404,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
             }
         }
 
-        const std::vector<cgs::Geometry> geometries = { singleTriangleGeometry };
         cgs::gBackBuffer.Clear();
-        cgs::Rasterize<cgs::eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE>(cgs::gBackBuffer, geometries);
+        cgs::Rasterize(cgs::gBackBuffer, cornellBox);
         cgs::Present(window, cgs::gBackBuffer);
         QueryPerformanceCounter(&endTime);
         elapsedMicroseconds.QuadPart = (endTime.QuadPart - startTime.QuadPart) * 1000000 / frequency.QuadPart;

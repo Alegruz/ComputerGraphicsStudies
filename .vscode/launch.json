@@ -30,7 +30,9 @@
             "program": "${workspaceFolder}/ComputerGraphicsStudies",
             "cwd": "${workspaceFolder}",
             "stopAtEntry": true,
-            "preLaunchTask": "CMake Build (clang-Debug)"
+            "args": [
+                "-v"
+            ]
         },
         {
             "type": "cppdbg",
@@ -39,7 +41,6 @@
             "program": "${workspaceFolder}/ComputerGraphicsStudies",
             "cwd": "${workspaceFolder}",
             "stopAtEntry": true,
-            "preLaunchTask": "CMake Build (clang-Release)"
         }
     ]
 }
