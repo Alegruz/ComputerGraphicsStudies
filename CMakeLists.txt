@@ -79,12 +79,14 @@ if(CGS_WINDOWS)
         Win32Main.cpp 
         CommandLineParser.cpp
         Renderer.cpp
+        Win32Thread.cpp
         )
 elseif(CGS_LINUX)
     add_executable(ComputerGraphicsStudies 
         LinuxMain.cpp
         CommandLineParser.cpp
         Renderer.cpp
+        LinuxThread.cpp
         $<TARGET_OBJECTS:xdg_shell>
         )
     target_include_directories(ComputerGraphicsStudies PRIVATE ${WAYLAND_INCLUDE_DIRS})

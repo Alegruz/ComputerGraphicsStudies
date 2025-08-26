@@ -7,13 +7,13 @@
 
 namespace cgs
 {
-    std::vector<ThreadInfo> gShaderThreads;
+    std::vector<std::shared_ptr<ThreadHandle>> gShaderThreads;
 
     static Camera gMainCamera;
     static float4x4 gViewMatrix;
     static float4x4 gProjectionMatrix;
 
-    static constexpr void
+    static void
     AddQuadVertices(VertexBuffer& vertexBuffer, std::vector<uint16>& inoutIndices, const Coordinate<eCoordinateSpace::WORLD>& v0, const Coordinate<eCoordinateSpace::WORLD>& v1, const Coordinate<eCoordinateSpace::WORLD>& v2, const Coordinate<eCoordinateSpace::WORLD>& v3)
     {
         const Coordinate<eCoordinateSpace::WORLD> normal = Normalize(Cross(v1 - v0, v2 - v0));
@@ -426,16 +426,16 @@ namespace cgs
         return outputColor;
     }
 
-    void*
-    Render(void* arg) noexcept
+    void
+    Render(ThreadProcessArgument& arg) noexcept
     {
-        if(arg == nullptr)
+        if(arg.Argument == nullptr)
         {
             assert(false && "RenderInfo argument is null");
-            return nullptr;
+            return;
         }
 
-        RenderThreadInfo& renderThreadInfo = *static_cast<RenderThreadInfo*>(arg);
+        RenderThreadInfo& renderThreadInfo = *static_cast<RenderThreadInfo*>(arg.Argument);
         while (renderThreadInfo.IsFinished.load() == false)
         {
             const uint32 currentFrameIndex = renderThreadInfo.CurrentFrameIndex.load();
@@ -443,7 +443,7 @@ namespace cgs
             {
                 assert(false && "CurrentFrameIndex exceeded BACK_BUFFERS_COUNT");
                 renderThreadInfo.IsFinished.store(true);
-                return nullptr;
+                return;
             }
 
             RenderInfo& renderInfo = renderThreadInfo.RenderInfoPerFrame[renderThreadInfo.CurrentFrameIndex];
@@ -457,23 +457,22 @@ namespace cgs
             renderThreadInfo.CurrentFrameIndex.store((currentFrameIndex + 1) % BACK_BUFFERS_COUNT);
         }
         renderThreadInfo.IsFinished.store(true);
-        return nullptr;
     }
 
-    void*
-    SubRasterize(void* arg) noexcept
+    void
+    SubRasterize(ThreadProcessArgument& arg) noexcept
     {
-        if (arg == nullptr)
+        if (arg.Argument == nullptr)
         {
             assert(false && "SubRasterizeInfo argument is null");
-            return nullptr;
+            return;
         }
 
-        SubRasterizeInfo& inoutInfo = *static_cast<SubRasterizeInfo*>(arg);
-        if(inoutInfo.InoutThreadInfo == nullptr)
+        SubRasterizeInfo& inoutInfo = *static_cast<SubRasterizeInfo*>(arg.Argument);
+        if(arg.InoutThreadHandle == nullptr || IsThreadValid(*arg.InoutThreadHandle) == false)
         {
-            assert(false && "SubRasterizeInfo argument has null ThreadInfo");
-            return nullptr;
+            assert(false && "SubRasterizeInfo argument has null ThreadHandle");
+            return;
         }
 
         const uint32 width = inoutInfo.InoutTexture.GetWidth();
@@ -512,8 +511,5 @@ namespace cgs
                 }
             }
         }
-
-        inoutInfo.InoutThreadInfo->IsFinished.store(true);
-        return nullptr;
     }
 }

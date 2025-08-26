@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cwctype>
 #include <filesystem>
+#include <memory>
 #include <span>
 #include <string>
 #include <vector>

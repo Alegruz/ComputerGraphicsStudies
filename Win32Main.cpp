@@ -80,6 +80,7 @@ namespace cgs
 {
     std::vector<std::filesystem::path> gRecentFiles;
     std::vector<Texture> gBackBuffers(BACK_BUFFERS_COUNT, Texture(1920, 1080));
+    static RenderThreadInfo gRenderThread;
 }
 
 // -------------------- MRU submenu rebuild --------------------
@@ -386,6 +387,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
     std::vector<cgs::Geometry> cornellBox;
     cgs::CreateCornellBoxScene(cornellBox);
 
+    cgs::gRenderThread.RenderInfoPerFrame.reserve(cgs::BACK_BUFFERS_COUNT);
+    for(uint32 frameIndex = 0; frameIndex < cgs::BACK_BUFFERS_COUNT; frameIndex++)
+    {
+        cgs::RenderInfo renderInfo(cgs::gBackBuffers[frameIndex], cornellBox);
+        cgs::gRenderThread.RenderInfoPerFrame.push_back(renderInfo);
+    }
+
+    uint32 frameIndex = 0;
     LARGE_INTEGER startTime;
     LARGE_INTEGER endTime;
     LARGE_INTEGER elapsedMicroseconds;
@@ -404,9 +413,43 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
             }
         }
 
-        cgs::gBackBuffers[0].Clear();
-        cgs::Rasterize(cgs::gBackBuffers[0], cornellBox);
-        cgs::Present(window, cgs::gBackBuffers[0]);
+        // cgs::gBackBuffers[0].Clear();
+        // cgs::Rasterize(cgs::gBackBuffers[0], cornellBox);
+        // cgs::Present(window, cgs::gBackBuffers[0]);
+        if(cgs::gRenderThread.ThreadHandle == nullptr || cgs::IsThreadValid(*cgs::gRenderThread.ThreadHandle) == false)
+        {
+            cgs::ThreadCreateInfo createInfo =
+            {
+                .Name = "RenderThread",
+                .StackSize = 0,
+                .Process = &cgs::Render,
+                .Argument = &cgs::gRenderThread
+            };
+            const bool threadCreateResult = cgs::Create(cgs::gRenderThread.ThreadHandle, createInfo);
+            if(threadCreateResult == false)
+            {
+                assert(false && "Failed to create render thread");
+            }
+            frameIndex = (frameIndex + 1) % cgs::BACK_BUFFERS_COUNT;
+        }
+        else
+        {
+            cgs::RenderInfo::eRenderState currentFrameRenderState = cgs::gRenderThread.RenderInfoPerFrame[frameIndex].RenderState.load();
+            if(currentFrameRenderState == cgs::RenderInfo::eRenderState::RENDERING)
+            {
+                while (currentFrameRenderState != cgs::RenderInfo::eRenderState::FINISHED)
+                {
+                    currentFrameRenderState = cgs::gRenderThread.RenderInfoPerFrame[frameIndex].RenderState.load();
+                }
+                cgs::Present(window, *cgs::gRenderThread.RenderInfoPerFrame[frameIndex].InoutBackBuffer);
+                cgs::gRenderThread.RenderInfoPerFrame[frameIndex].RenderState.store(cgs::RenderInfo::eRenderState::IDLE);
+                frameIndex = (frameIndex + 1) % cgs::BACK_BUFFERS_COUNT;
+            }
+            else if (currentFrameRenderState == cgs::RenderInfo::eRenderState::IDLE)
+            {
+                frameIndex = (frameIndex + 1) % cgs::BACK_BUFFERS_COUNT;
+            }
+        }
         QueryPerformanceCounter(&endTime);
         elapsedMicroseconds.QuadPart = (endTime.QuadPart - startTime.QuadPart) * 1000000 / frequency.QuadPart;
         startTime = endTime;

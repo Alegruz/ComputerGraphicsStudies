@@ -4,12 +4,10 @@
 
 namespace cgs
 {
-    extern std::vector<ThreadInfo> gShaderThreads;
+    extern std::vector<std::shared_ptr<ThreadHandle>> gShaderThreads;
 
     struct SubRasterizeInfo final
     {
-        ThreadInfo* InoutThreadInfo;
-
         Texture& InoutTexture;
         const Geometry& CurrentGeometry;
         const Geometry& EmissiveGeometry;
@@ -23,8 +21,8 @@ namespace cgs
         uint32 MaxY = 0;
     };
 
-    void*
-    SubRasterize(void* arg) noexcept;
+    void
+    SubRasterize(ThreadProcessArgument& arg) noexcept;
 
     template<eRasterizationMethod METHOD /*= eRasterizationMethod::DEFAULT*/>
     void
@@ -32,7 +30,7 @@ namespace cgs
     {
         if (gShaderThreads.empty() == true)
         {
-            const int availableProcessorsCount = get_nprocs() - 2;  // Leave 2 cores free
+            const int availableProcessorsCount = GetLogicalProcessorsCount() - 2;  // Leave 2 cores free
             gShaderThreads.resize(static_cast<size_t>(availableProcessorsCount));
         }
 
@@ -141,28 +139,32 @@ namespace cgs
                     {
                         for(uint32 threadIndex = 0; threadIndex < gShaderThreads.size(); ++threadIndex)
                         {
-                            ThreadInfo& threadInfo = gShaderThreads[threadIndex];
-                            const bool isValidThread = threadInfo.ThreadId != 0;
-                            const bool isFinished = isValidThread && threadInfo.IsFinished.load();
+                            std::shared_ptr<ThreadHandle>& threadHandle = gShaderThreads[threadIndex];
+
+                            const bool isValidThread = threadHandle != nullptr && IsThreadValid(*threadHandle);
+                            const bool isFinished = isValidThread && IsThreadAlive(*threadHandle) == false;
                             if (isValidThread == false || isFinished)
                             {
                                 if(isFinished)
                                 {
-                                    [[maybe_unused]] void* threadResult = nullptr;
-                                    pthread_join(threadInfo.ThreadId, &threadResult);
-                                    threadInfo.ThreadId = 0;
+                                    Join(*threadHandle);
                                     --activeThreadsCount;
                                     ++finishedTileCount;
                                 }
 
                                 if (tileIndexToProcess < subRasterizeInfos.size() && activeThreadsCount < maximumActiveThreadsCount)
                                 {
-                                    subRasterizeInfos[tileIndexToProcess].InoutThreadInfo = &threadInfo;
-                                    threadInfo.IsFinished.store(false);
-                                    const int error = pthread_create(&threadInfo.ThreadId, nullptr, &SubRasterize, &subRasterizeInfos[tileIndexToProcess]);
-                                    if (error != 0)
+                                    ThreadCreateInfo threadCreateInfo =
                                     {
-                                        assert(false && "Failed to create rasterization thread");                                    
+                                        .Name = "RasterizationThread",
+                                        .StackSize = 0,
+                                        .Process = &SubRasterize,
+                                        .Argument = &subRasterizeInfos[tileIndexToProcess]
+                                    };
+                                    bool threadCreateResult = Create(threadHandle, threadCreateInfo);
+                                    if (threadCreateResult == false)
+                                    {
+                                        assert(false && "Failed to create rasterization thread");
                                     }
                                     else
                                     {

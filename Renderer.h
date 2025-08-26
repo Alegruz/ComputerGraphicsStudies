@@ -1,7 +1,11 @@
 #pragma once
 
+#include "Thread.h"
+
 namespace cgs
 {
+    struct ThreadHandle;
+
     struct Rgba8 final
     {
         byte R = 0;
@@ -268,54 +272,6 @@ namespace cgs
     Rgba8
     CornellBoxFragmentShader(const CornellBoxFragmentShaderInput& input) noexcept;
 
-    struct ThreadInfo final
-    {
-        pthread_t ThreadId;
-        std::atomic<bool> IsFinished;
-
-        CGS_INLINE constexpr
-        ThreadInfo() noexcept
-            : ThreadId(0), IsFinished(false)
-        {}
-        CGS_INLINE constexpr
-        ThreadInfo(const ThreadInfo& other) noexcept
-            : ThreadId(other.ThreadId), IsFinished(other.IsFinished.load())
-        {}
-        CGS_INLINE constexpr
-        ThreadInfo(ThreadInfo&& other) noexcept
-            : ThreadId(other.ThreadId), IsFinished(other.IsFinished.load())
-        {
-            other.ThreadId = 0;
-            other.IsFinished.store(false);
-        }
-        CGS_INLINE
-        ~ThreadInfo() noexcept = default;
-
-        CGS_INLINE constexpr ThreadInfo&
-        operator=(const ThreadInfo& other) noexcept
-        {
-            if(this != &other)
-            {
-                ThreadId = other.ThreadId;
-                IsFinished.store(other.IsFinished.load());
-            }
-            return *this;
-        }
-        CGS_INLINE constexpr ThreadInfo&
-        operator=(ThreadInfo&& other) noexcept
-        {
-            if(this != &other)
-            {
-                ThreadId = other.ThreadId;
-                IsFinished.store(other.IsFinished.load());
-
-                other.ThreadId = 0;
-                other.IsFinished.store(false);
-            }
-            return *this;
-        }
-    };
-
     struct RenderInfo final
     {
         enum class eRenderState : uint8
@@ -341,7 +297,7 @@ namespace cgs
               Geometries(other.Geometries)
         {
         }
-        CGS_INLINE constexpr
+        CGS_INLINE
         RenderInfo(RenderInfo&& other) noexcept
             : RenderState(other.RenderState.load()),
               InoutBackBuffer(other.InoutBackBuffer),
@@ -384,12 +340,12 @@ namespace cgs
 
     struct RenderThreadInfo final
     {
-        ThreadInfo ThreadInfo;
+        std::shared_ptr<ThreadHandle> ThreadHandle;
         std::atomic<uint32> CurrentFrameIndex;
         std::vector<RenderInfo> RenderInfoPerFrame;
         std::atomic<bool> IsFinished;
     };
 
-    void*
-    Render(void* arg) noexcept;
+    void
+    Render(ThreadProcessArgument& arg) noexcept;
 }

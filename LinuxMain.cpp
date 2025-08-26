@@ -557,10 +557,17 @@ main(int argc, char** argv)
         gFrameCallback = wl_surface_frame(gSurface);
         wl_callback_add_listener(gFrameCallback, &gFrameListener, nullptr);
 
-        if(cgs::gRenderThread.ThreadInfo.ThreadId == 0)
+        if(cgs::gRenderThread.ThreadHandle == nullptr || cgs::IsThreadValid(*cgs::gRenderThread.ThreadHandle) == false)
         {
-            const int error = pthread_create(&cgs::gRenderThread.ThreadInfo.ThreadId, nullptr, &cgs::Render, &cgs::gRenderThread);
-            if(error != 0)
+            cgs::ThreadCreateInfo createInfo =
+            {
+                .Name = "RenderThread",
+                .StackSize = 0,
+                .Process = &cgs::Render,
+                .Argument = &cgs::gRenderThread
+            };
+            const bool threadCreateResult = cgs::Create(cgs::gRenderThread.ThreadHandle, createInfo);
+            if(threadCreateResult == false)
             {
                 assert(false && "Failed to create render thread");
             }

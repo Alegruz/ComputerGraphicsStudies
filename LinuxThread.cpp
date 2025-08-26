@@ -1,0 +1,103 @@
+#include "pch.hpp"
+
+#if defined(CGS_LINUX)
+#include "Thread.h"
+
+namespace cgs
+{
+    struct ThreadHandle final
+    {
+        pthread_t Handle;
+    };
+
+    struct StartThunk final
+    {
+        ThreadProcess Process;
+        void* Argument;
+    };
+
+    static void* StartThread(void* param)
+    {
+        StartThunk thunk = *static_cast<StartThunk*>(param);
+        thunk.Process(thunk.Argument);
+        delete static_cast<StartThunk*>(param);
+        return nullptr;
+    }
+
+    bool Create(std::shared_ptr<ThreadHandle>& outHandle, const ThreadCreateInfo& createInfo) noexcept
+    {
+        if(outHandle && outHandle->Handle)
+        {
+            return false;
+        }
+
+        outHandle = std::make_shared<ThreadHandle>();
+        StartThunk* thunk = new StartThunk{ createInfo.Process, createInfo.Argument };
+        if(pthread_create(&outHandle->Handle, nullptr, StartThread, thunk) != 0)
+        {
+            delete thunk;
+            return false;
+        }
+
+        return true;
+    }
+
+    void Join(ThreadHandle& inoutHandle) noexcept
+    {
+        if(inoutHandle.Handle == 0)
+        {
+            return;
+        }
+
+        pthread_join(inoutHandle.Handle, nullptr);
+        inoutHandle.Handle = 0;
+    }
+
+    void Detach(ThreadHandle& inoutHandle) noexcept
+    {
+        if(inoutHandle.Handle == 0)
+        {
+            return;
+        }
+
+        pthread_detach(inoutHandle.Handle);
+        inoutHandle.Handle = 0;
+    }
+
+    bool IsThreadAlive(const ThreadHandle& inoutHandle) noexcept
+    {
+        if(inoutHandle.Handle == 0)
+        {
+            return false;
+        }
+
+        int result = pthread_kill(inoutHandle.Handle, 0);
+        return result == 0;
+    }
+
+    bool IsThreadValid(const ThreadHandle& inoutHandle) noexcept
+    {
+        return inoutHandle.Handle != 0;
+    }
+
+    void SleepForMs(const uint32 ms) noexcept
+    {
+        usleep(ms * 1000);
+    }
+
+    void Yield() noexcept
+    {
+        sched_yield();
+    }
+
+    void Destroy(ThreadHandle& inoutHandle) noexcept
+    {
+        Detach(inoutHandle);
+    }
+
+    uint32 GetLogicalProcessorsCount() noexcept
+    {
+        return get_nprocs();
+    }
+}
+#endif  // defined(CGS_LINUX)
