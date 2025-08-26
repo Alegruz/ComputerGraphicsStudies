@@ -85,13 +85,13 @@ namespace cgs
         return Dot(vec, vec);
     }
 
-    CGS_INLINE constexpr float
+    CGS_INLINE float
     GetLength(const float3& vec) noexcept
     {
         return std::sqrt(GetLengthSquared(vec));
     }
 
-    CGS_INLINE constexpr float3
+    CGS_INLINE float3
     Normalize(const float3& vec) noexcept
     {
         const float length = GetLength(vec);
@@ -158,7 +158,7 @@ namespace cgs
             return *(&X + index);
         }
 
-        CGS_INLINE constexpr const float3&
+        CGS_INLINE const float3&
         GetXYZ() const noexcept
         {
             return *reinterpret_cast<const float3*>(&X);
@@ -218,13 +218,13 @@ namespace cgs
         return Dot(vec, vec);
     }
 
-    CGS_INLINE constexpr float
+    CGS_INLINE float
     GetLength(const float4& vec) noexcept
     {
         return std::sqrt(GetLengthSquared(vec));
     }
 
-    CGS_INLINE constexpr float4
+    CGS_INLINE float4
     Normalize(const float4& vec) noexcept
     {
         const float length = GetLength(vec);
