@@ -290,7 +290,7 @@ namespace cgs
             : RenderState(eRenderState::IDLE), InoutBackBuffer(&inoutBackBuffer), Geometries(&geometries)
         {
         }
-        CGS_INLINE constexpr
+        CGS_INLINE
         RenderInfo(const RenderInfo& other) noexcept
             : RenderState(other.RenderState.load()),
               InoutBackBuffer(other.InoutBackBuffer),
