@@ -23,7 +23,7 @@ namespace cgs
         {
             Yield();
         }
-        
+
         thunk.Process(thunk.Argument);
         delete static_cast<StartThunk*>(param);
         return nullptr;
@@ -37,7 +37,15 @@ namespace cgs
         }
 
         outHandle = std::make_shared<ThreadHandle>();
-        StartThunk* thunk = new StartThunk{ createInfo.Process, createInfo.Argument };
+        StartThunk* thunk = new StartThunk
+        {
+            .Process = createInfo.Process,
+            .Argument =
+            {
+                .InoutThreadHandle = outHandle,
+                .Argument = createInfo.Argument
+            } 
+        };
         if(pthread_create(&outHandle->Handle, nullptr, StartThread, thunk) != 0)
         {
             delete thunk;
