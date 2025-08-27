@@ -346,6 +346,39 @@ namespace cgs
         std::atomic<bool> IsFinished;
     };
 
+    enum class eRenderDeviceType : uint8
+    {
+        CPU,
+        CUDA,
+        COUNT,
+    };
+
+    // Primary template declaration
+    template<typename T>
+    CGS_INLINE constexpr T ConvertStringToEnumValue(const std::string& str) noexcept
+    {
+        static_assert(sizeof(T) == 0, "ConvertStringToEnumValue: Unsupported enum type");
+        return T{};
+    }
+
+    // Specialization for eRenderDeviceType
+    template<>
+    CGS_INLINE constexpr eRenderDeviceType ConvertStringToEnumValue<eRenderDeviceType>(const std::string& str) noexcept
+    {
+        if (str == "CPU" || str == "cpu")
+        {
+            return eRenderDeviceType::CPU;
+        }
+        else if (str == "CUDA" || str == "cuda")
+        {
+            return eRenderDeviceType::CUDA;
+        }
+        return eRenderDeviceType::CPU;
+    }
+
+    void
+    InitializeRenderer(const eRenderDeviceType renderDeviceType) noexcept;
+
     void
     Render(ThreadProcessArgument& arg) noexcept;
 }

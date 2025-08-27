@@ -493,6 +493,8 @@ main(int argc, char** argv)
     wl_surface_commit(gSurface);
     wl_display_roundtrip(gDisplay);
 
+    cgs::InitializeRenderer(cgs::ConvertStringToEnumValue<cgs::eRenderDeviceType>(commandLineParser.GetArgument(cgs::eOptionType::RENDER_DEVICE)));
+    
     [[maybe_unused]] float deltaTimeInMs = 0.0f;
     std::vector<cgs::Geometry> cornellBox;
     cgs::CreateCornellBoxScene(cornellBox);

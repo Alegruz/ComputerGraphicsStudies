@@ -12,6 +12,7 @@ namespace cgs
     static Camera gMainCamera;
     static float4x4 gViewMatrix;
     static float4x4 gProjectionMatrix;
+    static eRenderDeviceType gRenderDeviceType;
 
     static void
     AddQuadVertices(VertexBuffer& vertexBuffer, std::vector<uint16>& inoutIndices, const Coordinate<eCoordinateSpace::WORLD>& v0, const Coordinate<eCoordinateSpace::WORLD>& v1, const Coordinate<eCoordinateSpace::WORLD>& v2, const Coordinate<eCoordinateSpace::WORLD>& v3)
@@ -426,6 +427,12 @@ namespace cgs
         return outputColor;
     }
 
+    void 
+    InitializeRenderer(const eRenderDeviceType renderDeviceType) noexcept
+    {
+        gRenderDeviceType = renderDeviceType;
+    }
+
     void
     Render(ThreadProcessArgument& arg) noexcept
     {
@@ -438,23 +445,41 @@ namespace cgs
         RenderThreadInfo& renderThreadInfo = *static_cast<RenderThreadInfo*>(arg.Argument);
         while (renderThreadInfo.IsFinished.load() == false)
         {
-            const uint32 currentFrameIndex = renderThreadInfo.CurrentFrameIndex.load();
-            if (currentFrameIndex > BACK_BUFFERS_COUNT)
+            switch(gRenderDeviceType)
             {
-                assert(false && "CurrentFrameIndex exceeded BACK_BUFFERS_COUNT");
-                renderThreadInfo.IsFinished.store(true);
-                return;
-            }
+                case eRenderDeviceType::CPU:
+                {
+                    // CPU rendering logic
+                    const uint32 currentFrameIndex = renderThreadInfo.CurrentFrameIndex.load();
+                    if (currentFrameIndex > BACK_BUFFERS_COUNT)
+                    {
+                        assert(false && "CurrentFrameIndex exceeded BACK_BUFFERS_COUNT");
+                        renderThreadInfo.IsFinished.store(true);
+                        return;
+                    }
 
-            RenderInfo& renderInfo = renderThreadInfo.RenderInfoPerFrame[renderThreadInfo.CurrentFrameIndex];
-            if(renderInfo.RenderState.load() == RenderInfo::eRenderState::IDLE)
-            {
-                renderInfo.RenderState.store(RenderInfo::eRenderState::RENDERING);
-                renderInfo.InoutBackBuffer->Clear();
-                Rasterize(*renderInfo.InoutBackBuffer, *renderInfo.Geometries);
+                    RenderInfo& renderInfo = renderThreadInfo.RenderInfoPerFrame[renderThreadInfo.CurrentFrameIndex];
+                    if(renderInfo.RenderState.load() == RenderInfo::eRenderState::IDLE)
+                    {
+                        renderInfo.RenderState.store(RenderInfo::eRenderState::RENDERING);
+                        renderInfo.InoutBackBuffer->Clear();
+                        Rasterize(*renderInfo.InoutBackBuffer, *renderInfo.Geometries);
+                    }
+                    renderInfo.RenderState.store(RenderInfo::eRenderState::FINISHED);
+                    renderThreadInfo.CurrentFrameIndex.store((currentFrameIndex + 1) % BACK_BUFFERS_COUNT);
+                }
+                break;
+                case eRenderDeviceType::CUDA:
+                {
+                    // CUDA rendering logic
+                }
+                break;
+                case eRenderDeviceType::COUNT:
+                    [[fallthrough]];
+                default:
+                    assert(false && "Unknown render device type");
+                    break;
             }
-            renderInfo.RenderState.store(RenderInfo::eRenderState::FINISHED);
-            renderThreadInfo.CurrentFrameIndex.store((currentFrameIndex + 1) % BACK_BUFFERS_COUNT);
         }
         renderThreadInfo.IsFinished.store(true);
     }

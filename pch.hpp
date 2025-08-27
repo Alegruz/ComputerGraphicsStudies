@@ -1,11 +1,15 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cassert>
+#include <codecvt>
+#include <concepts>
 #include <cstdint>
 #include <cwctype>
 #include <filesystem>
+#include <locale>
 #include <memory>
 #include <span>
 #include <string>

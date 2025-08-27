@@ -8,6 +8,8 @@ namespace cgs
         HELP,
         VERSION,
         INPUT_RESOURCE,
+        RENDER_DEVICE,
+        COUNT,
     };
 
     class CommandLineParser final
@@ -18,11 +20,27 @@ namespace cgs
         using StringType = std::wstring;
         using StringViewType = std::wstring_view;
         CGS_INLINE static bool IsSpace(CharType ch) noexcept { return std::iswspace(ch); }
+        CGS_INLINE static std::string ToString(const StringType& str) noexcept 
+        {
+            if (str.empty()) 
+            {
+                return std::string();
+            }
+
+            const int size_needed = WideCharToMultiByte(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), nullptr, 0, nullptr, nullptr);
+            std::string result(size_needed, 0);
+            WideCharToMultiByte(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), &result[0], size_needed, nullptr, nullptr);
+            return result;
+        }
 #elif defined(CGS_LINUX)
         using CharType = char;
         using StringType = std::string;
         using StringViewType = std::string_view;
         CGS_INLINE static constexpr bool IsSpace(CharType ch) noexcept { return std::isspace(ch); }
+        CGS_INLINE static std::string ToString(const StringType& str) noexcept 
+        {
+            return str;
+        }
 #else   // NOT defined(CGS_WINDOWS) && NOT defined(CGS_LINUX)
 #error "Unsupported platform"
 #endif  // NOT defined(CGS_WINDOWS) && NOT defined(CGS_LINUX)
@@ -55,6 +73,7 @@ namespace cgs
         }
 
         bool ParseArguments() noexcept;
+        CGS_INLINE const std::string& GetArgument(const eOptionType optionType) const noexcept { return mOptionValues[static_cast<uint32>(optionType)]; }
 
     private:
         static void initializeOptionsMap() noexcept;
@@ -64,5 +83,6 @@ namespace cgs
 
     private:
         std::vector<StringType> mArguments;
+        std::array<std::string, static_cast<uint32>(eOptionType::COUNT)> mOptionValues;
     };
 }
