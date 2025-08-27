@@ -1,4 +1,0 @@
-/home/runner/work/ComputerGraphicsStudies/ComputerGraphicsStudies/build/CMakeFiles/xdg_shell.dir
-/home/runner/work/ComputerGraphicsStudies/ComputerGraphicsStudies/build/CMakeFiles/ComputerGraphicsStudies.dir
-/home/runner/work/ComputerGraphicsStudies/ComputerGraphicsStudies/build/CMakeFiles/edit_cache.dir
-/home/runner/work/ComputerGraphicsStudies/ComputerGraphicsStudies/build/CMakeFiles/rebuild_cache.dir

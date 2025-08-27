@@ -1,2 +1,0 @@
-# Hashes of file build rules.
-9aaa48bb0cd2fa0a6fd4d6cd712905cd wayland-protocols/xdg-shell-client-protocol.h
