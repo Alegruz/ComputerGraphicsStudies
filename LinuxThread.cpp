@@ -97,7 +97,7 @@ namespace cgs
 
     uint32 GetLogicalProcessorsCount() noexcept
     {
-        return get_nprocs();
+        return static_cast<uint32>(get_nprocs());
     }
 }
 #endif  // defined(CGS_LINUX)

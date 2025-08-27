@@ -34,3 +34,7 @@ Target platforms (sorted by priority):
 * **[2025.08.20]**: command line parser draft
 * **[2025.08.21]**: simple rasterization with a simple vertex animation in Win32
 * **[2025.08.22]**: simple rasterization with a simple vertex animation in Linux
+* **[2025.08.23]**: added vertex buffer and geometry classes
+* **[2025.08.24]**: added cornell box scene, implemented multithreaded tiled rendering and frame buffering
+* **[2025.08.25]**: sick day
+* **[2025.08.26]**: cross platform threading support

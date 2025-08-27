@@ -30,7 +30,7 @@ namespace cgs
     {
         if (gShaderThreads.empty() == true)
         {
-            const int availableProcessorsCount = GetLogicalProcessorsCount() - 2;  // Leave 2 cores free
+            const uint32 availableProcessorsCount = GetLogicalProcessorsCount() - 2;  // Leave 2 cores free
             gShaderThreads.resize(static_cast<size_t>(availableProcessorsCount));
         }
 

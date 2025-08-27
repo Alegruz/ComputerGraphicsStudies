@@ -456,6 +456,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
         deltaTimeInMs = elapsedMicroseconds.QuadPart / 1000.0f;
     }
 
+    if(cgs::IsThreadValid(*cgs::gRenderThread.ThreadHandle))
+    {
+        cgs::Join(*cgs::gRenderThread.ThreadHandle);
+    }
+
     if(accelerators)
     {
         DestroyAcceleratorTable(accelerators);

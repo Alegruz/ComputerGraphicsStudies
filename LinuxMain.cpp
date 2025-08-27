@@ -597,8 +597,11 @@ main(int argc, char** argv)
         deltaTimeInMs = static_cast<float>(endTime.tv_sec - startTime.tv_sec) * 1000.0f + static_cast<float>(endTime.tv_nsec - startTime.tv_nsec) * 1e-6f;
         startTime = endTime;
     }
-    cgs::gRenderThread.IsFinished.store(true);
-    pthread_join(cgs::gRenderThread.ThreadInfo.ThreadId, nullptr);
+
+    if(cgs::IsThreadValid(*cgs::gRenderThread.ThreadHandle))
+    {
+        cgs::Join(*cgs::gRenderThread.ThreadHandle);
+    }
 
     // Cleanup
     DestroyShmBuffer(gShmBuffer);
