@@ -38,3 +38,4 @@ Target platforms (sorted by priority):
 * **[2025.08.24]**: added cornell box scene, implemented multithreaded tiled rendering and frame buffering
 * **[2025.08.25]**: sick day
 * **[2025.08.26]**: cross platform threading support
+* **[2025.08.27]**: fixed cross platform compilation issue

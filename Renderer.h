@@ -340,7 +340,7 @@ namespace cgs
 
     struct RenderThreadInfo final
     {
-        std::shared_ptr<ThreadHandle> ThreadHandle;
+        std::shared_ptr<ThreadHandle> CurrentThreadHandle;
         std::atomic<uint32> CurrentFrameIndex;
         std::vector<RenderInfo> RenderInfoPerFrame;
         std::atomic<bool> IsFinished;

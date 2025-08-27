@@ -416,7 +416,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
         // cgs::gBackBuffers[0].Clear();
         // cgs::Rasterize(cgs::gBackBuffers[0], cornellBox);
         // cgs::Present(window, cgs::gBackBuffers[0]);
-        if(cgs::gRenderThread.ThreadHandle == nullptr || cgs::IsThreadValid(*cgs::gRenderThread.ThreadHandle) == false)
+        if(cgs::gRenderThread.CurrentThreadHandle == nullptr || cgs::IsThreadValid(*cgs::gRenderThread.CurrentThreadHandle) == false)
         {
             cgs::ThreadCreateInfo createInfo =
             {
@@ -425,7 +425,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
                 .Process = &cgs::Render,
                 .Argument = &cgs::gRenderThread
             };
-            const bool threadCreateResult = cgs::Create(cgs::gRenderThread.ThreadHandle, createInfo);
+            const bool threadCreateResult = cgs::Create(cgs::gRenderThread.CurrentThreadHandle, createInfo);
             if(threadCreateResult == false)
             {
                 assert(false && "Failed to create render thread");
@@ -456,9 +456,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
         deltaTimeInMs = elapsedMicroseconds.QuadPart / 1000.0f;
     }
 
-    if(cgs::IsThreadValid(*cgs::gRenderThread.ThreadHandle))
+    if(cgs::IsThreadValid(*cgs::gRenderThread.CurrentThreadHandle))
     {
-        cgs::Join(*cgs::gRenderThread.ThreadHandle);
+        cgs::Join(*cgs::gRenderThread.CurrentThreadHandle);
     }
 
     if(accelerators)

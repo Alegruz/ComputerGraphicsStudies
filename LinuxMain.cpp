@@ -557,7 +557,7 @@ main(int argc, char** argv)
         gFrameCallback = wl_surface_frame(gSurface);
         wl_callback_add_listener(gFrameCallback, &gFrameListener, nullptr);
 
-        if(cgs::gRenderThread.ThreadHandle == nullptr || cgs::IsThreadValid(*cgs::gRenderThread.ThreadHandle) == false)
+        if(cgs::gRenderThread.CurrentThreadHandle == nullptr || cgs::IsThreadValid(*cgs::gRenderThread.CurrentThreadHandle) == false)
         {
             cgs::ThreadCreateInfo createInfo =
             {
@@ -566,7 +566,7 @@ main(int argc, char** argv)
                 .Process = &cgs::Render,
                 .Argument = &cgs::gRenderThread
             };
-            const bool threadCreateResult = cgs::Create(cgs::gRenderThread.ThreadHandle, createInfo);
+            const bool threadCreateResult = cgs::Create(cgs::gRenderThread.CurrentThreadHandle, createInfo);
             if(threadCreateResult == false)
             {
                 assert(false && "Failed to create render thread");
@@ -598,9 +598,9 @@ main(int argc, char** argv)
         startTime = endTime;
     }
 
-    if(cgs::IsThreadValid(*cgs::gRenderThread.ThreadHandle))
+    if(cgs::IsThreadValid(*cgs::gRenderThread.CurrentThreadHandle))
     {
-        cgs::Join(*cgs::gRenderThread.ThreadHandle);
+        cgs::Join(*cgs::gRenderThread.CurrentThreadHandle);
     }
 
     // Cleanup
