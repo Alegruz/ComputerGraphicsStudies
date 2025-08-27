@@ -43,6 +43,7 @@
 #include <cstdint>
 
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/mman.h>
 #include <sys/sysinfo.h>
 #include <unistd.h>

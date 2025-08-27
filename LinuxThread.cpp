@@ -13,12 +13,17 @@ namespace cgs
     struct StartThunk final
     {
         ThreadProcess Process;
-        void* Argument;
+        ThreadProcessArgument Argument;
     };
 
     static void* StartThread(void* param)
     {
         StartThunk thunk = *static_cast<StartThunk*>(param);
+        while (thunk.Argument.InoutThreadHandle == nullptr || IsThreadValid(*thunk.Argument.InoutThreadHandle) == false)
+        {
+            Yield();
+        }
+        
         thunk.Process(thunk.Argument);
         delete static_cast<StartThunk*>(param);
         return nullptr;
