@@ -16,37 +16,47 @@ jobs:
       matrix:
         include:
           # VS 2022
-          - name: VS2022 Debug
+          - name: VS2022 Debug CPU
             runner: windows-latest   # windows-latest has VS 2022
-            configure_preset: vs22_x64-debug   # (ok to use vs22_x64 too)
-            build_preset: vs22_x64-debug
+            configure_preset: vs22_x64-debug-cpu   # (ok to use vs22_x64 too)
+            build_preset: vs22_x64-debug-cpu
             configuration: Debug
-          - name: VS2022 Release
+          - name: VS2022 Release CPU
             runner: windows-latest
-            configure_preset: vs22_x64-release
-            build_preset: vs22_x64-release
+            configure_preset: vs22_x64-release-cpu
+            build_preset: vs22_x64-release-cpu
+            configuration: Release
+          - name: VS2022 Debug D3D12
+            runner: windows-latest   # windows-latest has VS 2022
+            configure_preset: vs22_x64-debug-d3d12   # (ok to use vs22_x64 too)
+            build_preset: vs22_x64-debug-d3d12
+            configuration: Debug
+          - name: VS2022 Release D3D12
+            runner: windows-latest
+            configure_preset: vs22_x64-release-d3d12
+            build_preset: vs22_x64-release-d3d12
             configuration: Release
           # Clang on Ubuntu
-          - name: Clang Ubuntu Debug
+          - name: Clang Ubuntu Debug CPU
             runner: ubuntu-latest
-            configure_preset: clang_ubuntu-debug
-            build_preset: clang_ubuntu-debug
+            configure_preset: clang_ubuntu-debug-cpu
+            build_preset: clang_ubuntu-debug-cpu
             configuration: Debug
-          - name: Clang Ubuntu Release
+          - name: Clang Ubuntu Release CPU
             runner: ubuntu-latest
-            configure_preset: clang_ubuntu-release
-            build_preset: clang_ubuntu-release
+            configure_preset: clang_ubuntu-release-cpu
+            build_preset: clang_ubuntu-release-cpu
             configuration: Release
           # GCC on Ubuntu
-          - name: GCC Ubuntu Debug
+          - name: GCC Ubuntu Debug CPU
             runner: ubuntu-latest
-            configure_preset: gcc_ubuntu-debug
-            build_preset: gcc_ubuntu-debug
+            configure_preset: gcc_ubuntu-debug-cpu
+            build_preset: gcc_ubuntu-debug-cpu
             configuration: Debug
-          - name: GCC Ubuntu Release
+          - name: GCC Ubuntu Release CPU
             runner: ubuntu-latest
-            configure_preset: gcc_ubuntu-release
-            build_preset: gcc_ubuntu-release
+            configure_preset: gcc_ubuntu-release-cpu
+            build_preset: gcc_ubuntu-release-cpu
             configuration: Release
 
     steps:

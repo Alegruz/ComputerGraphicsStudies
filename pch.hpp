@@ -59,3 +59,8 @@
 #endif  // defined(CGS_LINUX)
 
 #include "Common.h"
+
+#if defined(CGS_GRAPHICS_API_D3D12)
+#include <d3d12.h>
+#include <dxgi1_6.h>
+#endif  // defined(CGS_GRAPHICS_API_D3D12)

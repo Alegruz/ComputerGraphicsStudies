@@ -1,8 +1,8 @@
 #include "pch.hpp"
 
 #if defined(CGS_LINUX)
-#include "CommandLineParser.h"
-#include "Renderer.hpp"
+#include "Common.cpp"
+#include "LinuxThread.cpp"
 
 #include <iostream>
 
@@ -493,8 +493,40 @@ main(int argc, char** argv)
     wl_surface_commit(gSurface);
     wl_display_roundtrip(gDisplay);
 
-    cgs::InitializeRenderer(cgs::ConvertStringToEnumValue<cgs::eRenderDeviceType>(commandLineParser.GetArgument(cgs::eOptionType::RENDER_DEVICE)));
-    
+    cgs::eRenderDeviceType renderDeviceType = cgs::ConvertStringToEnumValue<cgs::eRenderDeviceType>(commandLineParser.GetArgument(cgs::eOptionType::RENDER_DEVICE));
+    switch (renderDeviceType)
+    {
+    case cgs::eRenderDeviceType::CPU:
+        break;
+    case cgs::eRenderDeviceType::D3D12:
+        [[fallthrough]];
+    default:
+        assert(false && "Unknown render device type");
+        renderDeviceType = cgs::eRenderDeviceType::CPU;
+        break;
+    }
+
+    bool hasInitializedRenderer = false;
+    switch (renderDeviceType)
+    {
+    case cgs::eRenderDeviceType::CPU:
+    {
+        hasInitializedRenderer = cgs::InitializeRenderer<cgs::eRenderDeviceType::CPU>();
+    }
+        break;
+    case cgs::eRenderDeviceType::D3D12:
+        [[fallthrough]];
+    default:
+        assert(false && "Unknown render device type");
+        break;
+    }
+
+    if (hasInitializedRenderer == false)
+    {
+        std::fprintf(stderr, "Failed to initialize renderer\n");
+        return 3;
+    }
+
     [[maybe_unused]] float deltaTimeInMs = 0.0f;
     std::vector<cgs::Geometry> cornellBox;
     cgs::CreateCornellBoxScene(cornellBox);

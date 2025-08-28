@@ -350,6 +350,7 @@ namespace cgs
     {
         CPU,
         CUDA,
+        D3D12,
         COUNT,
     };
 
@@ -376,8 +377,9 @@ namespace cgs
         return eRenderDeviceType::CPU;
     }
 
-    void
-    InitializeRenderer(const eRenderDeviceType renderDeviceType) noexcept;
+    template <eRenderDeviceType RENDER_DEVICE_TYPE>
+    [[nodiscard]] bool
+    InitializeRenderer() noexcept;
 
     void
     Render(ThreadProcessArgument& arg) noexcept;

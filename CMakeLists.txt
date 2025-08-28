@@ -13,6 +13,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(ENABLE_PCH "Enable precompiled headers" ON)
 
+find_package(CUDAToolkit REQUIRED)
+
 if(WIN32)
     set(CGS_WINDOWS TRUE)
     set(CGS_LINUX FALSE)
@@ -77,16 +79,10 @@ target_link_options(project_sanitizers INTERFACE $<$<AND:$<NOT:$<CXX_COMPILER_ID
 if(CGS_WINDOWS)
     add_executable(ComputerGraphicsStudies 
         Win32Main.cpp 
-        CommandLineParser.cpp
-        Renderer.cpp
-        Win32Thread.cpp
         )
 elseif(CGS_LINUX)
     add_executable(ComputerGraphicsStudies 
         LinuxMain.cpp
-        CommandLineParser.cpp
-        Renderer.cpp
-        LinuxThread.cpp
         $<TARGET_OBJECTS:xdg_shell>
         )
     target_include_directories(ComputerGraphicsStudies PRIVATE ${WAYLAND_INCLUDE_DIRS})
@@ -115,6 +111,18 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_definitions(ComputerGraphicsStudies PRIVATE CGS_COMPILER_GCC)
 else()
     message(FATAL_ERROR "Unsupported compiler")
+endif()
+
+if(DEFINED GRAPHICS_API_TYPE)
+    message(STATUS "Using render device ${GRAPHICS_API_TYPE}")
+    if(GRAPHICS_API_TYPE MATCHES "CPU")
+        target_compile_definitions(ComputerGraphicsStudies PRIVATE CGS_GRAPHICS_API_CPU)
+    elseif(GRAPHICS_API_TYPE MATCHES "D3D12")
+        target_compile_definitions(ComputerGraphicsStudies PRIVATE CGS_GRAPHICS_API_D3D12)
+        target_link_libraries(ComputerGraphicsStudies PRIVATE d3d12 dxgi)
+    else()
+        message(FATAL_ERROR "Unsupported graphics API type")
+    endif()
 endif()
 
 set_target_properties(ComputerGraphicsStudies PROPERTIES OUTPUT_NAME "ComputerGraphicsStudies_${CMAKE_SYSTEM_NAME}_${CMAKE_CXX_COMPILER_ID}_${CMAKE_BUILD_TYPE}")

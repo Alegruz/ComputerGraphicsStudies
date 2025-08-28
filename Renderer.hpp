@@ -180,6 +180,13 @@ namespace cgs
         }
     }
 
+    template <eRenderDeviceType RENDER_DEVICE_TYPE>
+    bool
+    InitializeRenderer() noexcept
+    {
+        static_assert(RENDER_DEVICE_TYPE != eRenderDeviceType::COUNT, "Invalid render device type");
+    }
+
     template<typename T>
     CGS_INLINE constexpr bool 
     VertexBuffer::AddVertex(const T& vertex) noexcept

@@ -1,8 +1,16 @@
 #include "pch.hpp"
 
 #if defined(CGS_WINDOWS)
-#include "CommandLineParser.h"
-#include "Renderer.hpp"
+#include "Common.cpp"
+
+#if defined(CGS_GRAPHICS_API_CPU)
+#elif defined(CGS_GRAPHICS_API_D3D12)   // NOT defined(CGS_GRAPHICS_API_CPU)
+#include "D3D12Renderer.cpp"
+#else   // NOT defined(CGS_GRAPHICS_API_D3D12) && NOT defined(CGS_GRAPHICS_API_CPU)
+#error Unsupported graphics API type
+#endif  // NOT defined(CGS_GRAPHICS_API_D3D12) && NOT defined(CGS_GRAPHICS_API_CPU)
+
+#include "Win32Thread.cpp"
 
 static bool gIsRunning = true;
 
@@ -383,7 +391,47 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
 
     HACCEL accelerators = CreateAccelerators();
 
-    cgs::InitializeRenderer(cgs::ConvertStringToEnumValue<cgs::eRenderDeviceType>(commandLineParser.GetArgument(cgs::eOptionType::RENDER_DEVICE)));
+    bool hasInitializedRenderer = false;
+    cgs::eRenderDeviceType renderDeviceType = cgs::ConvertStringToEnumValue<cgs::eRenderDeviceType>(commandLineParser.GetArgument(cgs::eOptionType::RENDER_DEVICE));
+    switch (renderDeviceType)
+    {
+    case cgs::eRenderDeviceType::CPU:
+        break;
+    case cgs::eRenderDeviceType::D3D12:
+    {
+        hasInitializedRenderer = cgs::InitializeRenderer<cgs::eRenderDeviceType::D3D12>();
+        if (hasInitializedRenderer == false)
+        {
+            renderDeviceType = cgs::eRenderDeviceType::CPU;
+        }
+    }
+        break;
+    default:
+        assert(false && "Unknown render device type");
+        renderDeviceType = cgs::eRenderDeviceType::CPU;
+        break;
+    }
+
+    switch (renderDeviceType)
+    {
+    case cgs::eRenderDeviceType::CPU:
+    {
+        hasInitializedRenderer = cgs::InitializeRenderer<cgs::eRenderDeviceType::CPU>();
+    }
+        break;
+    case cgs::eRenderDeviceType::D3D12:
+        break;
+    default:
+        assert(false && "Unknown render device type");
+        break;
+    }
+
+    if(hasInitializedRenderer == false)
+    {
+        OutputDebugString(L"Failed to initialize renderer.\n");
+        OutputDebugString(L"Exiting application.\n");
+        return -1;
+    }
 
     [[maybe_unused]] float deltaTimeInMs = 0.0f;
     std::vector<cgs::Geometry> cornellBox;
