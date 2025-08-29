@@ -40,3 +40,4 @@ Target platforms (sorted by priority):
 * **[2025.08.26]**: cross platform threading support
 * **[2025.08.27]**: fixed cross platform compilation issue
 * **[2025.08.28]**: started Direct3D 12 support
+* **[2025.08.29]**: added command line arguments for width and height
