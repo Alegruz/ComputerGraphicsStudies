@@ -9,6 +9,8 @@ namespace cgs
         VERSION,
         INPUT_RESOURCE,
         RENDER_DEVICE,
+        WIDTH,
+        HEIGHT,
         COUNT,
     };
 
@@ -74,6 +76,7 @@ namespace cgs
 
         bool ParseArguments() noexcept;
         CGS_INLINE const std::string& GetArgument(const eOptionType optionType) const noexcept { return mOptionValues[static_cast<uint32>(optionType)]; }
+        CGS_INLINE const int32 GetIntArgument(const eOptionType optionType) const noexcept { return std::atoi(mOptionValues[static_cast<uint32>(optionType)].c_str()); }
 
     private:
         static void initializeOptionsMap() noexcept;
