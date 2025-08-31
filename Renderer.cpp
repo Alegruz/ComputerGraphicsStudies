@@ -1,13 +1,14 @@
 #include "pch.hpp"
 #include "Renderer.hpp"
-#include "Renderer.h"
+#include "Thread.h"
 
+#include <iostream>
 #include <numbers>
 #include <random>
 
 namespace cgs
 {
-    std::vector<std::shared_ptr<ThreadHandle>> gShaderThreads;
+    std::vector<SubRenderThreadInfo> gSubRenderThreads;
 
     static Camera gMainCamera;
     static float4x4 gViewMatrix;
@@ -42,7 +43,7 @@ namespace cgs
         gMainCamera = Camera(
             Camera::CreateInfo
             {
-                .Position = Coordinate<eCoordinateSpace::WORLD>{ 278.0f, 273.0f, -800.0f },
+                .Position = Coordinate<eCoordinateSpace::WORLD>{ -278.0f, 273.0f, -800.0f },
                 .Front = Coordinate<eCoordinateSpace::WORLD>{ 0.0f, 0.0f, 1.0f },
                 .Up = Coordinate<eCoordinateSpace::WORLD>{ 0.0f, 1.0f, 0.0f },
             }
@@ -58,7 +59,7 @@ namespace cgs
             {
                 float4( xAxis.X, xAxis.Y, xAxis.Z, -Dot(xAxis, gMainCamera.GetPosition()) ),
                 float4( yAxis.X, yAxis.Y, yAxis.Z, -Dot(yAxis, gMainCamera.GetPosition()) ),
-                float4(zAxis.X, zAxis.Y, zAxis.Z, -Dot(zAxis, gMainCamera.GetPosition())),
+                float4( zAxis.X, zAxis.Y, zAxis.Z, -Dot(zAxis, gMainCamera.GetPosition()) ),
                 float4( 0.0f, 0.0f, 0.0f, 1.0f ),
             },
         };
@@ -67,7 +68,7 @@ namespace cgs
         const float f = 1.0f / std::tan(fovY / 2.0f);
         const float aspectRatio = 1600.0f / 900.0f;
         const float nearPlane = 0.1f;
-        const float farPlane = 1000.0f;
+        const float farPlane = 2000.0f;
 
         gProjectionMatrix = float4x4
         {
@@ -84,22 +85,20 @@ namespace cgs
         outGeometries.reserve(8);
 
         // Floor
-        outGeometries.push_back(Geometry());
+        outGeometries.push_back(Geometry(std::string("Floor")));
         Geometry& floor = outGeometries.back();
         {
             VertexBuffer floorVertexBuffer(
-                VertexBuffer::CreateInfo
+                RenderResource::CreateInfo
                 {
-                    .HandnessType = eHandnessType::LEFT,
-                    .WindingType = eWindingType::COUNTER_CLOCKWISE,
-                    .StrideInBytes = sizeof(VertexPN),
-                    .Data = std::vector<byte>{}
+                    .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
+                    .DataOrEmpty = std::vector<byte>{},
                 }
-            );
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 552.8f, 0.0f, 0.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { 0.0f, 0.0f, 0.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 0.0f, 0.0f, 559.2f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 549.6f, 0.0f, 559.2f };
+                );
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 0.0f, 0.0f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -552.8f, 0.0f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -549.6f, 0.0f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 0.0f, 559.2f };
             std::vector<uint16> floorIndices;
             floorIndices.reserve(6);
             AddQuadVertices(floorVertexBuffer, floorIndices, v0, v1, v2, v3);
@@ -109,22 +108,20 @@ namespace cgs
         }
 
         // Light
-        outGeometries.push_back(Geometry());
+        outGeometries.push_back(Geometry(std::string("Light")));
         Geometry& light = outGeometries.back();
         {
             VertexBuffer lightVertexBuffer(
-                VertexBuffer::CreateInfo
+                RenderResource::CreateInfo
                 {
-                    .HandnessType = eHandnessType::LEFT,
-                    .WindingType = eWindingType::COUNTER_CLOCKWISE,
-                    .StrideInBytes = sizeof(VertexPN),
-                    .Data = std::vector<byte>{}
+                    .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
+                    .DataOrEmpty = std::vector<byte>{},
                 }
-            );
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 343.0f, 548.8f, 227.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { 343.0f, 548.8f, 332.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 213.0f, 548.8f, 332.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 213.0f, 548.8f, 227.0f };
+                );
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -343.0f, 548.8f, 332.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -343.0f, 548.8f, 227.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -213.0f, 548.8f, 227.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -213.0f, 548.8f, 332.0f };
             std::vector<uint16> lightIndices;
             lightIndices.reserve(6);
             AddQuadVertices(lightVertexBuffer, lightIndices, v0, v1, v2, v3);
@@ -135,23 +132,21 @@ namespace cgs
         }
 
         // Ceiling
-        outGeometries.push_back(Geometry());
+        outGeometries.push_back(Geometry(std::string("Ceiling")));
         Geometry& ceiling = outGeometries.back();
         {
             VertexBuffer ceilingVertexBuffer(
-                VertexBuffer::CreateInfo
+                RenderResource::CreateInfo
                 {
-                    .HandnessType = eHandnessType::LEFT,
-                    .WindingType = eWindingType::COUNTER_CLOCKWISE,
-                    .StrideInBytes = sizeof(VertexPN),
-                    .Data = std::vector<byte>{}
+                    .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
+                    .DataOrEmpty = std::vector<byte>{},
                 }
             );
 
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 556.0f, 548.8f, 0.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { 556.0f, 548.8f, 559.2f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 0.0f, 548.8f, 559.2f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 548.8f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -556.0f, 548.8f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -556.0f, 548.8f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 0.0f, 548.8f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 548.8f, 559.2f };
             std::vector<uint16> ceilingIndices;
             ceilingIndices.reserve(6);
             AddQuadVertices(ceilingVertexBuffer, ceilingIndices, v0, v1, v2, v3);
@@ -161,23 +156,21 @@ namespace cgs
         }
         
         // Back wall
-        outGeometries.push_back(Geometry());
+        outGeometries.push_back(Geometry(std::string("Back Wall")));
         Geometry& backWall = outGeometries.back();
         {
             VertexBuffer backWallVertexBuffer(
-                VertexBuffer::CreateInfo
+                RenderResource::CreateInfo
                 {
-                    .HandnessType = eHandnessType::LEFT,
-                    .WindingType = eWindingType::COUNTER_CLOCKWISE,
-                    .StrideInBytes = sizeof(VertexPN),
-                    .Data = std::vector<byte>{}
+                    .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
+                    .DataOrEmpty = std::vector<byte>{},
                 }
             );
 
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 549.6f, 0.0f, 559.2f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { 0.0f, 0.0f, 559.2f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 0.0f, 548.8f, 559.2f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 556.0f, 548.8f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 0.0f, 0.0f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -549.6f, 0.0f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -556.0f, 548.8f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 548.8f, 559.2f };
             std::vector<uint16> backWallIndices;
             backWallIndices.reserve(6);
             AddQuadVertices(backWallVertexBuffer, backWallIndices, v0, v1, v2, v3);
@@ -187,22 +180,20 @@ namespace cgs
         }
 
         // Right wall
-        outGeometries.push_back(Geometry());
+        outGeometries.push_back(Geometry(std::string("Right Wall")));
         Geometry& rightWall = outGeometries.back();
         {
             VertexBuffer rightWallVertexBuffer(
-                VertexBuffer::CreateInfo
+                RenderResource::CreateInfo
                 {
-                    .HandnessType = eHandnessType::LEFT,
-                    .WindingType = eWindingType::COUNTER_CLOCKWISE,
-                    .StrideInBytes = sizeof(VertexPN),
-                    .Data = std::vector<byte>{}
+                    .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
+                    .DataOrEmpty = std::vector<byte>{},
                 }
-            );
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 0.0f, 0.0f, 559.2f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { 0.0f, 0.0f, 0.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 0.0f, 548.8f, 0.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 548.8f, 559.2f };
+                );
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 0.0f, 0.0f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { 0.0f, 0.0f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 0.0f, 548.8f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 548.8f, 0.0f };
             std::vector<uint16> rightWallIndices;
             rightWallIndices.reserve(6);
             AddQuadVertices(rightWallVertexBuffer, rightWallIndices, v0, v1, v2, v3);
@@ -212,23 +203,21 @@ namespace cgs
         }
 
         // Left wall
-        outGeometries.push_back(Geometry());
+        outGeometries.push_back(Geometry(std::string("Left Wall")));
         Geometry& leftWall = outGeometries.back();
         {
             VertexBuffer leftWallVertexBuffer(
-                VertexBuffer::CreateInfo
+                RenderResource::CreateInfo
                 {
-                    .HandnessType = eHandnessType::LEFT,
-                    .WindingType = eWindingType::COUNTER_CLOCKWISE,
-                    .StrideInBytes = sizeof(VertexPN),
-                    .Data = std::vector<byte>{}
+                    .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
+                    .DataOrEmpty = std::vector<byte>{},
                 }
             );
 
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 552.8f, 0.0f, 0.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { 549.6f, 0.0f, 559.2f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 556.0f, 548.8f, 559.2f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 556.0f, 548.8f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -549.6f, 0.0f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -552.8f, 0.0f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -556.0f, 548.8f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -556.0f, 548.8f, 559.2f };
             std::vector<uint16> leftWallIndices;
             leftWallIndices.reserve(6);
             AddQuadVertices(leftWallVertexBuffer, leftWallIndices, v0, v1, v2, v3);
@@ -238,50 +227,48 @@ namespace cgs
         }
 
         // Short block
-        outGeometries.push_back(Geometry());
+        outGeometries.push_back(Geometry(std::string("Short Block")));
         Geometry& shortBlock = outGeometries.back();
         {
             VertexBuffer shortBlockVertexBuffer(
-                VertexBuffer::CreateInfo
+                RenderResource::CreateInfo
                 {
-                    .HandnessType = eHandnessType::LEFT,
-                    .WindingType = eWindingType::COUNTER_CLOCKWISE,
-                    .StrideInBytes = sizeof(VertexPN),
-                    .Data = std::vector<byte>{}
+                    .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
+                    .DataOrEmpty = std::vector<byte>{},
                 }
             );
 
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 130.0f, 165.0f, 65.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { 82.0f, 165.0f, 225.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 240.0f, 165.0f, 272.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 290.0f, 165.0f, 114.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -82.0f, 165.0f, 225.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -130.0f, 165.0f, 65.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -290.0f, 165.0f, 114.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -240.0f, 165.0f, 272.0f };
 
             std::vector<uint16> shortBlockIndices;
             shortBlockIndices.reserve(6 * 5);
             AddQuadVertices(shortBlockVertexBuffer, shortBlockIndices, v0, v1, v2, v3);
 
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v4 = { 290.0f, 0.0f, 114.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v5 = { 290.0f, 165.0f, 114.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v6 = { 240.0f, 165.0f, 272.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v7 = { 240.0f, 0.0f, 272.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v4 = { -290.0f, 165.0f, 114.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v5 = { -290.0f, 0.0f, 114.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v6 = { -240.0f, 0.0f, 272.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v7 = { -240.0f, 165.0f, 272.0f };
             AddQuadVertices(shortBlockVertexBuffer, shortBlockIndices, v4, v5, v6, v7);
 
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v8 = { 130.0f, 0.0f, 65.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v9 = { 130.0f, 165.0f, 65.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v10 = { 290.0f, 165.0f, 114.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v11 = { 290.0f, 0.0f, 114.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v8 = { -130.0f, 165.0f, 65.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v9 = { -130.0f, 0.0f, 65.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v10 = { -290.0f, 0.0f, 114.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v11 = { -290.0f, 165.0f, 114.0f };
             AddQuadVertices(shortBlockVertexBuffer, shortBlockIndices, v8, v9, v10, v11);
 
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v12 = { 82.0f, 0.0f, 225.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v13 = { 82.0f, 165.0f, 225.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v14 = { 130.0f, 165.0f, 65.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v15 = { 130.0f, 0.0f, 65.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v12 = { -82.0f, 165.0f, 225.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v13 = { -82.0f, 0.0f, 225.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v14 = { -130.0f, 0.0f, 65.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v15 = { -130.0f, 165.0f, 65.0f };
             AddQuadVertices(shortBlockVertexBuffer, shortBlockIndices, v12, v13, v14, v15);
 
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v16 = { 240.0f, 0.0f, 272.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v17 = { 240.0f, 165.0f, 272.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v18 = { 82.0f, 165.0f, 225.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v19 = { 82.0f, 0.0f, 225.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v16 = { -240.0f, 165.0f, 272.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v17 = { -240.0f, 0.0f, 272.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v18 = { -82.0f, 0.0f, 225.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v19 = { -82.0f, 165.0f, 225.0f };
             AddQuadVertices(shortBlockVertexBuffer, shortBlockIndices, v16, v17, v18, v19);
 
             shortBlock.SetVertexBuffer(std::move(shortBlockVertexBuffer));
@@ -290,50 +277,48 @@ namespace cgs
         }
 
         // Tall block
-        outGeometries.push_back(Geometry());
+        outGeometries.push_back(Geometry(std::string("Tall Block")));
         Geometry& tallBlock = outGeometries.back();
         {
             VertexBuffer tallBlockVertexBuffer(
-                VertexBuffer::CreateInfo
+                RenderResource::CreateInfo
                 {
-                    .HandnessType = eHandnessType::LEFT,
-                    .WindingType = eWindingType::COUNTER_CLOCKWISE,
-                    .StrideInBytes = sizeof(VertexPN),
-                    .Data = std::vector<byte>{}
+                    .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
+                    .DataOrEmpty = std::vector<byte>{},
                 }
             );
 
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 423.0f, 330.0f, 247.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { 265.0f, 330.0f, 296.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 314.0f, 330.0f, 456.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 472.0f, 330.0f, 406.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -265.0f, 330.0f, 296.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -423.0f, 330.0f, 247.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -472.0f, 330.0f, 406.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -314.0f, 330.0f, 456.0f };
 
             std::vector<uint16> tallBlockIndices;
             tallBlockIndices.reserve(6 * 5);
             AddQuadVertices(tallBlockVertexBuffer, tallBlockIndices, v0, v1, v2, v3);
 
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v4 = { 423.0f, 0.0f, 247.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v5 = { 423.0f, 330.0f, 247.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v6 = { 472.0f, 330.0f, 406.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v7 = { 472.0f, 0.0f, 406.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v4 = { -423.0f, 330.0f, 247.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v5 = { -423.0f, 0.0f, 247.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v6 = { -472.0f, 0.0f, 406.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v7 = { -472.0f, 330.0f, 406.0f };
             AddQuadVertices(tallBlockVertexBuffer, tallBlockIndices, v4, v5, v6, v7);
 
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v8 = { 472.0f, 0.0f, 406.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v9 = { 472.0f, 330.0f, 406.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v10 = { 314.0f, 330.0f, 456.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v11 = { 314.0f, 0.0f, 456.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v8 = { -472.0f, 330.0f, 406.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v9 = { -472.0f, 0.0f, 406.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v10 = { -314.0f, 0.0f, 456.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v11 = { -314.0f, 330.0f, 456.0f };
             AddQuadVertices(tallBlockVertexBuffer, tallBlockIndices, v8, v9, v10, v11);
 
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v12 = { 314.0f, 0.0f, 456.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v13 = { 314.0f, 330.0f, 456.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v14 = { 265.0f, 330.0f, 296.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v15 = { 265.0f, 0.0f, 296.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v12 = { -314.0f, 330.0f, 456.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v13 = { -314.0f, 0.0f, 456.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v14 = { -265.0f, 0.0f, 296.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v15 = { -265.0f, 330.0f, 296.0f };
             AddQuadVertices(tallBlockVertexBuffer, tallBlockIndices, v12, v13, v14, v15);
 
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v16 = { 265.0f, 0.0f, 296.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v17 = { 265.0f, 330.0f, 296.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v18 = { 423.0f, 330.0f, 247.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v19 = { 423.0f, 0.0f, 247.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v16 = { -265.0f, 330.0f, 296.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v17 = { -265.0f, 0.0f, 296.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v18 = { -423.0f, 0.0f, 247.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v19 = { -423.0f, 330.0f, 247.0f };
             AddQuadVertices(tallBlockVertexBuffer, tallBlockIndices, v16, v17, v18, v19);
 
             tallBlock.SetVertexBuffer(std::move(tallBlockVertexBuffer));
@@ -434,88 +419,168 @@ namespace cgs
     }
 
     void
-    Render(ThreadProcessArgument& arg) noexcept
+    RenderThreadMain(ThreadProcessArgument& arg) noexcept
     {
-        if(arg.Argument == nullptr)
+        if (arg.Argument == nullptr)
         {
             assert(false && "RenderInfo argument is null");
             return;
         }
 
-        RenderThreadInfo& renderThreadInfo = *static_cast<RenderThreadInfo*>(arg.Argument);
-        while (renderThreadInfo.IsFinished.load() == false)
+        if (gSubRenderThreads.empty() == true)
         {
-            // CPU rendering logic
-            const uint32 currentFrameIndex = renderThreadInfo.CurrentFrameIndex.load();
-            if (currentFrameIndex > BACK_BUFFERS_COUNT)
-            {
-                assert(false && "CurrentFrameIndex exceeded BACK_BUFFERS_COUNT");
-                renderThreadInfo.IsFinished.store(true);
-                return;
-            }
+            const uint32 availableProcessorsCount = GetLogicalProcessorsCount() - 2;  // Leave 2 cores free
+            gSubRenderThreads.reserve(static_cast<size_t>(availableProcessorsCount));
 
-            RenderInfo& renderInfo = renderThreadInfo.RenderInfoPerFrame[renderThreadInfo.CurrentFrameIndex];
-            if(renderInfo.RenderState.load() == RenderInfo::eRenderState::IDLE)
+            for (uint32 i = 0; i < availableProcessorsCount; ++i)
             {
-                renderInfo.RenderState.store(RenderInfo::eRenderState::RENDERING);
-                renderInfo.InoutBackBuffer->Clear();
-                Rasterize(*renderInfo.InoutBackBuffer, *renderInfo.Geometries);
+                gSubRenderThreads.emplace_back();
+                SubRenderThreadInfo& threadInfo = gSubRenderThreads.back();
+                ThreadCreateInfo threadCreateInfo =
+                {
+                    .Name = "SubRenderThread",
+                    .StackSize = 0,
+                    .Process = &SubRenderThreadMain,
+                    .Argument = &threadInfo,
+                };
+                bool threadCreateResult = Create(threadInfo.CurrentThreadHandle, threadCreateInfo);
+                if (threadCreateResult == false)
+                {
+                    assert(false && "Failed to create rasterization thread");
+                }
             }
-            renderInfo.RenderState.store(RenderInfo::eRenderState::FINISHED);
-            renderThreadInfo.CurrentFrameIndex.store((currentFrameIndex + 1) % BACK_BUFFERS_COUNT);
         }
-        renderThreadInfo.IsFinished.store(true);
+
+        RenderThreadInfo& renderThreadInfo = *static_cast<RenderThreadInfo*>(arg.Argument);
+        while (renderThreadInfo.IsActive.load())
+        {
+            std::unique_lock<std::mutex> uniqueLock(renderThreadInfo.RenderWorksMutex, std::defer_lock);
+            uniqueLock.lock();
+            if (renderThreadInfo.RenderWorksPerFrame.empty() == false)
+            {
+                RenderWork renderWork = std::move(renderThreadInfo.RenderWorksPerFrame.front());
+                renderThreadInfo.RenderWorksPerFrame.pop();
+                uniqueLock.unlock();
+
+                // Process the render work
+                renderWork.OutTexture.Clear();
+                renderWork.OutDepthBuffer.Clear(std::numeric_limits<float>::max());
+                if (renderThreadInfo.RenderMethod == eRenderMethod::RASTERIZATION)
+                {
+                    renderThreadInfo.CurrentWorkIndex.store(renderWork.WorkIndex);
+                    Rasterize(renderWork);
+                    renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
+                    // std::cout << "RenderWork completed: " << renderWork.WorkIndex << std::endl;
+                }
+                else
+                {
+                    assert(false && "Unsupported render method in RenderThreadMain");
+                }
+            }
+            else
+            {
+                uniqueLock.unlock();
+            }
+        }
+
+        for(SubRenderThreadInfo& threadInfo : gSubRenderThreads)
+        {
+            threadInfo.IsActive.store(false);
+            Join(*threadInfo.CurrentThreadHandle);
+            threadInfo.CurrentThreadHandle = nullptr;
+        }
     }
 
     void
-    SubRasterize(ThreadProcessArgument& arg) noexcept
+    SubRenderThreadMain(ThreadProcessArgument& arg) noexcept
     {
         if (arg.Argument == nullptr)
         {
-            assert(false && "SubRasterizeInfo argument is null");
+            assert(false && "SubRenderThreadInfo argument is null");
             return;
         }
 
-        SubRasterizeInfo& inoutInfo = *static_cast<SubRasterizeInfo*>(arg.Argument);
-        if(arg.InoutThreadHandle == nullptr || IsThreadValid(*arg.InoutThreadHandle) == false)
+        SubRenderThreadInfo& threadInfo = *static_cast<SubRenderThreadInfo*>(arg.Argument);
+        while (threadInfo.IsActive.load())
         {
-            assert(false && "SubRasterizeInfo argument has null ThreadHandle");
-            return;
-        }
-
-        const uint32 width = inoutInfo.InoutTexture.GetWidth();
-        const uint32 height = inoutInfo.InoutTexture.GetHeight();
-
-        for (uint32 y = inoutInfo.MinY; y < inoutInfo.MaxY; ++y)
-        {
-            for (uint32 x = inoutInfo.MinX; x < inoutInfo.MaxX; ++x)
+            std::unique_lock<std::mutex> uniqueLock(threadInfo.RenderWorksMutex, std::defer_lock);
+            uniqueLock.lock();
+            if (threadInfo.SubRenderWorks.empty() == false)
             {
-                const Coordinate<eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE> point{
+                SubRenderWork renderWork = std::move(threadInfo.SubRenderWorks.front());
+                threadInfo.SubRenderWorks.pop();
+                uniqueLock.unlock();
+
+                // Process the render work
+                if (threadInfo.RenderMethod == eRenderMethod::RASTERIZATION)
+                {
+                    SubRasterize(renderWork);
+                    threadInfo.LastCompleteWorkIndex = renderWork.WorkIndex;
+                    // std::cout << "SubRenderWork completed: " << renderWork.WorkIndex << std::endl;
+                }
+                else
+                {
+                    assert(false && "Unsupported render method in SubRenderThreadMain");
+                }
+            }
+            else
+            {
+                uniqueLock.unlock();
+            }
+        }
+    }
+
+    void
+    SubRasterize(SubRenderWork& work) noexcept
+    {
+        const uint32 width = work.ParentRenderWork.OutTexture.GetWidth();
+        const uint32 height = work.ParentRenderWork.OutTexture.GetHeight();
+
+        for (uint32 y = work.MinY; y < work.MaxY; ++y)
+        {
+            for (uint32 x = work.MinX; x < work.MaxX; ++x)
+            {
+                Coordinate<eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE> point{
                     static_cast<float>(x) / static_cast<float>(width) * 2.0f - 1.0f,
                     static_cast<float>(y) / static_cast<float>(height) * 2.0f - 1.0f,
                     0.0f
                 };
-                const float3 barycentricCoords = ComputeBarycentricCoordinates(inoutInfo.V0.NdcPosition, inoutInfo.V1.NdcPosition, inoutInfo.V2.NdcPosition, point);
+                const float3 barycentricCoords = ComputeBarycentricCoordinates(work.V0.NdcPosition, work.V1.NdcPosition, work.V2.NdcPosition, point);
                 const bool isInTriangle = 0.0f <= barycentricCoords.X && barycentricCoords.X <= 1.0f &&
                     0.0f <= barycentricCoords.Y && barycentricCoords.Y <= 1.0f &&
                     0.0f <= barycentricCoords.Z && barycentricCoords.Z <= 1.0f;
                 if (isInTriangle)
                 {
+#if 1
+                    point.Z = work.V0.NdcPosition.Z * barycentricCoords.X + work.V1.NdcPosition.Z * barycentricCoords.Y + work.V2.NdcPosition.Z * barycentricCoords.Z;
+                    float depthValue;
+                    work.ParentRenderWork.OutDepthBuffer.GetFragment(depthValue, x, y);
+                    if (point.Z >= depthValue)
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        work.ParentRenderWork.OutDepthBuffer.SetFragmentValue(x, y, point.Z);
+                    }
                     // Simple rasterization logic: set every pixel to a color
                     // In a real application, you would perform actual rasterization here
-                    CornellBoxFragmentShaderInput fsInput =
+                    [[maybe_unused]] CornellBoxFragmentShaderInput fsInput =
                     {
                         .VSOutput =
                         {
                             .NdcPosition = point,
-                            .WsPosition = inoutInfo.V0.WsPosition * barycentricCoords.X + inoutInfo.V1.WsPosition * barycentricCoords.Y + inoutInfo.V2.WsPosition * barycentricCoords.Z,
-                            .Normal = inoutInfo.V0.Normal * barycentricCoords.X + inoutInfo.V1.Normal * barycentricCoords.Y + inoutInfo.V2.Normal * barycentricCoords.Z,
+                            .WsPosition = work.V0.WsPosition * barycentricCoords.X + work.V1.WsPosition * barycentricCoords.Y + work.V2.WsPosition * barycentricCoords.Z,
+                            .Normal = work.V0.Normal * barycentricCoords.X + work.V1.Normal * barycentricCoords.Y + work.V2.Normal * barycentricCoords.Z,
                         },
-                        .Color = inoutInfo.CurrentGeometry.GetColor(),
-                        .EmissiveGeometry = inoutInfo.EmissiveGeometry,
+                        .Color = work.CurrentGeometry.GetColor(),
+                        .EmissiveGeometry = work.EmissiveGeometry,
                     };
                     const Rgba8 fragmentValue = CornellBoxFragmentShader(fsInput);
-                    inoutInfo.InoutTexture.SetFragmentValue(x, y, fragmentValue.R, fragmentValue.G, fragmentValue.B, fragmentValue.A);
+#else
+                    const Rgba8 fragmentValue = RED;
+#endif
+                    work.ParentRenderWork.OutTexture.SetFragmentValue(x, y, fragmentValue);
                 }
             }
         }

@@ -88,6 +88,7 @@ namespace cgs
 {
     std::vector<std::filesystem::path> gRecentFiles;
     std::vector<Texture> gBackBuffers(BACK_BUFFERS_COUNT, Texture(1920, 1080));
+    std::vector<Texture> gBackBuffers(BACK_BUFFERS_COUNT, Texture(1920, 1080));
     static RenderThreadInfo gRenderThread;
 }
 

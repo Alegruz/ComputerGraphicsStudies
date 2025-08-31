@@ -13,7 +13,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(ENABLE_PCH "Enable precompiled headers" ON)
 
-find_package(CUDAToolkit REQUIRED)
+find_package(CUDAToolkit)
 
 if(WIN32)
     set(CGS_WINDOWS TRUE)

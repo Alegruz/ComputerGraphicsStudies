@@ -4,41 +4,17 @@
 
 namespace cgs
 {
-    extern std::vector<std::shared_ptr<ThreadHandle>> gShaderThreads;
-
-    struct SubRasterizeInfo final
-    {
-        Texture& InoutTexture;
-        const Geometry& CurrentGeometry;
-        const Geometry& EmissiveGeometry;
-
-        const CornellBoxVertexShaderOutput& V0;
-        const CornellBoxVertexShaderOutput& V1;
-        const CornellBoxVertexShaderOutput& V2;
-        uint32 MinX = 0;
-        uint32 MaxX = 0;
-        uint32 MinY = 0;
-        uint32 MaxY = 0;
-    };
-
-    void
-    SubRasterize(ThreadProcessArgument& arg) noexcept;
+    extern std::vector<SubRenderThreadInfo> gSubRenderThreads;
 
     template<eRasterizationMethod METHOD /*= eRasterizationMethod::DEFAULT*/>
     void
-    Rasterize(Texture& outTexture, const std::vector<Geometry>& geometries) noexcept
+    Rasterize(RenderWork& renderWork) noexcept
     {
-        if (gShaderThreads.empty() == true)
-        {
-            const uint32 availableProcessorsCount = GetLogicalProcessorsCount() - 2;  // Leave 2 cores free
-            gShaderThreads.resize(static_cast<size_t>(availableProcessorsCount));
-        }
-
-        const uint32 width = outTexture.GetWidth();
-        const uint32 height = outTexture.GetHeight();
+        const uint32 width = renderWork.OutTexture.GetWidth();
+        const uint32 height = renderWork.OutTexture.GetHeight();
 
         const Geometry* emissiveGeometryOrNull = nullptr;
-        for (const Geometry& geometry : geometries)
+        for (const Geometry& geometry : renderWork.Geometries)
         {
             if (geometry.IsEmissive() == true)
             {
@@ -55,7 +31,10 @@ namespace cgs
         
         const Geometry& emissiveGeometry = *emissiveGeometryOrNull;
 
-        for (const Geometry& geometry : geometries)
+        const uint32 subRenderThreadsCount = static_cast<uint32>(gSubRenderThreads.size());
+        std::vector<uint32> finalTileIndicesPerThread;
+        finalTileIndicesPerThread.resize(subRenderThreadsCount, 0);
+        for (const Geometry& geometry : renderWork.Geometries)
         {
             const VertexBuffer& vertexBuffer = geometry.GetVertexBuffer();
             const std::vector<uint16>& indices = geometry.GetIndices();
@@ -86,9 +65,6 @@ namespace cgs
                     const uint32 tilesCountX = (width + TILE_SIZE - 1) / TILE_SIZE;
                     const uint32 tilesCountY = (height + TILE_SIZE - 1) / TILE_SIZE;
 
-                    std::vector<SubRasterizeInfo> subRasterizeInfos;
-                    subRasterizeInfos.reserve(tilesCountX * tilesCountY);
-
                     for(uint32 tileYIndex = 0; tileYIndex < tilesCountY; ++tileYIndex)
                     {
                         const uint32 minY = tileYIndex * TILE_SIZE;
@@ -107,76 +83,73 @@ namespace cgs
                                 maxX = width;
                             }
 
-                            subRasterizeInfos.push_back(
-                                SubRasterizeInfo
-                                {
-                                    .InoutTexture = outTexture,
-                                    .CurrentGeometry = geometry,
-                                    .EmissiveGeometry = emissiveGeometry,
-                                    .V0 = v0,
-                                    .V1 = v1,
-                                    .V2 = v2,
-                                    .MinX = minX,
-                                    .MaxX = maxX,
-                                    .MinY = minY,
-                                    .MaxY = maxY,
-                                }
-                            );
-                        }
-                    }
-
-                    uint32 finishedTileCount = 0;
-                    uint32 tileIndexToProcess = 0;
-                    uint32 activeThreadsCount = 0;
-                    const uint32 maximumActiveThreadsCount = static_cast<uint32>(gShaderThreads.size());
-                    if(maximumActiveThreadsCount == 0)
-                    {
-                        assert(false && "No available threads for rasterization");
-                        return;
-                    }
-
-                    while (finishedTileCount < subRasterizeInfos.size())
-                    {
-                        for(uint32 threadIndex = 0; threadIndex < gShaderThreads.size(); ++threadIndex)
-                        {
-                            std::shared_ptr<ThreadHandle>& threadHandle = gShaderThreads[threadIndex];
-
-                            const bool isValidThread = threadHandle != nullptr && IsThreadValid(*threadHandle);
-                            const bool isFinished = isValidThread && IsThreadAlive(*threadHandle) == false;
-                            if (isValidThread == false || isFinished)
                             {
-                                if(isFinished)
-                                {
-                                    Join(*threadHandle);
-                                    --activeThreadsCount;
-                                    ++finishedTileCount;
-                                }
+                                const uint32 tileIndex = tileYIndex * tilesCountX + tileXIndex;
+                                const uint32 subRenderThreadIndex = tileIndex % subRenderThreadsCount;
+                                finalTileIndicesPerThread[subRenderThreadIndex] = tileIndex;
 
-                                if (tileIndexToProcess < subRasterizeInfos.size() && activeThreadsCount < maximumActiveThreadsCount)
-                                {
-                                    ThreadCreateInfo threadCreateInfo =
+                                std::lock_guard<std::mutex> lock(gSubRenderThreads[subRenderThreadIndex].RenderWorksMutex);
+                                gSubRenderThreads[subRenderThreadIndex].SubRenderWorks.push(
+                                    SubRenderWork
                                     {
-                                        .Name = "RasterizationThread",
-                                        .StackSize = 0,
-                                        .Process = &SubRasterize,
-                                        .Argument = &subRasterizeInfos[tileIndexToProcess]
-                                    };
-                                    bool threadCreateResult = Create(threadHandle, threadCreateInfo);
-                                    if (threadCreateResult == false)
-                                    {
-                                        assert(false && "Failed to create rasterization thread");
+                                        .ParentRenderWork = renderWork,
+                                        .CurrentGeometry = geometry,
+                                        .EmissiveGeometry = emissiveGeometry,
+                                        .V0 = v0,
+                                        .V1 = v1,
+                                        .V2 = v2,
+                                        .MinX = minX,
+                                        .MaxX = maxX,
+                                        .MinY = minY,
+                                        .MaxY = maxY,
+                                        .WorkIndex = tileIndex,
                                     }
-                                    else
-                                    {
-                                        ++activeThreadsCount;
-                                        ++tileIndexToProcess;
-                                    }
-                                }
+                                    );
                             }
                         }
                     }
                 }
             }
+        }
+
+        for (uint32 i = 0; i < subRenderThreadsCount; ++i)
+        {
+            const uint64 currentThreadFinalWorkIndex = finalTileIndicesPerThread[i];
+            SubRenderThreadInfo& subRenderThreadInfo = gSubRenderThreads[i];
+            while (true)
+            {
+                const uint64 lastCompleteWorkIndex = subRenderThreadInfo.LastCompleteWorkIndex.load();
+                const bool isThreadIdle = lastCompleteWorkIndex == std::numeric_limits<uint64>::max();
+                std::lock_guard<std::mutex> lockGuard(subRenderThreadInfo.RenderWorksMutex);
+                if (isThreadIdle == false && subRenderThreadInfo.SubRenderWorks.empty() == true && lastCompleteWorkIndex >= currentThreadFinalWorkIndex)
+                {
+                    break;
+                }
+
+                cgs::Yield();
+            }
+        }
+    }
+
+    template<typename T>
+    CGS_INLINE void 
+    RenderResource::GetElementOrNull(const T*& outElementOrNull, const uint32 index) const noexcept
+    {
+        outElementOrNull = nullptr;
+
+        constexpr uint32 ELEMENT_TYPE_STRIDE = sizeof(T);
+        if (ELEMENT_TYPE_STRIDE != mStrideInBytes)
+        {
+            assert(false && "Element type stride mismatch");
+            return;
+        }
+
+        // Calculate the offset in bytes
+        const size_t offset = index * mStrideInBytes;
+        // Check if the offset is within the bounds of the data vector
+        if (offset + mStrideInBytes <= mData.size())
+        {
+            outElementOrNull = reinterpret_cast<const T*>(mData.data() + offset);
         }
     }
 
@@ -211,26 +184,5 @@ namespace cgs
         // Copy the vertex data into the buffer
         std::memcpy(mData.data() + mData.size() - VERTEX_STRIDE, &vertex, VERTEX_STRIDE);
         return true;
-    }
-
-    template<typename T>
-    CGS_INLINE void 
-    VertexBuffer::GetVertexOrNull(const T*& outVertex, const uint16 index) const noexcept
-    {
-        outVertex = nullptr;
-
-        constexpr uint32 VERTEX_STRIDE = sizeof(T);
-        if (VERTEX_STRIDE != mStrideInBytes)
-        {
-            return;
-        }
-
-        // Calculate the offset in bytes
-        const size_t offset = index * mStrideInBytes;
-        // Check if the offset is within the bounds of the data vector
-        if (offset + mStrideInBytes <= mData.size())
-        {
-            outVertex = reinterpret_cast<const T*>(mData.data() + offset);
-        }
     }
 }

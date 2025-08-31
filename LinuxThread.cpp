@@ -8,6 +8,7 @@ namespace cgs
     struct ThreadHandle final
     {
         pthread_t Handle;
+        std::atomic<bool> IsAlive = false;
     };
 
     struct StartThunk final
@@ -24,6 +25,7 @@ namespace cgs
             Yield();
         }
 
+        thunk.Argument.InoutThreadHandle->IsAlive.store(true);
         thunk.Process(thunk.Argument);
         delete static_cast<StartThunk*>(param);
         return nullptr;
@@ -51,6 +53,7 @@ namespace cgs
             delete thunk;
             return false;
         }
+        pthread_setname_np(outHandle->Handle, createInfo.Name.c_str());
 
         return true;
     }
@@ -84,8 +87,7 @@ namespace cgs
             return false;
         }
 
-        int result = pthread_kill(inoutHandle.Handle, 0);
-        return result == 0;
+        return inoutHandle.IsAlive.load();
     }
 
     bool IsThreadValid(const ThreadHandle& inoutHandle) noexcept

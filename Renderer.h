@@ -38,62 +38,113 @@ namespace cgs
         Coordinate<eCoordinateSpace::WORLD> Normal;
     };
 
-    // TODO(alegruz): Force handness and winding to be LHS and CCW?
-    class VertexBuffer final
+    class RenderResource
     {
     public:
-        struct CreateInfo final
+        enum class eFormat : uint8
         {
-            eHandnessType HandnessType = eHandnessType::LEFT;
-            eWindingType WindingType = eWindingType::COUNTER_CLOCKWISE;
-            uint32 StrideInBytes = 0;
-            std::vector<byte>&& Data;
+            RGBA8_UNORM = 0,
+            RGB32_FLOAT,
+            RGBA32_FLOAT,
+            D8_UNORM,
+            D32_UNORM,
+            COUNT,
+            DEFAULT = 0,
         };
 
+        struct CreateInfo final
+        {
+            std::vector<eFormat>&& Formats;
+            std::vector<byte>&& DataOrEmpty;
+            uint32 ElementsCount = 0;
+        };
+
+    public:
+        static constexpr uint32 FORMAT_STRIDE[] =
+        {
+            1 * 4,  // RGBA8_UNORM
+            4 * 3,  // RGB32_FLOAT
+            4 * 4,  // RGBA32_FLOAT
+            1 * 1,  // D8_UNORM
+            1 * 4,  // D32_UNORM
+        };
+        static_assert(CGS_ARRAYSIZE(FORMAT_STRIDE) == static_cast<uint32>(eFormat::COUNT));
+
+    public:
+        CGS_INLINE constexpr
+        RenderResource() noexcept = default;
+        CGS_INLINE constexpr
+        RenderResource(CreateInfo&& createInfo) noexcept
+            : mStrideInBytes()
+            , mFormats(std::move(createInfo.Formats))
+            , mData(std::move(createInfo.DataOrEmpty))
+        {
+            for (const eFormat format : mFormats)
+            {
+                mStrideInBytes += FORMAT_STRIDE[static_cast<uint32>(format)];
+            }
+
+            if (mData.size() < createInfo.ElementsCount * mStrideInBytes)
+            {
+                mData.resize(createInfo.ElementsCount * mStrideInBytes, 0);
+            }
+        }
+        CGS_INLINE constexpr
+        RenderResource(const RenderResource&) noexcept = default;
+        CGS_INLINE constexpr
+        RenderResource(RenderResource&&) noexcept = default;
+        CGS_INLINE
+        ~RenderResource() noexcept = default;
+
+        CGS_INLINE constexpr RenderResource&
+        operator=(const RenderResource&) noexcept = default;
+        CGS_INLINE constexpr RenderResource&
+        operator=(RenderResource&&) noexcept = default;
+
+        CGS_INLINE constexpr const byte*
+        GetData() const noexcept { return mData.data(); }
+        template<typename T>
+        void 
+        GetElementOrNull(const T*& outElementOrNull, const uint32 index) const noexcept;
+
+    protected:
+        uint32 mStrideInBytes;
+        std::vector<eFormat> mFormats;
+        std::vector<byte> mData;
+    };
+
+    // TODO(alegruz): Force handness and winding to be LHS and CCW?
+    class VertexBuffer final : public RenderResource
+    {
     public:
         CGS_INLINE constexpr
         VertexBuffer() noexcept = default;
         CGS_INLINE constexpr
         VertexBuffer(CreateInfo&& createInfo) noexcept
-            : mHandnessType(createInfo.HandnessType)
-            , mWindingType(createInfo.WindingType)
-            , mStrideInBytes(createInfo.StrideInBytes)
-            , mData(std::move(createInfo.Data))
+            : RenderResource(std::move(createInfo))
         {
         }
         CGS_INLINE 
         ~VertexBuffer() noexcept = default;
 
-        CGS_INLINE constexpr void
-        SetHandnessType(const eHandnessType handnessType) noexcept { mHandnessType = handnessType; }
-        CGS_INLINE constexpr void 
-        SetWindingType(const eWindingType windingType) noexcept { mWindingType = windingType; }
         template<typename T>
         [[nodiscard]] constexpr bool
         AddVertex(const T& vertex) noexcept;
 
-        CGS_INLINE constexpr eHandnessType 
-        GetHandnessType() const noexcept { return mHandnessType; }
-        CGS_INLINE constexpr eWindingType 
-        GetWindingType() const noexcept { return mWindingType; }
         template<typename T>
-        void 
-        GetVertexOrNull(const T*& outVertex, const uint16 index) const noexcept;
+        CGS_INLINE void 
+        GetVertexOrNull(const T*& outVertex, const uint16 index) const noexcept { GetElementOrNull(outVertex, static_cast<uint32>(index)); }
         CGS_INLINE constexpr uint32
         GetVertexCount() const noexcept { if (mStrideInBytes > 0) { return static_cast<uint32>(mData.size()) / mStrideInBytes; } return 0; }
-
-    private:
-        eHandnessType mHandnessType;
-        eWindingType mWindingType;
-        uint32 mStrideInBytes;
-        std::vector<byte> mData;
     };
 
     class Geometry final
     {
     public:
         CGS_INLINE constexpr 
-        Geometry() noexcept: mIsEmissive(false), mVertexBuffer(), mIndices(), mColor(BLACK) {}
+        Geometry() noexcept: mIsEmissive(false), mVertexBuffer(), mIndices(), mColor(BLACK), mName() {}
+        CGS_INLINE constexpr
+        Geometry(const std::string& name) noexcept: mIsEmissive(false), mVertexBuffer(), mIndices(), mColor(BLACK), mName(name) {}
         CGS_INLINE
         ~Geometry() noexcept = default;
 
@@ -120,19 +171,39 @@ namespace cgs
         VertexBuffer mVertexBuffer;
         std::vector<uint16> mIndices;
         Rgba8 mColor;
+        std::string mName;
     };
 
-    class Texture final
+    class Texture final : public RenderResource
     {
     public:
-        CGS_INLINE constexpr 
+        struct CreateInfo final
+        {
+            eFormat Format;
+            uint32 Width;
+            uint32 Height;
+            uint32 Depth;
+        };
+
+    public:
+        CGS_INLINE constexpr
         Texture() noexcept = default;
         CGS_INLINE constexpr
-        Texture(const uint32 width, const uint32 height) noexcept
-            : Texture(width, height, 0) {}
-        CGS_INLINE constexpr 
-        Texture(const uint32 width, const uint32 height, const byte initialValue) noexcept
-            : mWidth(width), mHeight(height), mData(width * height * 4, initialValue) {}
+        Texture(CreateInfo&& createInfo) noexcept
+            : RenderResource
+            (
+                RenderResource::CreateInfo
+                {
+                    .Formats = std::vector<eFormat>{ createInfo.Format },
+                    .DataOrEmpty = std::vector<byte>(),
+                    .ElementsCount = createInfo.Width * createInfo.Height * createInfo.Depth,
+                }
+            )
+            , mWidth(createInfo.Width)
+            , mHeight(createInfo.Height)
+            , mDepth(createInfo.Depth)
+        {
+        }
         CGS_INLINE constexpr 
         Texture(const Texture&) noexcept = default;
         CGS_INLINE constexpr 
@@ -149,45 +220,64 @@ namespace cgs
         GetWidth() const noexcept { return mWidth; }
         CGS_INLINE constexpr uint32 
         GetHeight() const noexcept { return mHeight; }
-        CGS_INLINE constexpr const byte*
-        GetData() const noexcept { return mData.data(); }
-        CGS_INLINE constexpr Rgba8
-        GetFragment(const uint32 x, const uint32 y) const noexcept
+        CGS_INLINE constexpr uint32
+        GetDepth() const noexcept { return mDepth; }
+        template<typename T>
+        CGS_INLINE constexpr bool
+        GetFragment(T& outFragment, const uint32 x, const uint32 y) const noexcept { return GetFragment(outFragment, x, y, 0); }
+        template<typename T>
+        CGS_INLINE constexpr bool
+        GetFragment(T& outFragment, const uint32 x, const uint32 y, const uint32 z) const noexcept
         {
-            if (x < mWidth && y < mHeight)
+            if(sizeof(T) != mStrideInBytes)
             {
-                const size_t index = (y * mWidth + x) * 4;
-                return Rgba8{ mData[index], mData[index + 1], mData[index + 2], mData[index + 3] };
+                assert(false && "GetFragment: type size mismatch");
+                return false;
+            }
+
+            if (x < mWidth && y < mHeight && z < mDepth)
+            {
+                const size_t index = (z * mWidth * mHeight + y * mWidth + x) * mStrideInBytes;
+                outFragment = *reinterpret_cast<const T*>(&mData[index]);
+                return true;
             }
             assert(false && "GetFragment: coordinates out of bounds");
-            return Rgba8(); // Out of bounds, return transparent black
+            return false;
         }
 
         CGS_INLINE constexpr void 
         Clear() noexcept { std::fill(mData.begin(), mData.end(), static_cast<byte>(0)); }
+        template<typename T>
+        CGS_INLINE constexpr void
+        Clear(const T& value) noexcept { for (uint32 z = 0; z < mDepth; ++z) { for (uint32 y = 0; y < mHeight; ++y) { for (uint32 x = 0; x < mWidth; ++x) { SetFragmentValue(x, y, z, value); } } } }
+        template<typename T>
         CGS_INLINE constexpr bool
-        SetFragmentValue(const uint32 x, const uint32 y, const byte r, const byte g, const byte b, const byte a) noexcept
+        SetFragmentValue(const uint32 x, const uint32 y, const T& value) noexcept
         {
-            if (x < mWidth && y < mHeight)
+            return SetFragmentValue<T>(x, y, 0, value);
+        }
+        template<typename T>
+        CGS_INLINE constexpr bool
+        SetFragmentValue(const uint32 x, const uint32 y, const uint32 z, const T& value) noexcept
+        {
+            if (x < mWidth && y < mHeight && z < mDepth)
             {
-                const size_t index = (y * mWidth + x) * 4;
-                mData[index + 0] = r;
-                mData[index + 1] = g;
-                mData[index + 2] = b;
-                mData[index + 3] = a;
+                const size_t index = (z * mWidth * mHeight + y * mWidth + x) * mStrideInBytes;
+                *reinterpret_cast<T*>(&mData[index]) = value;
                 return true;
             }
             return false;
         }
 
     private:
-        uint32 mWidth = 0;
-        uint32 mHeight = 0;
-        std::vector<byte> mData;
+        uint32 mWidth;
+        uint32 mHeight;
+        uint32 mDepth;
     };
 
     constexpr uint32 BACK_BUFFERS_COUNT = 3;
     extern std::vector<cgs::Texture> gBackBuffers;
+    extern std::vector<cgs::Texture> gDepthBuffers;
 
     enum class eRasterizationMethod : uint8
     {
@@ -195,9 +285,112 @@ namespace cgs
         BARYCENTRIC = DEFAULT,
     };
 
+    enum class eRenderMethod : uint8
+    {
+        RASTERIZATION = 0,
+        RAYTRACING,
+        DEFAULT = 0,
+    };
+
+    struct CornellBoxVertexShaderOutput final
+    {
+        Coordinate<eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE> NdcPosition;
+        Coordinate<eCoordinateSpace::WORLD> WsPosition;
+        Coordinate<eCoordinateSpace::WORLD> Normal;
+    };
+
+    struct RenderWork final
+    {
+        Texture& OutTexture;
+        Texture& OutDepthBuffer;
+        const std::vector<Geometry>& Geometries;
+        uint64 WorkIndex;
+    };
+
+    struct RenderThreadInfo final
+    {
+        std::shared_ptr<ThreadHandle> CurrentThreadHandle;
+        eRenderMethod RenderMethod;
+
+        std::mutex RenderWorksMutex;
+        std::queue<RenderWork> RenderWorksPerFrame;
+        std::atomic<uint64> CurrentWorkIndex = std::numeric_limits<uint64>::max();
+        std::atomic<uint64> LastCompleteWorkIndex = std::numeric_limits<uint64>::max();
+
+        std::atomic<bool> IsActive = true;
+    };
+
+    void
+    RenderThreadMain(ThreadProcessArgument& arg) noexcept;
+
     template<eRasterizationMethod METHOD = eRasterizationMethod::DEFAULT>
     void
-    Rasterize(Texture& outTexture, const std::vector<Geometry>& geometries) noexcept;
+    Rasterize(RenderWork& work) noexcept;
+
+    struct SubRenderWork final
+    {
+        RenderWork& ParentRenderWork;
+        
+        const Geometry& CurrentGeometry;
+        const Geometry& EmissiveGeometry;
+
+        const CornellBoxVertexShaderOutput& V0;
+        const CornellBoxVertexShaderOutput& V1;
+        const CornellBoxVertexShaderOutput& V2;
+
+        uint32 MinX = 0;
+        uint32 MaxX = 0;
+        uint32 MinY = 0;
+        uint32 MaxY = 0;
+
+        uint64 WorkIndex = 0;
+    };
+
+    struct SubRenderThreadInfo final
+    {
+        std::shared_ptr<ThreadHandle> CurrentThreadHandle;
+        eRenderMethod RenderMethod;
+
+        std::mutex RenderWorksMutex;
+        std::queue<SubRenderWork> SubRenderWorks;
+        std::atomic<uint64> LastCompleteWorkIndex;
+        std::atomic<bool> IsActive;
+
+        CGS_INLINE SubRenderThreadInfo() noexcept
+            : CurrentThreadHandle(nullptr)
+            , RenderMethod(eRenderMethod::DEFAULT)
+            , LastCompleteWorkIndex(std::numeric_limits<uint64>::max())
+            , IsActive(true)
+        {
+        }
+        SubRenderThreadInfo(const SubRenderThreadInfo&) = delete;
+        CGS_INLINE SubRenderThreadInfo(SubRenderThreadInfo&& other) noexcept
+        {
+            *this = std::move(other);
+        }
+        CGS_INLINE ~SubRenderThreadInfo() noexcept = default;
+
+        SubRenderThreadInfo& operator=(const SubRenderThreadInfo&) = delete;
+        CGS_INLINE SubRenderThreadInfo& operator=(SubRenderThreadInfo&& other) noexcept
+        {
+            if (this != &other)
+            {
+                std::lock_guard<std::mutex> lockGuard(other.RenderWorksMutex);
+                CurrentThreadHandle = std::move(other.CurrentThreadHandle);
+                RenderMethod = other.RenderMethod;
+                SubRenderWorks = std::move(other.SubRenderWorks);
+                LastCompleteWorkIndex = other.LastCompleteWorkIndex.load();
+                IsActive = other.IsActive.load();
+            }
+            return *this;
+        }
+    };
+
+    void
+    SubRenderThreadMain(ThreadProcessArgument& arg) noexcept;
+
+    void
+    SubRasterize(SubRenderWork& work) noexcept;
 
     class Camera final
     {
@@ -252,13 +445,6 @@ namespace cgs
     void
     CreateCornellBoxScene(std::vector<Geometry>& outGeometries) noexcept;
 
-    struct CornellBoxVertexShaderOutput final
-    {
-        Coordinate<eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE> NdcPosition;
-        Coordinate<eCoordinateSpace::WORLD> WsPosition;
-        Coordinate<eCoordinateSpace::WORLD> Normal;
-    };
-
     CornellBoxVertexShaderOutput
     CornellBoxVertexShader(const VertexPN& input) noexcept;
 
@@ -272,78 +458,52 @@ namespace cgs
     Rgba8
     CornellBoxFragmentShader(const CornellBoxFragmentShaderInput& input) noexcept;
 
-    struct RenderInfo final
+    struct ThreadInfo final
     {
-        enum class eRenderState : uint8
-        {
-            IDLE,
-            DEFAULT = IDLE,
-            RENDERING,
-            FINISHED
-        };
-        std::atomic<eRenderState> RenderState;
-        Texture* InoutBackBuffer;
-        const std::vector<Geometry>* Geometries;
-
-        CGS_INLINE constexpr
-        RenderInfo(Texture& inoutBackBuffer, const std::vector<Geometry>& geometries)
-            : RenderState(eRenderState::IDLE), InoutBackBuffer(&inoutBackBuffer), Geometries(&geometries)
-        {
-        }
-        CGS_INLINE
-        RenderInfo(const RenderInfo& other) noexcept
-            : RenderState(other.RenderState.load()),
-              InoutBackBuffer(other.InoutBackBuffer),
-              Geometries(other.Geometries)
-        {
-        }
-        CGS_INLINE
-        RenderInfo(RenderInfo&& other) noexcept
-            : RenderState(other.RenderState.load()),
-              InoutBackBuffer(other.InoutBackBuffer),
-              Geometries(other.Geometries)
-        {
-            other.RenderState.store(eRenderState::IDLE);
-            other.InoutBackBuffer = nullptr;
-            other.Geometries = nullptr;
-        }
-        CGS_INLINE constexpr
-        ~RenderInfo() noexcept = default;
-
-        CGS_INLINE constexpr RenderInfo&
-        operator=(const RenderInfo& other) noexcept
-        {
-            if (this != &other)
-            {
-                RenderState.store(other.RenderState.load());
-                InoutBackBuffer = other.InoutBackBuffer;
-                Geometries = other.Geometries;
-            }
-            return *this;
-        }
-        CGS_INLINE constexpr RenderInfo&
-        operator=(RenderInfo&& other) noexcept
-        {
-            if (this != &other)
-            {
-                RenderState.store(other.RenderState.load());
-                InoutBackBuffer = other.InoutBackBuffer;
-                Geometries = other.Geometries;
-
-                other.RenderState.store(eRenderState::IDLE);
-                other.InoutBackBuffer = nullptr;
-                other.Geometries = nullptr;
-            }
-            return *this;
-        }
-    };
-
-    struct RenderThreadInfo final
-    {
-        std::shared_ptr<ThreadHandle> CurrentThreadHandle;
-        std::atomic<uint32> CurrentFrameIndex;
-        std::vector<RenderInfo> RenderInfoPerFrame;
+        pthread_t ThreadId;
         std::atomic<bool> IsFinished;
+
+        CGS_INLINE constexpr
+        ThreadInfo() noexcept
+            : ThreadId(0), IsFinished(false)
+        {}
+        CGS_INLINE constexpr
+        ThreadInfo(const ThreadInfo& other) noexcept
+            : ThreadId(other.ThreadId), IsFinished(other.IsFinished.load())
+        {}
+        CGS_INLINE constexpr
+        ThreadInfo(ThreadInfo&& other) noexcept
+            : ThreadId(other.ThreadId), IsFinished(other.IsFinished.load())
+        {
+            other.ThreadId = 0;
+            other.IsFinished.store(false);
+        }
+        CGS_INLINE
+        ~ThreadInfo() noexcept = default;
+
+        CGS_INLINE constexpr ThreadInfo&
+        operator=(const ThreadInfo& other) noexcept
+        {
+            if(this != &other)
+            {
+                ThreadId = other.ThreadId;
+                IsFinished.store(other.IsFinished.load());
+            }
+            return *this;
+        }
+        CGS_INLINE constexpr ThreadInfo&
+        operator=(ThreadInfo&& other) noexcept
+        {
+            if(this != &other)
+            {
+                ThreadId = other.ThreadId;
+                IsFinished.store(other.IsFinished.load());
+
+                other.ThreadId = 0;
+                other.IsFinished.store(false);
+            }
+            return *this;
+        }
     };
 
     enum class eRenderDeviceType : uint8
@@ -356,7 +516,7 @@ namespace cgs
 
     // Primary template declaration
     template<typename T>
-    CGS_INLINE constexpr T ConvertStringToEnumValue(const std::string& str) noexcept
+    CGS_INLINE constexpr T ConvertStringToEnumValue(const std::string&) noexcept
     {
         static_assert(sizeof(T) == 0, "ConvertStringToEnumValue: Unsupported enum type");
         return T{};

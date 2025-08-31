@@ -11,6 +11,8 @@
 #include <filesystem>
 #include <locale>
 #include <memory>
+#include <mutex>
+#include <queue>
 #include <span>
 #include <string>
 #include <vector>
