@@ -1,8 +1,8 @@
 #include "pch.hpp"
 
-#if defined(CGS_GRAPHICS_API_D3D12)
 #include "Renderer.hpp"
 
+#if defined(CGS_GRAPHICS_API_D3D12)
 namespace cgs
 {
     template<typename T>
@@ -160,4 +160,11 @@ namespace cgs
         return true;
     }
 }
-#endif  // defined(CGS_GRAPHICS_API_D3D12)
+#else   // NOT defined(CGS_GRAPHICS_API_D3D12)
+    template <>
+    bool
+    InitializeRenderer<eRenderDeviceType::D3D12>() noexcept
+    {
+        return false;
+    }
+#endif  // NOT defined(CGS_GRAPHICS_API_D3D12)

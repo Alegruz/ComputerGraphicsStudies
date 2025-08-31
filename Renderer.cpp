@@ -9,6 +9,8 @@
 namespace cgs
 {
     std::vector<SubRenderThreadInfo> gSubRenderThreads;
+    static std::mutex gBackBufferLock;
+    static std::mutex gDepthBufferLock;
 
     static Camera gMainCamera;
     static float4x4 gViewMatrix;
@@ -93,6 +95,7 @@ namespace cgs
                 {
                     .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
                     .DataOrEmpty = std::vector<byte>{},
+                    .Name = std::string("Floor Vertex Buffer"),
                 }
                 );
             constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 0.0f, 0.0f, 0.0f };
@@ -116,6 +119,7 @@ namespace cgs
                 {
                     .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
                     .DataOrEmpty = std::vector<byte>{},
+                    .Name = std::string("Light Vertex Buffer"),
                 }
                 );
             constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -343.0f, 548.8f, 332.0f };
@@ -140,6 +144,7 @@ namespace cgs
                 {
                     .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
                     .DataOrEmpty = std::vector<byte>{},
+                    .Name = std::string("Ceiling Vertex Buffer"),
                 }
             );
 
@@ -164,6 +169,7 @@ namespace cgs
                 {
                     .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
                     .DataOrEmpty = std::vector<byte>{},
+                    .Name = std::string("Back Wall Vertex Buffer"),
                 }
             );
 
@@ -188,6 +194,7 @@ namespace cgs
                 {
                     .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
                     .DataOrEmpty = std::vector<byte>{},
+                    .Name = std::string("Right Wall Vertex Buffer"),
                 }
                 );
             constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 0.0f, 0.0f, 0.0f };
@@ -211,6 +218,7 @@ namespace cgs
                 {
                     .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
                     .DataOrEmpty = std::vector<byte>{},
+                    .Name = std::string("Left Wall Vertex Buffer"),
                 }
             );
 
@@ -235,6 +243,7 @@ namespace cgs
                 {
                     .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
                     .DataOrEmpty = std::vector<byte>{},
+                    .Name = std::string("Short Block Vertex Buffer"),
                 }
             );
 
@@ -285,6 +294,7 @@ namespace cgs
                 {
                     .Formats = std::vector<RenderResource::eFormat>{ RenderResource::eFormat::RGB32_FLOAT, RenderResource::eFormat::RGB32_FLOAT },
                     .DataOrEmpty = std::vector<byte>{},
+                    .Name = std::string("Tall Block Vertex Buffer"),
                 }
             );
 
@@ -415,6 +425,15 @@ namespace cgs
     bool
     InitializeRenderer<eRenderDeviceType::CPU>() noexcept
     {
+        for (uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
+        {
+            Texture& texture = gBackBuffers[i];
+            texture.SetName("Back Buffer " + std::to_string(i));
+
+            Texture& depthTexture = gDepthBuffers[i];
+            depthTexture.SetName("Depth Buffer " + std::to_string(i));
+        }
+
         return true;
     }
 
@@ -561,25 +580,32 @@ namespace cgs
                     }
                     else
                     {
+                        std::lock_guard<std::mutex> lock(gDepthBufferLock);
                         work.ParentRenderWork.OutDepthBuffer.SetFragmentValue(x, y, point.Z);
                     }
                     // Simple rasterization logic: set every pixel to a color
                     // In a real application, you would perform actual rasterization here
-                    [[maybe_unused]] CornellBoxFragmentShaderInput fsInput =
+                    Rgba8 fragmentValue = work.CurrentGeometry.GetColor();
+                    if(work.CurrentGeometry.IsEmissive() == false)
                     {
-                        .VSOutput =
+                        CornellBoxFragmentShaderInput fsInput =
                         {
-                            .NdcPosition = point,
-                            .WsPosition = work.V0.WsPosition * barycentricCoords.X + work.V1.WsPosition * barycentricCoords.Y + work.V2.WsPosition * barycentricCoords.Z,
-                            .Normal = work.V0.Normal * barycentricCoords.X + work.V1.Normal * barycentricCoords.Y + work.V2.Normal * barycentricCoords.Z,
-                        },
-                        .Color = work.CurrentGeometry.GetColor(),
-                        .EmissiveGeometry = work.EmissiveGeometry,
-                    };
-                    const Rgba8 fragmentValue = CornellBoxFragmentShader(fsInput);
+                            .VSOutput =
+                            {
+                                .NdcPosition = point,
+                                .WsPosition = work.V0.WsPosition * barycentricCoords.X + work.V1.WsPosition * barycentricCoords.Y + work.V2.WsPosition * barycentricCoords.Z,
+                                .Normal = work.V0.Normal * barycentricCoords.X + work.V1.Normal * barycentricCoords.Y + work.V2.Normal * barycentricCoords.Z,
+                            },
+                            .Color = work.CurrentGeometry.GetColor(),
+                            .EmissiveGeometry = work.EmissiveGeometry,
+                        };
+                        fragmentValue = CornellBoxFragmentShader(fsInput);
+                    }
 #else
                     const Rgba8 fragmentValue = RED;
-#endif
+#endif                    
+
+                    std::lock_guard<std::mutex> lock(gBackBufferLock);
                     work.ParentRenderWork.OutTexture.SetFragmentValue(x, y, fragmentValue);
                 }
             }

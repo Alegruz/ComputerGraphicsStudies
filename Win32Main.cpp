@@ -87,8 +87,8 @@ static File gCurrentFile;
 namespace cgs
 {
     std::vector<std::filesystem::path> gRecentFiles;
-    std::vector<Texture> gBackBuffers(BACK_BUFFERS_COUNT, Texture(1920, 1080));
-    std::vector<Texture> gBackBuffers(BACK_BUFFERS_COUNT, Texture(1920, 1080));
+    std::vector<Texture> gBackBuffers(BACK_BUFFERS_COUNT, Texture(Texture::CreateInfo{ .Format = RenderResource::eFormat::RGBA8_UNORM, .Width = 1600, .Height = 900, .Depth = 1, .Name = std::string("Back Buffer") }));
+    std::vector<Texture> gDepthBuffers(BACK_BUFFERS_COUNT, Texture(Texture::CreateInfo{ .Format = RenderResource::eFormat::D32_UNORM, .Width = 1600, .Height = 900, .Depth = 1, .Name = std::string("Depth Buffer") }));
     static RenderThreadInfo gRenderThread;
 }
 
@@ -438,14 +438,21 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
     std::vector<cgs::Geometry> cornellBox;
     cgs::CreateCornellBoxScene(cornellBox);
 
-    cgs::gRenderThread.RenderInfoPerFrame.reserve(cgs::BACK_BUFFERS_COUNT);
-    for(uint32 frameIndex = 0; frameIndex < cgs::BACK_BUFFERS_COUNT; frameIndex++)
+    cgs::gRenderThread.RenderMethod = cgs::eRenderMethod::RASTERIZATION;
+    cgs::ThreadCreateInfo createInfo =
     {
-        cgs::RenderInfo renderInfo(cgs::gBackBuffers[frameIndex], cornellBox);
-        cgs::gRenderThread.RenderInfoPerFrame.push_back(renderInfo);
+        .Name = "RenderThread",
+        .StackSize = 0,
+        .Process = &cgs::RenderThreadMain,
+        .Argument = &cgs::gRenderThread
+    };
+    const bool threadCreateResult = cgs::Create(cgs::gRenderThread.CurrentThreadHandle, createInfo);
+    if (threadCreateResult == false)
+    {
+        assert(false && "Failed to create render thread");
     }
 
-    uint32 frameIndex = 0;
+    uint64 workIndex = 0;
     LARGE_INTEGER startTime;
     LARGE_INTEGER endTime;
     LARGE_INTEGER elapsedMicroseconds;
@@ -464,43 +471,44 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
             }
         }
 
-        // cgs::gBackBuffers[0].Clear();
-        // cgs::Rasterize(cgs::gBackBuffers[0], cornellBox);
-        // cgs::Present(window, cgs::gBackBuffers[0]);
-        if(cgs::gRenderThread.CurrentThreadHandle == nullptr || cgs::IsThreadValid(*cgs::gRenderThread.CurrentThreadHandle) == false)
+        const uint32 currentFrameIndexToRender = static_cast<uint32>(workIndex % 3);
+        bool isFirstFrame = false;
+        while (true)
         {
-            cgs::ThreadCreateInfo createInfo =
+            const uint64 lastCompleteWorkIndex = cgs::gRenderThread.LastCompleteWorkIndex.load();
+            // const uint64 currentWorkIndex = cgs::gRenderThread.CurrentWorkIndex.load();
+            // uint32 renderWorksCount = 0;
+            // {
+            //     const std::lock_guard lock(cgs::gRenderThread.RenderWorksMutex);
+            //     renderWorksCount = static_cast<uint32>(cgs::gRenderThread.RenderWorksPerFrame.size());
+            // }
+            isFirstFrame = workIndex < cgs::BACK_BUFFERS_COUNT;
+            const bool hasCompletedWork = lastCompleteWorkIndex != std::numeric_limits<uint64>::max();
+
+            if (isFirstFrame == true || (hasCompletedWork && lastCompleteWorkIndex >= static_cast<uint64>(static_cast<int64>(workIndex) - static_cast<int64>(cgs::BACK_BUFFERS_COUNT))))
             {
-                .Name = "RenderThread",
-                .StackSize = 0,
-                .Process = &cgs::Render,
-                .Argument = &cgs::gRenderThread
-            };
-            const bool threadCreateResult = cgs::Create(cgs::gRenderThread.CurrentThreadHandle, createInfo);
-            if(threadCreateResult == false)
-            {
-                assert(false && "Failed to create render thread");
+                break;
             }
-            frameIndex = (frameIndex + 1) % cgs::BACK_BUFFERS_COUNT;
+            cgs::Yield();
         }
-        else
+
         {
-            cgs::RenderInfo::eRenderState currentFrameRenderState = cgs::gRenderThread.RenderInfoPerFrame[frameIndex].RenderState.load();
-            if(currentFrameRenderState == cgs::RenderInfo::eRenderState::RENDERING)
+            if (isFirstFrame == false)
             {
-                while (currentFrameRenderState != cgs::RenderInfo::eRenderState::FINISHED)
+                cgs::Present(window, cgs::gBackBuffers[currentFrameIndexToRender]);
+            }
+
+            const std::lock_guard lock(cgs::gRenderThread.RenderWorksMutex);
+            cgs::gRenderThread.RenderWorksPerFrame.push(
+                cgs::RenderWork
                 {
-                    currentFrameRenderState = cgs::gRenderThread.RenderInfoPerFrame[frameIndex].RenderState.load();
-                }
-                cgs::Present(window, *cgs::gRenderThread.RenderInfoPerFrame[frameIndex].InoutBackBuffer);
-                cgs::gRenderThread.RenderInfoPerFrame[frameIndex].RenderState.store(cgs::RenderInfo::eRenderState::IDLE);
-                frameIndex = (frameIndex + 1) % cgs::BACK_BUFFERS_COUNT;
-            }
-            else if (currentFrameRenderState == cgs::RenderInfo::eRenderState::IDLE)
-            {
-                frameIndex = (frameIndex + 1) % cgs::BACK_BUFFERS_COUNT;
-            }
+                    .OutTexture = cgs::gBackBuffers[currentFrameIndexToRender],
+                    .OutDepthBuffer = cgs::gDepthBuffers[currentFrameIndexToRender],
+                    .Geometries = cornellBox,
+                    .WorkIndex = workIndex++
+                });
         }
+
         QueryPerformanceCounter(&endTime);
         elapsedMicroseconds.QuadPart = (endTime.QuadPart - startTime.QuadPart) * 1000000 / frequency.QuadPart;
         startTime = endTime;

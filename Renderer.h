@@ -57,6 +57,7 @@ namespace cgs
             std::vector<eFormat>&& Formats;
             std::vector<byte>&& DataOrEmpty;
             uint32 ElementsCount = 0;
+            std::string&& Name;
         };
 
     public:
@@ -78,6 +79,7 @@ namespace cgs
             : mStrideInBytes()
             , mFormats(std::move(createInfo.Formats))
             , mData(std::move(createInfo.DataOrEmpty))
+            , mName(std::move(createInfo.Name))
         {
             for (const eFormat format : mFormats)
             {
@@ -101,16 +103,22 @@ namespace cgs
         CGS_INLINE constexpr RenderResource&
         operator=(RenderResource&&) noexcept = default;
 
+        CGS_INLINE constexpr void
+        SetName(const std::string& name) noexcept { mName = name; }
+
         CGS_INLINE constexpr const byte*
         GetData() const noexcept { return mData.data(); }
         template<typename T>
         void 
         GetElementOrNull(const T*& outElementOrNull, const uint32 index) const noexcept;
+        CGS_INLINE constexpr const std::string&
+        GetName() const noexcept { return mName; }
 
     protected:
         uint32 mStrideInBytes;
         std::vector<eFormat> mFormats;
         std::vector<byte> mData;
+        std::string mName;
     };
 
     // TODO(alegruz): Force handness and winding to be LHS and CCW?
@@ -165,6 +173,8 @@ namespace cgs
         GetIndices() const noexcept { return mIndices; }
         [[nodiscard]] CGS_INLINE constexpr const Rgba8&
         GetColor() const noexcept { return mColor; }
+        [[nodiscard]] CGS_INLINE constexpr const std::string&
+        GetName() const noexcept { return mName; }
 
     private:
         bool mIsEmissive;
@@ -183,6 +193,7 @@ namespace cgs
             uint32 Width;
             uint32 Height;
             uint32 Depth;
+            std::string&& Name;
         };
 
     public:
@@ -197,6 +208,7 @@ namespace cgs
                     .Formats = std::vector<eFormat>{ createInfo.Format },
                     .DataOrEmpty = std::vector<byte>(),
                     .ElementsCount = createInfo.Width * createInfo.Height * createInfo.Depth,
+                    .Name = std::move(createInfo.Name),
                 }
             )
             , mWidth(createInfo.Width)
@@ -334,9 +346,9 @@ namespace cgs
         const Geometry& CurrentGeometry;
         const Geometry& EmissiveGeometry;
 
-        const CornellBoxVertexShaderOutput& V0;
-        const CornellBoxVertexShaderOutput& V1;
-        const CornellBoxVertexShaderOutput& V2;
+        const CornellBoxVertexShaderOutput V0;
+        const CornellBoxVertexShaderOutput V1;
+        const CornellBoxVertexShaderOutput V2;
 
         uint32 MinX = 0;
         uint32 MaxX = 0;
@@ -457,54 +469,6 @@ namespace cgs
     
     Rgba8
     CornellBoxFragmentShader(const CornellBoxFragmentShaderInput& input) noexcept;
-
-    struct ThreadInfo final
-    {
-        pthread_t ThreadId;
-        std::atomic<bool> IsFinished;
-
-        CGS_INLINE constexpr
-        ThreadInfo() noexcept
-            : ThreadId(0), IsFinished(false)
-        {}
-        CGS_INLINE constexpr
-        ThreadInfo(const ThreadInfo& other) noexcept
-            : ThreadId(other.ThreadId), IsFinished(other.IsFinished.load())
-        {}
-        CGS_INLINE constexpr
-        ThreadInfo(ThreadInfo&& other) noexcept
-            : ThreadId(other.ThreadId), IsFinished(other.IsFinished.load())
-        {
-            other.ThreadId = 0;
-            other.IsFinished.store(false);
-        }
-        CGS_INLINE
-        ~ThreadInfo() noexcept = default;
-
-        CGS_INLINE constexpr ThreadInfo&
-        operator=(const ThreadInfo& other) noexcept
-        {
-            if(this != &other)
-            {
-                ThreadId = other.ThreadId;
-                IsFinished.store(other.IsFinished.load());
-            }
-            return *this;
-        }
-        CGS_INLINE constexpr ThreadInfo&
-        operator=(ThreadInfo&& other) noexcept
-        {
-            if(this != &other)
-            {
-                ThreadId = other.ThreadId;
-                IsFinished.store(other.IsFinished.load());
-
-                other.ThreadId = 0;
-                other.IsFinished.store(false);
-            }
-            return *this;
-        }
-    };
 
     enum class eRenderDeviceType : uint8
     {

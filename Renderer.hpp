@@ -63,9 +63,18 @@ namespace cgs
                 {
                     constexpr uint32 TILE_SIZE = 64;
                     const uint32 tilesCountX = (width + TILE_SIZE - 1) / TILE_SIZE;
-                    const uint32 tilesCountY = (height + TILE_SIZE - 1) / TILE_SIZE;
 
-                    for(uint32 tileYIndex = 0; tileYIndex < tilesCountY; ++tileYIndex)
+                    const float minNdcX = ((std::min(v0.NdcPosition.X, std::min(v1.NdcPosition.X, v2.NdcPosition.X)) + 1.0f) * 0.5f) * static_cast<float>(width);
+                    const float maxNdcX = ((std::max(v0.NdcPosition.X, std::max(v1.NdcPosition.X, v2.NdcPosition.X)) + 1.0f) * 0.5f) * static_cast<float>(width);
+                    const float minNdcY = ((std::min(v0.NdcPosition.Y, std::min(v1.NdcPosition.Y, v2.NdcPosition.Y)) + 1.0f) * 0.5f) * static_cast<float>(height);
+                    const float maxNdcY = ((std::max(v0.NdcPosition.Y, std::max(v1.NdcPosition.Y, v2.NdcPosition.Y)) + 1.0f) * 0.5f) * static_cast<float>(height);
+
+                    const uint32 minTileXIndex = static_cast<uint32>(std::floor(minNdcX / static_cast<float>(TILE_SIZE)));
+                    const uint32 maxTileXIndex = static_cast<uint32>(std::ceil(maxNdcX / static_cast<float>(TILE_SIZE)));
+                    const uint32 minTileYIndex = static_cast<uint32>(std::floor(minNdcY / static_cast<float>(TILE_SIZE)));
+                    const uint32 maxTileYIndex = static_cast<uint32>(std::ceil(maxNdcY / static_cast<float>(TILE_SIZE)));
+
+                    for(uint32 tileYIndex = minTileYIndex; tileYIndex < maxTileYIndex; ++tileYIndex)
                     {
                         const uint32 minY = tileYIndex * TILE_SIZE;
                         uint32 maxY = minY + TILE_SIZE;
@@ -74,7 +83,7 @@ namespace cgs
                             maxY = height;
                         }
 
-                        for(uint32 tileXIndex = 0; tileXIndex < tilesCountX; ++tileXIndex)
+                        for(uint32 tileXIndex = minTileXIndex; tileXIndex < maxTileXIndex; ++tileXIndex)
                         {
                             const uint32 minX = tileXIndex * TILE_SIZE;
                             uint32 maxX = minX + TILE_SIZE;
@@ -88,6 +97,7 @@ namespace cgs
                                 const uint32 subRenderThreadIndex = tileIndex % subRenderThreadsCount;
                                 finalTileIndicesPerThread[subRenderThreadIndex] = tileIndex;
 
+#if 1
                                 std::lock_guard<std::mutex> lock(gSubRenderThreads[subRenderThreadIndex].RenderWorksMutex);
                                 gSubRenderThreads[subRenderThreadIndex].SubRenderWorks.push(
                                     SubRenderWork
@@ -105,6 +115,23 @@ namespace cgs
                                         .WorkIndex = tileIndex,
                                     }
                                     );
+#else
+                                SubRenderWork subRenderWork
+                                {
+                                    .ParentRenderWork = renderWork,
+                                    .CurrentGeometry = geometry,
+                                    .EmissiveGeometry = emissiveGeometry,
+                                    .V0 = v0,
+                                    .V1 = v1,
+                                    .V2 = v2,
+                                    .MinX = minX,
+                                    .MaxX = maxX,
+                                    .MinY = minY,
+                                    .MaxY = maxY,
+                                    .WorkIndex = tileIndex,
+                                };
+                                SubRasterize(subRenderWork);
+#endif
                             }
                         }
                     }
@@ -158,6 +185,7 @@ namespace cgs
     InitializeRenderer() noexcept
     {
         static_assert(RENDER_DEVICE_TYPE != eRenderDeviceType::COUNT, "Invalid render device type");
+        return false;
     }
 
     template<typename T>
