@@ -11,8 +11,8 @@ static bool gIsRunning = true;
 namespace cgs
 {
     std::vector<std::filesystem::path> gRecentFiles;
-    std::vector<Texture> gBackBuffers(BACK_BUFFERS_COUNT, Texture(Texture::CreateInfo{ .Format = RenderResource::eFormat::RGBA8_UNORM, .Width = 1600, .Height = 900, .Depth = 1 }));
-    std::vector<Texture> gDepthBuffers(BACK_BUFFERS_COUNT, Texture(Texture::CreateInfo{ .Format = RenderResource::eFormat::D32_UNORM, .Width = 1600, .Height = 900, .Depth = 1 }));
+    std::vector<Texture> gBackBuffers(BACK_BUFFERS_COUNT, Texture(Texture::CreateInfo{ .Format = RenderResource::eFormat::RGBA8_UNORM, .Width = 1600, .Height = 900, .Depth = 1, .Name = "BackBuffer" }));
+    std::vector<Texture> gDepthBuffers(BACK_BUFFERS_COUNT, Texture(Texture::CreateInfo{ .Format = RenderResource::eFormat::D32_UNORM, .Width = 1600, .Height = 900, .Depth = 1, .Name = "DepthBuffer" }));
     static RenderThreadInfo gRenderThread;
 }
 
