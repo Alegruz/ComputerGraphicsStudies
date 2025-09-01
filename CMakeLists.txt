@@ -119,6 +119,12 @@ if(DEFINED GRAPHICS_API_TYPE)
         target_compile_definitions(ComputerGraphicsStudies PRIVATE CGS_GRAPHICS_API_CPU)
     elseif(GRAPHICS_API_TYPE MATCHES "D3D12")
         target_compile_definitions(ComputerGraphicsStudies PRIVATE CGS_GRAPHICS_API_D3D12)
+        target_include_directories(ComputerGraphicsStudies PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/External/D3D12/include)
+        add_custom_command(TARGET ComputerGraphicsStudies POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/External/D3D12/bin/x64"
+                "${CMAKE_CURRENT_LIST_DIR}"
+        )
         target_link_libraries(ComputerGraphicsStudies PRIVATE d3d12 dxgi)
     else()
         message(FATAL_ERROR "Unsupported graphics API type")
@@ -142,3 +148,24 @@ endif()
 add_custom_command(TARGET ComputerGraphicsStudies POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:ComputerGraphicsStudies>" "${CMAKE_CURRENT_LIST_DIR}/${CMAKE_PROJECT_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
 )
+if(CGS_WINDOWS)
+    # Copy all DLLs from build directory to output directory
+    file(GLOB DLL_FILES "${CMAKE_BINARY_DIR}/*.dll")
+    foreach(DLL_FILE ${DLL_FILES})
+        add_custom_command(TARGET ComputerGraphicsStudies POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${DLL_FILE}"
+                "${CMAKE_CURRENT_LIST_DIR}/"
+        )
+    endforeach()
+else()
+    # Copy all shared libraries (.so) from build directory to output directory
+    file(GLOB SO_FILES "${CMAKE_BINARY_DIR}/*.so")
+    foreach(SO_FILE ${SO_FILES})
+        add_custom_command(TARGET ComputerGraphicsStudies POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${SO_FILE}"
+                "${CMAKE_CURRENT_LIST_DIR}/"
+        )
+    endforeach()
+endif()

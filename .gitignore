@@ -2,3 +2,7 @@
 *.exe
 .vs/ComputerGraphicsStudies
 ComputerGraphicsStudies
+/D3D12Core.dll
+/d3d12SDKLayers.dll
+External/D3D12/bin/win32
+External/D3D12/bin/arm64
