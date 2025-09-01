@@ -517,6 +517,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
 
     if(cgs::IsThreadValid(*cgs::gRenderThread.CurrentThreadHandle))
     {
+        cgs::gRenderThread.IsActive.store(false);
         cgs::Join(*cgs::gRenderThread.CurrentThreadHandle);
     }
 
