@@ -434,7 +434,7 @@ namespace cgs
             for (uint32 x = 0; x < width; x++)
             {
                 Rgba8 fragment;
-                backBuffer.GetFragment(fragment, x, y);
+                backBuffer.GetFragment(fragment, cgs::RenderResource::eFormat::RGBA8_UNORM, x, y);
                 const Rgba8 fragmentAfterPremultiplyingAlpha =
                 {
                     .R = static_cast<byte>(fragment.R * fragment.A / 255),
