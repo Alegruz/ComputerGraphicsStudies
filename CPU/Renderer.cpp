@@ -20,7 +20,7 @@ namespace cgs
     static float4x4 gViewMatrix;
     static float4x4 gProjectionMatrix;
 
-    void
+    static void
     SubRenderThreadMain(ThreadProcessArgument& arg) noexcept;
 
     static void
@@ -518,7 +518,7 @@ namespace cgs
         }
     }
 
-    static void
+    void
     SubRenderThreadMain(ThreadProcessArgument& arg) noexcept
     {
         if (arg.Argument == nullptr)
