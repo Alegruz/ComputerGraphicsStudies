@@ -573,7 +573,7 @@ namespace cgs
 #if 1
                     point.Z = work.V0.NdcPosition.Z * barycentricCoords.X + work.V1.NdcPosition.Z * barycentricCoords.Y + work.V2.NdcPosition.Z * barycentricCoords.Z;
                     float depthValue;
-                    work.ParentRenderWork.OutDepthBuffer.GetFragment(depthValue, x, y);
+                    work.ParentRenderWork.OutDepthBuffer.GetFragment(depthValue, RenderResource::eFormat::D32_UNORM, x, y);
                     if (point.Z >= depthValue)
                     {
                         continue;
@@ -581,7 +581,7 @@ namespace cgs
                     else
                     {
                         std::lock_guard<std::mutex> lock(gDepthBufferLock);
-                        work.ParentRenderWork.OutDepthBuffer.SetFragmentValue(x, y, point.Z);
+                        work.ParentRenderWork.OutDepthBuffer.SetFragmentValue(x, y, point.Z, RenderResource::eFormat::D32_UNORM);
                     }
                     // Simple rasterization logic: set every pixel to a color
                     // In a real application, you would perform actual rasterization here
@@ -606,7 +606,7 @@ namespace cgs
 #endif                    
 
                     std::lock_guard<std::mutex> lock(gBackBufferLock);
-                    work.ParentRenderWork.OutTexture.SetFragmentValue(x, y, fragmentValue);
+                    work.ParentRenderWork.OutTexture.SetFragmentValue(x, y, fragmentValue, RenderResource::eFormat::RGBA8_UNORM);
                 }
             }
         }

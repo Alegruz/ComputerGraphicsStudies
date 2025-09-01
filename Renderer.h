@@ -14,6 +14,14 @@ namespace cgs
         byte A = 255;
     };
 
+    struct Bgra8 final
+    {
+        byte B = 0;
+        byte G = 0;
+        byte R = 0;
+        byte A = 255;
+    };
+
     static constexpr Rgba8 WHITE{ 255, 255, 255, 255 };
     static constexpr Rgba8 BLACK{ 0, 0, 0, 255 };
     static constexpr Rgba8 RED{ 255, 0, 0, 255 };
@@ -43,7 +51,8 @@ namespace cgs
     public:
         enum class eFormat : uint8
         {
-            RGBA8_UNORM = 0,
+            BGRA8_UNORM = 0,
+            RGBA8_UNORM,
             RGB32_FLOAT,
             RGBA32_FLOAT,
             D8_UNORM,
@@ -63,6 +72,7 @@ namespace cgs
     public:
         static constexpr uint32 FORMAT_STRIDE[] =
         {
+            1 * 4,  // BGRA8_UNORM
             1 * 4,  // RGBA8_UNORM
             4 * 3,  // RGB32_FLOAT
             4 * 4,  // RGBA32_FLOAT
@@ -120,6 +130,48 @@ namespace cgs
         std::vector<byte> mData;
         std::string mName;
     };
+    
+    bool
+    Convert(void*& dst, const RenderResource::eFormat dstFormat, const void* src, const RenderResource::eFormat srcFormat) noexcept
+    {
+        if(dstFormat == srcFormat)
+        {
+            memcpy(dst, src, RenderResource::FORMAT_STRIDE[static_cast<uint32>(srcFormat)]);
+            return true;
+        }
+
+        if(dstFormat == RenderResource::eFormat::BGRA8_UNORM && srcFormat == RenderResource::eFormat::RGBA8_UNORM)
+        {
+            const Rgba8& rgbaValue = *reinterpret_cast<const Rgba8*>(src);
+            const Bgra8 convertedValue =
+            {
+                .B = rgbaValue.B,
+                .G = rgbaValue.G,
+                .R = rgbaValue.R,
+                .A = rgbaValue.A
+            };
+
+            *reinterpret_cast<Bgra8*>(dst) = convertedValue;
+            return true;
+        }
+        
+        if(dstFormat == RenderResource::eFormat::RGBA8_UNORM && srcFormat == RenderResource::eFormat::BGRA8_UNORM)
+        {
+            const Bgra8& bgraValue = *reinterpret_cast<const Bgra8*>(src);
+            const Rgba8 convertedValue =
+            {
+                .R = bgraValue.R,
+                .G = bgraValue.G,
+                .B = bgraValue.B,
+                .A = bgraValue.A
+            };
+
+            *reinterpret_cast<Rgba8*>(dst) = convertedValue;
+            return true;
+        }
+
+        return false;
+    }
 
     // TODO(alegruz): Force handness and winding to be LHS and CCW?
     class VertexBuffer final : public RenderResource
@@ -158,7 +210,7 @@ namespace cgs
 
         CGS_INLINE constexpr void
         SetIsEmissive(const bool isEmissive) noexcept { mIsEmissive = isEmissive; }
-        CGS_INLINE constexpr void
+        CGS_INLINE void
         SetVertexBuffer(VertexBuffer&& vertexBuffer) noexcept { mVertexBuffer = std::move(vertexBuffer); }
         CGS_INLINE constexpr void 
         SetIndices(std::vector<uint16>&& indices) noexcept { mIndices = std::move(indices); }
@@ -236,10 +288,10 @@ namespace cgs
         GetDepth() const noexcept { return mDepth; }
         template<typename T>
         CGS_INLINE constexpr bool
-        GetFragment(T& outFragment, const uint32 x, const uint32 y) const noexcept { return GetFragment(outFragment, x, y, 0); }
+        GetFragment(T& outFragment, const eFormat format, const uint32 x, const uint32 y) const noexcept { return GetFragment(outFragment, format, x, y, 0); }
         template<typename T>
         CGS_INLINE constexpr bool
-        GetFragment(T& outFragment, const uint32 x, const uint32 y, const uint32 z) const noexcept
+        GetFragment(T& outFragment, const eFormat format, const uint32 x, const uint32 y, const uint32 z) const noexcept
         {
             if(sizeof(T) != mStrideInBytes)
             {
@@ -249,8 +301,15 @@ namespace cgs
 
             if (x < mWidth && y < mHeight && z < mDepth)
             {
-                const size_t index = (z * mWidth * mHeight + y * mWidth + x) * mStrideInBytes;
-                outFragment = *reinterpret_cast<const T*>(&mData[index]);
+                size_t index = (z * mWidth * mHeight + y * mWidth + x) * mStrideInBytes;
+                // outFragment = *reinterpret_cast<const T*>(&mData[index]);
+                size_t offset = 0;
+                for(uint32 i = 0; i < mFormats.size(); ++i)
+                {
+                    void* dst = &outFragment + offset;
+                    Convert(dst, format, &mData[index + offset], mFormats[i]);
+                    offset += RenderResource::FORMAT_STRIDE[static_cast<uint32>(mFormats[i])];
+                }
                 return true;
             }
             assert(false && "GetFragment: coordinates out of bounds");
@@ -261,21 +320,54 @@ namespace cgs
         Clear() noexcept { std::fill(mData.begin(), mData.end(), static_cast<byte>(0)); }
         template<typename T>
         CGS_INLINE constexpr void
-        Clear(const T& value) noexcept { for (uint32 z = 0; z < mDepth; ++z) { for (uint32 y = 0; y < mHeight; ++y) { for (uint32 x = 0; x < mWidth; ++x) { SetFragmentValue(x, y, z, value); } } } }
-        template<typename T>
-        CGS_INLINE constexpr bool
-        SetFragmentValue(const uint32 x, const uint32 y, const T& value) noexcept
-        {
-            return SetFragmentValue<T>(x, y, 0, value);
+        Clear(const T& value) noexcept 
+        { 
+            for (uint32 z = 0; z < mDepth; ++z) 
+            { 
+                for (uint32 y = 0; y < mHeight; ++y) 
+                { 
+                    for (uint32 x = 0; x < mWidth; ++x) 
+                    { 
+                        size_t index = (z * mWidth * mHeight + y * mWidth + x) * mStrideInBytes;
+                        // *reinterpret_cast<T*>(&mData[index]) = value;
+                        size_t offset = 0;
+                        for(uint32 i = 0; i < mFormats.size(); ++i)
+                        {
+                            const size_t stride = RenderResource::FORMAT_STRIDE[static_cast<uint32>(mFormats[i])];
+                            memcpy(&mData[index + offset], &value + offset, stride);
+                            offset += stride;
+                        }
+                    } 
+                } 
+            } 
         }
         template<typename T>
         CGS_INLINE constexpr bool
-        SetFragmentValue(const uint32 x, const uint32 y, const uint32 z, const T& value) noexcept
+        SetFragmentValue(const uint32 x, const uint32 y, const T& value, const eFormat format) noexcept
         {
+            return SetFragmentValue<T>(x, y, 0, value, format);
+        }
+        template<typename T>
+        CGS_INLINE constexpr bool
+        SetFragmentValue(const uint32 x, const uint32 y, const uint32 z, const T& value, const eFormat format) noexcept
+        {
+            if (sizeof(T) != mStrideInBytes)
+            {
+                assert(false && "SetFragmentValue: type size mismatch");
+                return false;
+            }
+
             if (x < mWidth && y < mHeight && z < mDepth)
             {
-                const size_t index = (z * mWidth * mHeight + y * mWidth + x) * mStrideInBytes;
-                *reinterpret_cast<T*>(&mData[index]) = value;
+                size_t index = (z * mWidth * mHeight + y * mWidth + x) * mStrideInBytes;
+                // *reinterpret_cast<T*>(&mData[index]) = value;
+                size_t offset = 0;
+                for(uint32 i = 0; i < mFormats.size(); ++i)
+                {
+                    void* dst = &mData[index + offset];
+                    Convert(dst, mFormats[i], &value + offset, format);
+                    offset += RenderResource::FORMAT_STRIDE[static_cast<uint32>(mFormats[i])];
+                }
                 return true;
             }
             return false;
