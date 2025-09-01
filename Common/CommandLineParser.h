@@ -8,7 +8,6 @@ namespace cgs
         HELP,
         VERSION,
         INPUT_RESOURCE,
-        RENDER_DEVICE,
         WIDTH,
         HEIGHT,
         COUNT,

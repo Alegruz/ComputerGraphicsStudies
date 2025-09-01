@@ -20,8 +20,6 @@ static bool gIsRunning = true;
 namespace cgs
 {
     std::vector<std::filesystem::path> gRecentFiles;
-    std::vector<Texture> gBackBuffers(BACK_BUFFERS_COUNT, Texture(Texture::CreateInfo{ .Format = RenderResource::eFormat::BGRA8_UNORM, .Width = 1600, .Height = 900, .Depth = 1, .Name = "BackBuffer" }));
-    std::vector<Texture> gDepthBuffers(BACK_BUFFERS_COUNT, Texture(Texture::CreateInfo{ .Format = RenderResource::eFormat::D32_UNORM, .Width = 1600, .Height = 900, .Depth = 1, .Name = "DepthBuffer" }));
     static RenderThreadInfo gRenderThread;
 }
 
@@ -189,8 +187,8 @@ XdgSurfaceConfigure(void*,
     xdg_surface_ack_configure(surf, serial);
 
     // Determine a size to draw. Compositor may suggest 0,0; pick a default.
-    const int width = static_cast<int>(cgs::gBackBuffers[0].GetWidth());
-    const int height = static_cast<int>(cgs::gBackBuffers[0].GetHeight());
+    const int width = static_cast<int>(cgs::gWidth);
+    const int height = static_cast<int>(cgs::gHeight);
 
     if (!gShmBuffer.Buffer || gShmBuffer.Width != width || gShmBuffer.Height != height)
     {
@@ -291,15 +289,6 @@ PointerButton(void*,
               uint32 /*state*/)
 {
     gLastButtonSerial = serial;
-
-    cgs::Rgba8 fragmentValue = {};
-    cgs::gBackBuffers[0].GetFragment(fragmentValue, cgs::RenderResource::eFormat::RGBA8_UNORM, static_cast<uint32_t>(gPointerX), static_cast<uint32_t>(gPointerY));
-    std::cout << "Fragment Value: "
-        << static_cast<uint32_t>(fragmentValue.R)
-        << ", " << static_cast<uint32_t>(fragmentValue.G)
-        << ", " << static_cast<uint32_t>(fragmentValue.B)
-        << ", " << static_cast<uint32_t>(fragmentValue.A)
-        << std::endl;
 }
 
 static void
@@ -432,6 +421,7 @@ static const wl_registry_listener gRegistryListener =
 
 namespace cgs
 {
+#if defined(CGS_GRAPHICS_API_CPU)
     static void
     Present(const Texture& backBuffer)
     {
@@ -464,6 +454,7 @@ namespace cgs
 
         wl_display_flush(gDisplay); // send all queued requests
     }
+#endif  // defined(CGS_GRAPHICS_API_CPU)
 }
 
 int
@@ -513,33 +504,20 @@ main(int argc, char** argv)
     wl_surface_commit(gSurface);
     wl_display_roundtrip(gDisplay);
 
-    cgs::eRenderDeviceType renderDeviceType = cgs::ConvertStringToEnumValue<cgs::eRenderDeviceType>(commandLineParser.GetArgument(cgs::eOptionType::RENDER_DEVICE));
-    switch (renderDeviceType)
-    {
-    case cgs::eRenderDeviceType::CPU:
-        break;
-    case cgs::eRenderDeviceType::D3D12:
-        [[fallthrough]];
-    default:
-        assert(false && "Unknown render device type");
-        renderDeviceType = cgs::eRenderDeviceType::CPU;
-        break;
-    }
-
     bool hasInitializedRenderer = false;
-    switch (renderDeviceType)
+#if defined(CGS_GRAPHICS_API_CPU)
+    const cgs::RendererCreateInfo renderCreateInfo =
     {
-    case cgs::eRenderDeviceType::CPU:
-    {
-        hasInitializedRenderer = cgs::InitializeRenderer<cgs::eRenderDeviceType::CPU>();
-    }
-        break;
-    case cgs::eRenderDeviceType::D3D12:
-        [[fallthrough]];
-    default:
-        assert(false && "Unknown render device type");
-        break;
-    }
+        .Width = cgs::gWidth,
+        .Height = cgs::gHeight,
+    };
+
+    hasInitializedRenderer = cgs::InitializeRenderer(renderCreateInfo);
+#elif defined(CGS_GRAPHICS_API_D3D12)
+#error "D3D12 graphics API is not supported yet"
+#else
+#error "Unknown graphics API type"
+#endif
 
     if (hasInitializedRenderer == false)
     {
@@ -623,12 +601,6 @@ main(int argc, char** argv)
         while (true)
         {
             const uint64 lastCompleteWorkIndex = cgs::gRenderThread.LastCompleteWorkIndex.load();
-            // const uint64 currentWorkIndex = cgs::gRenderThread.CurrentWorkIndex.load();
-            // uint32 renderWorksCount = 0;
-            // {
-            //     const std::lock_guard lock(cgs::gRenderThread.RenderWorksMutex);
-            //     renderWorksCount = static_cast<uint32>(cgs::gRenderThread.RenderWorksPerFrame.size());
-            // }
             isFirstFrame = workIndex < cgs::BACK_BUFFERS_COUNT;
             const bool hasCompletedWork = lastCompleteWorkIndex != std::numeric_limits<uint64>::max();
 
@@ -642,17 +614,20 @@ main(int argc, char** argv)
         {
             if (isFirstFrame == false)
             {
+#if defined(CGS_GRAPHICS_API_CPU)
                 cgs::Present(cgs::gBackBuffers[currentFrameIndexToRender]);
+#else   // NOT defined(CGS_GRAPHICS_API_CPU)
+#error Unsupported graphics API
+#endif  // NOT defined(CGS_GRAPHICS_API_CPU)
             }
 
             const std::lock_guard lock(cgs::gRenderThread.RenderWorksMutex);
             cgs::gRenderThread.RenderWorksPerFrame.push(
                 cgs::RenderWork
                 {
-                    .OutTexture = cgs::gBackBuffers[currentFrameIndexToRender],
-                    .OutDepthBuffer = cgs::gDepthBuffers[currentFrameIndexToRender],
                     .Geometries = cornellBox,
-                    .WorkIndex = workIndex++
+                    .WorkIndex = workIndex++,
+                    .FrameIndex = currentFrameIndexToRender,
                 });
         }
 

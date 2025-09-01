@@ -1,20 +1,21 @@
 #pragma once
 
-#include "Common/Renderer.h"
+#include "CPU/Renderer.h"
 
+#if defined(CGS_GRAPHICS_API_CPU)
 namespace cgs
 {
     extern std::vector<SubRenderThreadInfo> gSubRenderThreads;
 
     template<eRasterizationMethod METHOD /*= eRasterizationMethod::DEFAULT*/>
     void
-    Rasterize(RenderWork& renderWork) noexcept
+    Rasterize(CpuRenderWork& renderWork) noexcept
     {
         const uint32 width = renderWork.OutTexture.GetWidth();
         const uint32 height = renderWork.OutTexture.GetHeight();
 
         const Geometry* emissiveGeometryOrNull = nullptr;
-        for (const Geometry& geometry : renderWork.Geometries)
+        for (const Geometry& geometry : renderWork.Work.Geometries)
         {
             if (geometry.IsEmissive() == true)
             {
@@ -34,7 +35,7 @@ namespace cgs
         const uint32 subRenderThreadsCount = static_cast<uint32>(gSubRenderThreads.size());
         std::vector<uint32> finalTileIndicesPerThread;
         finalTileIndicesPerThread.resize(subRenderThreadsCount, 0);
-        for (const Geometry& geometry : renderWork.Geometries)
+        for (const Geometry& geometry : renderWork.Work.Geometries)
         {
             const VertexBuffer& vertexBuffer = geometry.GetVertexBuffer();
             const std::vector<uint16>& indices = geometry.GetIndices();
@@ -182,7 +183,7 @@ namespace cgs
 
     template <eRenderDeviceType RENDER_DEVICE_TYPE>
     bool
-    InitializeRenderer() noexcept
+    InitializeRenderer(const RendererCreateInfo&) noexcept
     {
         static_assert(RENDER_DEVICE_TYPE != eRenderDeviceType::COUNT, "Invalid render device type");
         return false;
@@ -214,3 +215,4 @@ namespace cgs
         return true;
     }
 }
+#endif  // defined(CGS_GRAPHICS_API_CPU)

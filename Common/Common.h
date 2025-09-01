@@ -37,6 +37,8 @@ namespace cgs
     constexpr uint32 API_VERSION = MAKE_API_VERSION(0, 0, 0, 0);
 
     extern std::vector<std::filesystem::path> gRecentFiles;
+    constexpr uint32_t gWidth = 1920;
+    constexpr uint32_t gHeight = 1080;
 }
 
 #include "Core/Math.h"

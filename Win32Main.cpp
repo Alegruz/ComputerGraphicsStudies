@@ -88,8 +88,6 @@ static File gCurrentFile;
 namespace cgs
 {
     std::vector<std::filesystem::path> gRecentFiles;
-    std::vector<Texture> gBackBuffers(BACK_BUFFERS_COUNT, Texture(Texture::CreateInfo{ .Format = RenderResource::eFormat::BGRA8_UNORM, .Width = 1600, .Height = 900, .Depth = 1, .Name = std::string("Back Buffer") }));
-    std::vector<Texture> gDepthBuffers(BACK_BUFFERS_COUNT, Texture(Texture::CreateInfo{ .Format = RenderResource::eFormat::D32_UNORM, .Width = 1600, .Height = 900, .Depth = 1, .Name = std::string("Depth Buffer") }));
     static RenderThreadInfo gRenderThread;
 }
 
@@ -275,6 +273,7 @@ public:
 
 namespace cgs
 {
+#if defined(CGS_GRAPHICS_API_CPU)
     static void
     Present(HWND window, const Texture& backBuffer) noexcept
     {
@@ -310,6 +309,7 @@ namespace cgs
         StretchDIBits(deviceContext, 0, 0, backBuffer.GetWidth(), backBuffer.GetHeight(), 0, 0, backBuffer.GetWidth(), backBuffer.GetHeight(), backBuffer.GetData(), &bitmapInfo, DIB_RGB_COLORS, SRCCOPY);
         ReleaseDC(window, deviceContext);
     }
+#endif  // defined(CGS_GRAPHICS_API_CPU)
 }
 
 /// @brief The entry point for a Windows application.
@@ -371,8 +371,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
     const DWORD windowStyle = WS_VISIBLE;
     const int windowX = 0;
     const int windowY = 0;
-    const int windowWidth = cgs::gBackBuffers[0].GetWidth();
-    const int windowHeight = cgs::gBackBuffers[0].GetHeight();
+    const int windowWidth = cgs::gWidth;
+    const int windowHeight = cgs::gHeight;
     const HWND window = CreateWindow(
         className,
         windowName,
@@ -394,18 +394,19 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
     HACCEL accelerators = CreateAccelerators();
 
     bool hasInitializedRenderer = false;
+    const cgs::RendererCreateInfo renderCreateInfo =
+    {
+        .Width = cgs::gWidth,
+        .Height = cgs::gHeight,
 #if defined(CGS_GRAPHICS_API_CPU)
-    hasInitializedRenderer = cgs::InitializeRenderer<cgs::eRenderDeviceType::CPU>();
 #elif defined(CGS_GRAPHICS_API_D3D12)
-    hasInitializedRenderer = cgs::InitializeRenderer<cgs::eRenderDeviceType::D3D12>();
+        .Window = window,
 #else
 #error "Unknown graphics API type"
 #endif
+    };
 
-    if (hasInitializedRenderer == false)
-    {
-        hasInitializedRenderer = cgs::InitializeRenderer<cgs::eRenderDeviceType::CPU>();
-    }
+    hasInitializedRenderer = cgs::InitializeRenderer(renderCreateInfo);
 
     if(hasInitializedRenderer == false)
     {
@@ -456,12 +457,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
         while (true)
         {
             const uint64 lastCompleteWorkIndex = cgs::gRenderThread.LastCompleteWorkIndex.load();
-            // const uint64 currentWorkIndex = cgs::gRenderThread.CurrentWorkIndex.load();
-            // uint32 renderWorksCount = 0;
-            // {
-            //     const std::lock_guard lock(cgs::gRenderThread.RenderWorksMutex);
-            //     renderWorksCount = static_cast<uint32>(cgs::gRenderThread.RenderWorksPerFrame.size());
-            // }
             isFirstFrame = workIndex < cgs::BACK_BUFFERS_COUNT;
             const bool hasCompletedWork = lastCompleteWorkIndex != std::numeric_limits<uint64>::max();
 
@@ -475,17 +470,22 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
         {
             if (isFirstFrame == false)
             {
+#if defined(CGS_GRAPHICS_API_CPU)
                 cgs::Present(window, cgs::gBackBuffers[currentFrameIndexToRender]);
+#elif defined(CGS_GRAPHICS_API_D3D12)
+                assert(false && "D3D12 Present not implemented");
+#else   // NOT defined(CGS_GRAPHICS_API_CPU) && NOT defined(CGS_GRAPHICS_API_D3D12)
+#error "Unknown graphics API"
+#endif  // NOT defined(CGS_GRAPHICS_API_CPU) && NOT defined(CGS_GRAPHICS_API_D3D12)
             }
 
             const std::lock_guard lock(cgs::gRenderThread.RenderWorksMutex);
             cgs::gRenderThread.RenderWorksPerFrame.push(
                 cgs::RenderWork
                 {
-                    .OutTexture = cgs::gBackBuffers[currentFrameIndexToRender],
-                    .OutDepthBuffer = cgs::gDepthBuffers[currentFrameIndexToRender],
                     .Geometries = cornellBox,
-                    .WorkIndex = workIndex++
+                    .WorkIndex = workIndex++,
+                    .FrameIndex = currentFrameIndexToRender,
                 });
         }
 

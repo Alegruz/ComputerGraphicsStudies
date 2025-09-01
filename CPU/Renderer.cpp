@@ -1,24 +1,23 @@
 #include "pch.hpp"
 
-#include "Common/Renderer.hpp"
+#include "Common/Renderer.cpp"
 
 #if defined(CGS_GRAPHICS_API_CPU)
+#include "CPU/Renderer.hpp"
 #include "Common/Thread.h"
 
 #include <iostream>
-#include <numbers>
 #include <random>
 
 namespace cgs
 {
     static GlobalRenderContext gGlobalRenderContext;
+    static std::vector<Texture> gBackBuffers(BACK_BUFFERS_COUNT, Texture(Texture::CreateInfo{ .Format = RenderResource::eFormat::BGRA8_UNORM, .Width = cgs::gWidth, .Height = cgs::gHeight, .Depth = 1, .Name = std::string("Back Buffer") }));
+    static std::vector<Texture> gDepthBuffers(BACK_BUFFERS_COUNT, Texture(Texture::CreateInfo{ .Format = RenderResource::eFormat::D32_UNORM, .Width = cgs::gWidth, .Height = cgs::gHeight, .Depth = 1, .Name = std::string("Depth Buffer") }));
+
     std::vector<SubRenderThreadInfo> gSubRenderThreads;
     static std::mutex gBackBufferLock;
     static std::mutex gDepthBufferLock;
-
-    static Camera gMainCamera;
-    static float4x4 gViewMatrix;
-    static float4x4 gProjectionMatrix;
 
     static void
     SubRenderThreadMain(ThreadProcessArgument& arg) noexcept;
@@ -49,46 +48,7 @@ namespace cgs
     void
     CreateCornellBoxScene(std::vector<Geometry>& outGeometries) noexcept
     {
-        gMainCamera = Camera(
-            Camera::CreateInfo
-            {
-                .Position = Coordinate<eCoordinateSpace::WORLD>{ -278.0f, 273.0f, -800.0f },
-                .Front = Coordinate<eCoordinateSpace::WORLD>{ 0.0f, 0.0f, 1.0f },
-                .Up = Coordinate<eCoordinateSpace::WORLD>{ 0.0f, 1.0f, 0.0f },
-            }
-            );
-        
-        float3 zAxis = Normalize(gMainCamera.GetFront());
-        float3 xAxis = Normalize(Cross(gMainCamera.GetUp(), zAxis));
-        float3 yAxis = Cross(zAxis, xAxis);
-
-        gViewMatrix = float4x4
-        {
-            .Data =
-            {
-                float4( xAxis.X, xAxis.Y, xAxis.Z, -Dot(xAxis, gMainCamera.GetPosition()) ),
-                float4( yAxis.X, yAxis.Y, yAxis.Z, -Dot(yAxis, gMainCamera.GetPosition()) ),
-                float4( zAxis.X, zAxis.Y, zAxis.Z, -Dot(zAxis, gMainCamera.GetPosition()) ),
-                float4( 0.0f, 0.0f, 0.0f, 1.0f ),
-            },
-        };
-
-        const float fovY = std::numbers::pi_v<float> / 4.0f;
-        const float f = 1.0f / std::tan(fovY / 2.0f);
-        const float aspectRatio = 1600.0f / 900.0f;
-        const float nearPlane = 0.1f;
-        const float farPlane = 2000.0f;
-
-        gProjectionMatrix = float4x4
-        {
-            .Data =
-            {
-                float4(f / aspectRatio, 0.0f, 0.0f, 0.0f),
-                float4(0.0f, f, 0.0f, 0.0f),
-                float4(0.0f, 0.0f, farPlane / (farPlane - nearPlane), (-farPlane * nearPlane) / (farPlane - nearPlane)),
-                float4(0.0f, 0.0f, 1.0f, 0.0f),
-            },
-        };
+        InitializeCornellBoxCamera();
 
         outGeometries.clear();
         outGeometries.reserve(8);
@@ -428,9 +388,8 @@ namespace cgs
         return outputColor;
     }
     
-    template<>
     bool
-    InitializeRenderer<eRenderDeviceType::CPU>() noexcept
+    InitializeRenderer(const RendererCreateInfo&) noexcept
     {
         for (uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
         {
@@ -490,12 +449,18 @@ namespace cgs
                 uniqueLock.unlock();
 
                 // Process the render work
-                renderWork.OutTexture.Clear();
-                renderWork.OutDepthBuffer.Clear(std::numeric_limits<float>::max());
+                CpuRenderWork cpuRenderWork = 
+                {
+                    .OutTexture = gBackBuffers[renderWork.FrameIndex],
+                    .OutDepthBuffer = gDepthBuffers[renderWork.FrameIndex],
+                    .Work = renderWork,
+                };
+                cpuRenderWork.OutTexture.Clear();
+                cpuRenderWork.OutDepthBuffer.Clear(std::numeric_limits<float>::max());
                 if (renderThreadInfo.RenderMethod == eRenderMethod::RASTERIZATION)
                 {
                     renderThreadInfo.CurrentWorkIndex.store(renderWork.WorkIndex);
-                    Rasterize(renderWork);
+                    Rasterize(cpuRenderWork);
                     renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
                     // std::cout << "RenderWork completed: " << renderWork.WorkIndex << std::endl;
                 }
@@ -623,7 +588,7 @@ namespace cgs
 #else   // NOT defined(CGS_GRAPHICS_API_CPU)
     template <>
     bool
-    InitializeRenderer<eRenderDeviceType::CPU>() noexcept
+    InitializeRenderer<eRenderDeviceType::CPU>(const RendererCreateInfo& createInfo) noexcept
     {
         return false;
     }

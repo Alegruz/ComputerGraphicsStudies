@@ -1,62 +1,13 @@
 #include "pch.hpp"
 
-#include "Common/Renderer.hpp"
+#include "Common/Renderer.cpp"
 
 #if defined(CGS_GRAPHICS_API_D3D12)
+#include "D3D12/Renderer.h"
+
 namespace cgs
 {
     static GlobalRenderContext gGlobalRenderContext;
-
-    void
-    CreateCornellBoxScene(std::vector<Geometry>&) noexcept
-    {
-        assert(false && "CreateCornellBoxScene not implemented");
-    }
-
-    void
-    RenderThreadMain(ThreadProcessArgument& arg) noexcept
-    {
-        if (arg.Argument == nullptr)
-        {
-            assert(false && "RenderInfo argument is null");
-            return;
-        }
-
-        RenderThreadInfo& renderThreadInfo = *static_cast<RenderThreadInfo*>(arg.Argument);
-        while (renderThreadInfo.IsActive.load())
-        {
-            std::unique_lock<std::mutex> uniqueLock(renderThreadInfo.RenderWorksMutex, std::defer_lock);
-            uniqueLock.lock();
-            if (renderThreadInfo.RenderWorksPerFrame.empty() == false)
-            {
-                RenderWork renderWork = std::move(renderThreadInfo.RenderWorksPerFrame.front());
-                renderThreadInfo.RenderWorksPerFrame.pop();
-                uniqueLock.unlock();
-
-                // Process the render work
-                assert(false && "Render work not implemented");
-#if 0
-                renderWork.OutTexture.Clear();
-                renderWork.OutDepthBuffer.Clear(std::numeric_limits<float>::max());
-                if (renderThreadInfo.RenderMethod == eRenderMethod::RASTERIZATION)
-                {
-                    renderThreadInfo.CurrentWorkIndex.store(renderWork.WorkIndex);
-                    Rasterize(renderWork);
-                    renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
-                    // std::cout << "RenderWork completed: " << renderWork.WorkIndex << std::endl;
-                }
-                else
-                {
-                    assert(false && "Unsupported render method in RenderThreadMain");
-                }
-#endif
-            }
-            else
-            {
-                uniqueLock.unlock();
-            }
-        }
-    }
 
     template<typename T>
     class D3DPtr final
@@ -159,10 +110,61 @@ namespace cgs
     static D3DPtr<IDXGIFactory6> gFactory;
     static D3DPtr<IDXGIAdapter> gAdapter;
     static D3DPtr<ID3D12Device> gDevice;
+    static D3DPtr<IDXGISwapChain1> gSwapChain;
 
-    template <>
+    void
+    CreateCornellBoxScene(std::vector<Geometry>&) noexcept
+    {
+        InitializeCornellBoxCamera();
+    }
+
+    void
+    RenderThreadMain(ThreadProcessArgument& arg) noexcept
+    {
+        if (arg.Argument == nullptr)
+        {
+            assert(false && "RenderInfo argument is null");
+            return;
+        }
+
+        RenderThreadInfo& renderThreadInfo = *static_cast<RenderThreadInfo*>(arg.Argument);
+        while (renderThreadInfo.IsActive.load())
+        {
+            std::unique_lock<std::mutex> uniqueLock(renderThreadInfo.RenderWorksMutex, std::defer_lock);
+            uniqueLock.lock();
+            if (renderThreadInfo.RenderWorksPerFrame.empty() == false)
+            {
+                RenderWork renderWork = std::move(renderThreadInfo.RenderWorksPerFrame.front());
+                renderThreadInfo.RenderWorksPerFrame.pop();
+                uniqueLock.unlock();
+
+                // Process the render work
+                assert(false && "Render work not implemented");
+#if 0
+                renderWork.OutTexture.Clear();
+                renderWork.OutDepthBuffer.Clear(std::numeric_limits<float>::max());
+                if (renderThreadInfo.RenderMethod == eRenderMethod::RASTERIZATION)
+                {
+                    renderThreadInfo.CurrentWorkIndex.store(renderWork.WorkIndex);
+                    Rasterize(renderWork);
+                    renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
+                    // std::cout << "RenderWork completed: " << renderWork.WorkIndex << std::endl;
+                }
+                else
+                {
+                    assert(false && "Unsupported render method in RenderThreadMain");
+                }
+#endif
+            }
+            else
+            {
+                uniqueLock.unlock();
+            }
+        }
+    }
+
     bool
-    InitializeRenderer<eRenderDeviceType::D3D12>() noexcept
+    InitializeRenderer(const RendererCreateInfo& createInfo) noexcept
     {
         HRESULT hr = S_OK;
 
@@ -210,14 +212,34 @@ namespace cgs
             return false;
         }
 
+        const DXGI_SWAP_CHAIN_DESC1 swapChainDesc = 
+        {
+            .Width = createInfo.Width,
+            .Height = createInfo.Height,
+            .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+            .Stereo = FALSE,
+            .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+            .BufferUsage = DXGI_USAGE_BACK_BUFFER,
+            .BufferCount = BACK_BUFFERS_COUNT,
+            .Scaling = DXGI_SCALING_STRETCH,
+            .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
+            .AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED,
+            .Flags = 0,
+        };
+        hr = gFactory->CreateSwapChainForHwnd(gDevice.Get(), createInfo.Window, &swapChainDesc, nullptr, nullptr, gSwapChain.GetAddressOf());
+        if (FAILED(hr))
+        {
+            assert(false && "Failed to create swap chain");
+            return false;
+        }
+
         gGlobalRenderContext.RenderDeviceType = eRenderDeviceType::D3D12;
         return true;
     }
 }
 #else   // NOT defined(CGS_GRAPHICS_API_D3D12)
-    template <>
     bool
-    InitializeRenderer<eRenderDeviceType::D3D12>() noexcept
+    InitializeRenderer(const RendererCreateInfo&) noexcept
     {
         return false;
     }

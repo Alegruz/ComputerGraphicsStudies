@@ -11,7 +11,6 @@ namespace cgs
         { TEXT("--help"), {.LongOption = TEXT("--help"), .ShortOption = TEXT("-h"), .Type = eOptionType::HELP, .Description = TEXT("Show help information.") } },
         { TEXT("--version"), {.LongOption = TEXT("--version"), .ShortOption = TEXT("-v"), .Type = eOptionType::VERSION, .Description = TEXT("Show version information.") } },
         { TEXT("--input-resource"), {.LongOption = TEXT("--input-resource"), .ShortOption = TEXT("-i"), .Type = eOptionType::INPUT_RESOURCE, .Description = TEXT("Path to the input model file.") } },
-        { TEXT("--render-device"), {.LongOption = TEXT("--render-device"), .ShortOption = TEXT("-rd"), .Type = eOptionType::RENDER_DEVICE, .Description = TEXT("Specify the render device.") } },
         { TEXT("--width"), {.LongOption = TEXT("--width"), .ShortOption = TEXT("-w"), .Type = eOptionType::WIDTH, .Description = TEXT("Specify the width.") } },
         { TEXT("--height"), {.LongOption = TEXT("--height"), .ShortOption = TEXT("-h"), .Type = eOptionType::HEIGHT, .Description = TEXT("Specify the height.") } },
     };
@@ -120,19 +119,6 @@ namespace cgs
                     const StringType optionArgument = mArguments[argumentIndex + 1];
                     cgs::gRecentFiles.push_back(optionArgument);
                     mOptionValues[static_cast<uint32>(eOptionType::INPUT_RESOURCE)] = ToString(optionArgument);
-                    ++argumentIndex;
-                }
-                break;
-                case cgs::eOptionType::RENDER_DEVICE:
-                {
-                    if (argumentIndex + 1 >= numArguments)
-                    {
-                        isOptionFound = false;
-                        break;
-                    }
-
-                    const StringType optionArgument = mArguments[argumentIndex + 1];
-                    mOptionValues[static_cast<uint32>(eOptionType::RENDER_DEVICE)] = ToString(optionArgument);
                     ++argumentIndex;
                 }
                 break;

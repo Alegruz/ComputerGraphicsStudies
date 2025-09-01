@@ -28,18 +28,6 @@ namespace cgs
     static constexpr Rgba8 GREEN{ 0, 255, 0, 255 };
     static constexpr Rgba8 BLUE{ 0, 0, 255, 255 };
 
-    enum class eHandnessType : uint8
-    {
-        LEFT,
-        RIGHT,
-    };
-
-    enum class eWindingType : uint8
-    {
-        COUNTER_CLOCKWISE,
-        CLOCKWISE,
-    };
-
     struct VertexPN final
     {
         Coordinate<eCoordinateSpace::WORLD> Position;
@@ -380,8 +368,6 @@ namespace cgs
     };
 
     constexpr uint32 BACK_BUFFERS_COUNT = 3;
-    extern std::vector<cgs::Texture> gBackBuffers;
-    extern std::vector<cgs::Texture> gDepthBuffers;
 
     enum class eRasterizationMethod : uint8
     {
@@ -405,10 +391,9 @@ namespace cgs
 
     struct RenderWork final
     {
-        Texture& OutTexture;
-        Texture& OutDepthBuffer;
         const std::vector<Geometry>& Geometries;
         uint64 WorkIndex;
+        uint32 FrameIndex;
     };
 
     struct RenderThreadInfo final
@@ -426,72 +411,6 @@ namespace cgs
 
     void
     RenderThreadMain(ThreadProcessArgument& arg) noexcept;
-
-    template<eRasterizationMethod METHOD = eRasterizationMethod::DEFAULT>
-    void
-    Rasterize(RenderWork& work) noexcept;
-
-    struct SubRenderWork final
-    {
-        RenderWork& ParentRenderWork;
-        
-        const Geometry& CurrentGeometry;
-        const Geometry& EmissiveGeometry;
-
-        const CornellBoxVertexShaderOutput V0;
-        const CornellBoxVertexShaderOutput V1;
-        const CornellBoxVertexShaderOutput V2;
-
-        uint32 MinX = 0;
-        uint32 MaxX = 0;
-        uint32 MinY = 0;
-        uint32 MaxY = 0;
-
-        uint64 WorkIndex = 0;
-    };
-
-    struct SubRenderThreadInfo final
-    {
-        std::shared_ptr<ThreadHandle> CurrentThreadHandle;
-        eRenderMethod RenderMethod;
-
-        std::mutex RenderWorksMutex;
-        std::queue<SubRenderWork> SubRenderWorks;
-        std::atomic<uint64> LastCompleteWorkIndex;
-        std::atomic<bool> IsActive;
-
-        CGS_INLINE SubRenderThreadInfo() noexcept
-            : CurrentThreadHandle(nullptr)
-            , RenderMethod(eRenderMethod::DEFAULT)
-            , LastCompleteWorkIndex(std::numeric_limits<uint64>::max())
-            , IsActive(true)
-        {
-        }
-        SubRenderThreadInfo(const SubRenderThreadInfo&) = delete;
-        CGS_INLINE SubRenderThreadInfo(SubRenderThreadInfo&& other) noexcept
-        {
-            *this = std::move(other);
-        }
-        CGS_INLINE ~SubRenderThreadInfo() noexcept = default;
-
-        SubRenderThreadInfo& operator=(const SubRenderThreadInfo&) = delete;
-        CGS_INLINE SubRenderThreadInfo& operator=(SubRenderThreadInfo&& other) noexcept
-        {
-            if (this != &other)
-            {
-                std::lock_guard<std::mutex> lockGuard(other.RenderWorksMutex);
-                CurrentThreadHandle = std::move(other.CurrentThreadHandle);
-                RenderMethod = other.RenderMethod;
-                SubRenderWorks = std::move(other.SubRenderWorks);
-                LastCompleteWorkIndex = other.LastCompleteWorkIndex.load();
-                IsActive = other.IsActive.load();
-            }
-            return *this;
-        }
-    };
-
-    void
-    SubRasterize(SubRenderWork& work) noexcept;
 
     class Camera final
     {
@@ -594,10 +513,6 @@ namespace cgs
         }
         return eRenderDeviceType::CPU;
     }
-    
-    template <eRenderDeviceType RENDER_DEVICE_TYPE>
-    [[nodiscard]] bool
-    InitializeRenderer() noexcept;
 
     void
     Render(ThreadProcessArgument& arg) noexcept;
