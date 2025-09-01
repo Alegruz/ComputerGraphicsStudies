@@ -43,3 +43,4 @@ Target platforms (sorted by priority):
 * **[2025.08.29]**: added command line arguments for width and height
 * **[2025.08.30]**: improved multithreads to worker threads instead of creating and deleting threads every frame
 * **[2025.08.31]**: fixed multithreaded rendering
+* **[2025.09.01]**: implemented RGBA8 to BGRA8 conversion
