@@ -284,7 +284,7 @@ PointerButton(void*,
     gLastButtonSerial = serial;
 
     cgs::Rgba8 fragmentValue = {};
-    cgs::gBackBuffers[0].GetFragment(fragmentValue, cgs::RenderResource::eFormat::RGBA8, static_cast<uint32_t>(gPointerX), static_cast<uint32_t>(gPointerY));
+    cgs::gBackBuffers[0].GetFragment(fragmentValue, cgs::RenderResource::eFormat::RGBA8_UNORM, static_cast<uint32_t>(gPointerX), static_cast<uint32_t>(gPointerY));
     std::cout << "Fragment Value: "
         << static_cast<uint32_t>(fragmentValue.R)
         << ", " << static_cast<uint32_t>(fragmentValue.G)
