@@ -11,7 +11,7 @@
 
 namespace cgs
 {
-    GlobalRenderContext gGlobalRenderContext;
+    static GlobalRenderContext gGlobalRenderContext;
     std::vector<SubRenderThreadInfo> gSubRenderThreads;
     static std::mutex gBackBufferLock;
     static std::mutex gDepthBufferLock;

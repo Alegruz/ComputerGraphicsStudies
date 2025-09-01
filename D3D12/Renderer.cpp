@@ -5,6 +5,14 @@
 #if defined(CGS_GRAPHICS_API_D3D12)
 namespace cgs
 {
+    static GlobalRenderContext gGlobalRenderContext;
+
+    void
+    CreateCornellBoxScene(std::vector<Geometry>&) noexcept
+    {
+        assert(false && "CreateCornellBoxScene not implemented");
+    }
+
     void
     RenderThreadMain(ThreadProcessArgument& arg) noexcept
     {
@@ -26,6 +34,7 @@ namespace cgs
                 uniqueLock.unlock();
 
                 // Process the render work
+                assert(false && "Render work not implemented");
 #if 0
                 renderWork.OutTexture.Clear();
                 renderWork.OutDepthBuffer.Clear(std::numeric_limits<float>::max());

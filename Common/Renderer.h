@@ -571,7 +571,6 @@ namespace cgs
     {
         eRenderDeviceType RenderDeviceType;
     };
-    extern GlobalRenderContext gGlobalRenderContext;
 
     // Primary template declaration
     template<typename T>
