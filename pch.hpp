@@ -60,7 +60,7 @@
 #include "xdg-shell-client-protocol.h"
 #endif  // defined(CGS_LINUX)
 
-#include "Common.h"
+#include "Common/Common.h"
 
 #if defined(CGS_GRAPHICS_API_D3D12)
 #include <d3d12.h>

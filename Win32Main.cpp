@@ -1,16 +1,17 @@
 #include "pch.hpp"
 
 #if defined(CGS_WINDOWS)
-#include "Common.cpp"
+#include "Common/Common.cpp"
 
 #if defined(CGS_GRAPHICS_API_CPU)
+#include "CPU/Renderer.cpp"
 #elif defined(CGS_GRAPHICS_API_D3D12)   // NOT defined(CGS_GRAPHICS_API_CPU)
-#include "D3D12Renderer.cpp"
+#include "D3D12/Renderer.cpp"
 #else   // NOT defined(CGS_GRAPHICS_API_D3D12) && NOT defined(CGS_GRAPHICS_API_CPU)
 #error Unsupported graphics API type
 #endif  // NOT defined(CGS_GRAPHICS_API_D3D12) && NOT defined(CGS_GRAPHICS_API_CPU)
 
-#include "Win32Thread.cpp"
+#include "Win32/Thread.cpp"
 
 static bool gIsRunning = true;
 
@@ -394,14 +395,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
 
     bool hasInitializedRenderer = false;
 #if defined(CGS_GRAPHICS_API_CPU)
-    cgs::eRenderDeviceType renderDeviceType = cgs::eRenderDeviceType::CPU;
+    hasInitializedRenderer = cgs::InitializeRenderer<cgs::eRenderDeviceType::CPU>();
 #elif defined(CGS_GRAPHICS_API_D3D12)
-    cgs::eRenderDeviceType renderDeviceType = cgs::eRenderDeviceType::D3D12;
     hasInitializedRenderer = cgs::InitializeRenderer<cgs::eRenderDeviceType::D3D12>();
-    if (hasInitializedRenderer == false)
-    {
-        renderDeviceType = cgs::eRenderDeviceType::CPU;
-    }
 #else
 #error "Unknown graphics API type"
 #endif

@@ -1,10 +1,54 @@
 #include "pch.hpp"
 
-#include "Renderer.hpp"
+#include "Common/Renderer.hpp"
 
 #if defined(CGS_GRAPHICS_API_D3D12)
 namespace cgs
 {
+    void
+    RenderThreadMain(ThreadProcessArgument& arg) noexcept
+    {
+        if (arg.Argument == nullptr)
+        {
+            assert(false && "RenderInfo argument is null");
+            return;
+        }
+
+        RenderThreadInfo& renderThreadInfo = *static_cast<RenderThreadInfo*>(arg.Argument);
+        while (renderThreadInfo.IsActive.load())
+        {
+            std::unique_lock<std::mutex> uniqueLock(renderThreadInfo.RenderWorksMutex, std::defer_lock);
+            uniqueLock.lock();
+            if (renderThreadInfo.RenderWorksPerFrame.empty() == false)
+            {
+                RenderWork renderWork = std::move(renderThreadInfo.RenderWorksPerFrame.front());
+                renderThreadInfo.RenderWorksPerFrame.pop();
+                uniqueLock.unlock();
+
+                // Process the render work
+#if 0
+                renderWork.OutTexture.Clear();
+                renderWork.OutDepthBuffer.Clear(std::numeric_limits<float>::max());
+                if (renderThreadInfo.RenderMethod == eRenderMethod::RASTERIZATION)
+                {
+                    renderThreadInfo.CurrentWorkIndex.store(renderWork.WorkIndex);
+                    Rasterize(renderWork);
+                    renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
+                    // std::cout << "RenderWork completed: " << renderWork.WorkIndex << std::endl;
+                }
+                else
+                {
+                    assert(false && "Unsupported render method in RenderThreadMain");
+                }
+#endif
+            }
+            else
+            {
+                uniqueLock.unlock();
+            }
+        }
+    }
+
     template<typename T>
     class D3DPtr final
     {

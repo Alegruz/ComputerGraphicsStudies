@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Thread.h"
+#include "Common/Thread.h"
 
 namespace cgs
 {
@@ -489,9 +489,6 @@ namespace cgs
             return *this;
         }
     };
-
-    void
-    SubRenderThreadMain(ThreadProcessArgument& arg) noexcept;
 
     void
     SubRasterize(SubRenderWork& work) noexcept;

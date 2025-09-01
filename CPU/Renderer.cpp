@@ -1,6 +1,9 @@
 #include "pch.hpp"
-#include "Renderer.hpp"
-#include "Thread.h"
+
+#include "Common/Renderer.hpp"
+
+#if defined(CGS_GRAPHICS_API_CPU)
+#include "Common/Thread.h"
 
 #include <iostream>
 #include <numbers>
@@ -16,6 +19,9 @@ namespace cgs
     static Camera gMainCamera;
     static float4x4 gViewMatrix;
     static float4x4 gProjectionMatrix;
+
+    void
+    SubRenderThreadMain(ThreadProcessArgument& arg) noexcept;
 
     static void
     AddQuadVertices(VertexBuffer& vertexBuffer, std::vector<uint16>& inoutIndices, const Coordinate<eCoordinateSpace::WORLD>& v0, const Coordinate<eCoordinateSpace::WORLD>& v1, const Coordinate<eCoordinateSpace::WORLD>& v2, const Coordinate<eCoordinateSpace::WORLD>& v3)
@@ -512,7 +518,7 @@ namespace cgs
         }
     }
 
-    void
+    static void
     SubRenderThreadMain(ThreadProcessArgument& arg) noexcept
     {
         if (arg.Argument == nullptr)
@@ -614,3 +620,11 @@ namespace cgs
         }
     }
 }
+#else   // NOT defined(CGS_GRAPHICS_API_CPU)
+    template <>
+    bool
+    InitializeRenderer<eRenderDeviceType::CPU>() noexcept
+    {
+        return false;
+    }
+#endif  // NOT defined(CGS_GRAPHICS_API_CPU)

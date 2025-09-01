@@ -1,8 +1,17 @@
 #include "pch.hpp"
 
 #if defined(CGS_LINUX)
-#include "Common.cpp"
-#include "LinuxThread.cpp"
+#include "Common/Common.cpp"
+
+#if defined(CGS_GRAPHICS_API_CPU)
+#include "CPU/Renderer.cpp"
+#elif defined(CGS_GRAPHICS_API_D3D12)   // NOT defined(CGS_GRAPHICS_API_CPU)
+#error "D3D12 is not supported on Linux"
+#else   // NOT defined(CGS_GRAPHICS_API_D3D12) && NOT defined(CGS_GRAPHICS_API_CPU)
+#error Unsupported graphics API type
+#endif  // NOT defined(CGS_GRAPHICS_API_D3D12) && NOT defined(CGS_GRAPHICS_API_CPU)
+
+#include "Linux/Thread.cpp"
 
 #include <iostream>
 

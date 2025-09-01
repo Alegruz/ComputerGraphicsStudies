@@ -1,14 +1,14 @@
 #include "pch.hpp"
 
-#if defined(CGS_WINDOWS)
-#include "Thread.h"
+#if defined(CGS_LINUX)
+#include "Common/Thread.h"
 
 namespace cgs
 {
     struct ThreadHandle final
     {
-        HANDLE Handle;
-        DWORD ThreadId;
+        pthread_t Handle;
+        std::atomic<bool> IsAlive = false;
     };
 
     struct StartThunk final
@@ -17,17 +17,18 @@ namespace cgs
         ThreadProcessArgument Argument;
     };
 
-    static DWORD WINAPI StartThread(LPVOID param)
+    static void* StartThread(void* param)
     {
         StartThunk thunk = *static_cast<StartThunk*>(param);
         while (thunk.Argument.InoutThreadHandle == nullptr || IsThreadValid(*thunk.Argument.InoutThreadHandle) == false)
         {
             Yield();
         }
-        
+
+        thunk.Argument.InoutThreadHandle->IsAlive.store(true);
         thunk.Process(thunk.Argument);
         delete static_cast<StartThunk*>(param);
-        return 0;
+        return nullptr;
     }
 
     bool Create(std::shared_ptr<ThreadHandle>& outHandle, const ThreadCreateInfo& createInfo) noexcept
@@ -47,75 +48,61 @@ namespace cgs
                 .Argument = createInfo.Argument
             } 
         };
-        const DWORD flags = 0;
-        const SIZE_T stackSize = createInfo.StackSize;
-        outHandle->Handle = CreateThread(nullptr, stackSize, StartThread, thunk, flags, &outHandle->ThreadId);
-        if(outHandle->Handle == NULL)
+        if(pthread_create(&outHandle->Handle, nullptr, StartThread, thunk) != 0)
         {
             delete thunk;
             return false;
         }
+        pthread_setname_np(outHandle->Handle, createInfo.Name.c_str());
 
-        wchar_t threadName[64] = { 0, };
-        MultiByteToWideChar(CP_UTF8, 0, createInfo.Name.c_str(), -1, threadName, static_cast<int>(std::size(threadName)));
-        SetThreadDescription(outHandle->Handle, threadName);
         return true;
     }
 
     void Join(ThreadHandle& inoutHandle) noexcept
     {
-        if(inoutHandle.Handle == NULL)
+        if(inoutHandle.Handle == 0)
         {
             return;
         }
 
-        WaitForSingleObject(inoutHandle.Handle, INFINITE);
-        CloseHandle(inoutHandle.Handle);
-        inoutHandle.Handle = NULL;
-        inoutHandle.ThreadId = 0;
+        pthread_join(inoutHandle.Handle, nullptr);
+        inoutHandle.Handle = 0;
     }
 
     void Detach(ThreadHandle& inoutHandle) noexcept
     {
-        if(inoutHandle.Handle == NULL)
+        if(inoutHandle.Handle == 0)
         {
             return;
         }
 
-        CloseHandle(inoutHandle.Handle);
-        inoutHandle.Handle = NULL;
-        inoutHandle.ThreadId = 0;
+        pthread_detach(inoutHandle.Handle);
+        inoutHandle.Handle = 0;
     }
 
     bool IsThreadAlive(const ThreadHandle& inoutHandle) noexcept
     {
-        if(inoutHandle.Handle == NULL)
+        if(inoutHandle.Handle == 0)
         {
             return false;
         }
 
-        DWORD exitCode;
-        if(GetExitCodeThread(inoutHandle.Handle, &exitCode))
-        {
-            return exitCode == STILL_ACTIVE;
-        }
-
-        return false;
+        return inoutHandle.IsAlive.load();
     }
 
     bool IsThreadValid(const ThreadHandle& inoutHandle) noexcept
     {
-        return inoutHandle.Handle != NULL;
+        return inoutHandle.Handle != 0;
     }
 
     void SleepForMs(const uint32 ms) noexcept
     {
-        Sleep(ms);
+        usleep(ms * 1000);
     }
 
     void Yield() noexcept
     {
-        SwitchToThread();
+        sched_yield();
     }
 
     void Destroy(ThreadHandle& inoutHandle) noexcept
@@ -125,9 +112,7 @@ namespace cgs
 
     uint32 GetLogicalProcessorsCount() noexcept
     {
-        SYSTEM_INFO sysInfo;
-        GetSystemInfo(&sysInfo);
-        return sysInfo.dwNumberOfProcessors;
+        return static_cast<uint32>(get_nprocs());
     }
 }
-#endif  // defined(CGS_WINDOWS)
+#endif  // defined(CGS_LINUX)

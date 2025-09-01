@@ -1,6 +1,6 @@
 #include "pch.hpp"
 
-#include "CommandLineParser.h"
+#include "Common/CommandLineParser.h"
 
 namespace cgs
 {
