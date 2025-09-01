@@ -8,6 +8,7 @@
 
 namespace cgs
 {
+    GlobalRenderContext gGlobalRenderContext;
     std::vector<SubRenderThreadInfo> gSubRenderThreads;
     static std::mutex gBackBufferLock;
     static std::mutex gDepthBufferLock;
@@ -434,6 +435,7 @@ namespace cgs
             depthTexture.SetName("Depth Buffer " + std::to_string(i));
         }
 
+        gGlobalRenderContext.RenderDeviceType = eRenderDeviceType::CPU;
         return true;
     }
 

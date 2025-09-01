@@ -570,6 +570,12 @@ namespace cgs
         COUNT,
     };
 
+    struct GlobalRenderContext final
+    {
+        eRenderDeviceType RenderDeviceType;
+    };
+    extern GlobalRenderContext gGlobalRenderContext;
+
     // Primary template declaration
     template<typename T>
     CGS_INLINE constexpr T ConvertStringToEnumValue(const std::string&) noexcept
@@ -592,7 +598,7 @@ namespace cgs
         }
         return eRenderDeviceType::CPU;
     }
-
+    
     template <eRenderDeviceType RENDER_DEVICE_TYPE>
     [[nodiscard]] bool
     InitializeRenderer() noexcept;

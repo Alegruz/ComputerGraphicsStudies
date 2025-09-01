@@ -157,6 +157,7 @@ namespace cgs
             return false;
         }
 
+        gGlobalRenderContext.RenderDeviceType = eRenderDeviceType::D3D12;
         return true;
     }
 }

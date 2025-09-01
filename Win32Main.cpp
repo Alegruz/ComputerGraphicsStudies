@@ -393,38 +393,22 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
     HACCEL accelerators = CreateAccelerators();
 
     bool hasInitializedRenderer = false;
-    cgs::eRenderDeviceType renderDeviceType = cgs::ConvertStringToEnumValue<cgs::eRenderDeviceType>(commandLineParser.GetArgument(cgs::eOptionType::RENDER_DEVICE));
-    switch (renderDeviceType)
+#if defined(CGS_GRAPHICS_API_CPU)
+    cgs::eRenderDeviceType renderDeviceType = cgs::eRenderDeviceType::CPU;
+#elif defined(CGS_GRAPHICS_API_D3D12)
+    cgs::eRenderDeviceType renderDeviceType = cgs::eRenderDeviceType::D3D12;
+    hasInitializedRenderer = cgs::InitializeRenderer<cgs::eRenderDeviceType::D3D12>();
+    if (hasInitializedRenderer == false)
     {
-    case cgs::eRenderDeviceType::CPU:
-        break;
-    case cgs::eRenderDeviceType::D3D12:
-    {
-        hasInitializedRenderer = cgs::InitializeRenderer<cgs::eRenderDeviceType::D3D12>();
-        if (hasInitializedRenderer == false)
-        {
-            renderDeviceType = cgs::eRenderDeviceType::CPU;
-        }
-    }
-        break;
-    default:
-        assert(false && "Unknown render device type");
         renderDeviceType = cgs::eRenderDeviceType::CPU;
-        break;
     }
+#else
+#error "Unknown graphics API type"
+#endif
 
-    switch (renderDeviceType)
-    {
-    case cgs::eRenderDeviceType::CPU:
+    if (hasInitializedRenderer == false)
     {
         hasInitializedRenderer = cgs::InitializeRenderer<cgs::eRenderDeviceType::CPU>();
-    }
-        break;
-    case cgs::eRenderDeviceType::D3D12:
-        break;
-    default:
-        assert(false && "Unknown render device type");
-        break;
     }
 
     if(hasInitializedRenderer == false)
