@@ -526,7 +526,7 @@ main(int argc, char** argv)
     }
 
     [[maybe_unused]] float deltaTimeInMs = 0.0f;
-    std::vector<cgs::Geometry> cornellBox;
+    std::vector<std::unique_ptr<cgs::Geometry>> cornellBox;
     cgs::CreateCornellBoxScene(cornellBox);
 
     cgs::gRenderThread.RenderMethod = cgs::eRenderMethod::RASTERIZATION;

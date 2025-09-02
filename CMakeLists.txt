@@ -134,12 +134,12 @@ if(DEFINED GRAPHICS_API_TYPE)
                 "${CMAKE_CURRENT_LIST_DIR}"
         )
         target_link_libraries(ComputerGraphicsStudies PRIVATE d3d12 dxgi)
+
+        if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+            target_link_libraries(ComputerGraphicsStudies PRIVATE dxguid)    
+        endif()
     else()
         message(FATAL_ERROR "Unsupported graphics API type")
-    endif()
-
-    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-        target_link_libraries(ComputerGraphicsStudies PRIVATE dxguid)    
     endif()
 endif()
 
