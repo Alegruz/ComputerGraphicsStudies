@@ -14,9 +14,5 @@ namespace cgs
 
     bool
     InitializeRenderer(const RendererCreateInfo& createInfo) noexcept;
-
-    template<eRasterizationMethod METHOD = eRasterizationMethod::DEFAULT>
-    void
-    Rasterize(CpuRenderWork& work) noexcept;
 }   // namespace cgs
 #endif  // defined(CGS_GRAPHICS_API_D3D12)
