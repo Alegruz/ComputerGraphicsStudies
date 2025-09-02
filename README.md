@@ -44,3 +44,4 @@ Target platforms (sorted by priority):
 * **[2025.08.30]**: improved multithreads to worker threads instead of creating and deleting threads every frame
 * **[2025.08.31]**: fixed multithreaded rendering
 * **[2025.09.01]**: implemented RGBA8 to BGRA8 conversion, adding d3d12 base code
+* **[2025.09.02]**: added simple d3d12 objects initialization from dxgi objects and d3d12device to swap chain and back buffer render targets
