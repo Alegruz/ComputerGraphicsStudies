@@ -65,4 +65,7 @@
 #if defined(CGS_GRAPHICS_API_D3D12)
 #include <d3d12.h>
 #include <dxgi1_6.h>
+#if defined(CGS_DEBUG)
+#include <dxgidebug.h>
+#endif  // defined(CGS_DEBUG)
 #endif  // defined(CGS_GRAPHICS_API_D3D12)

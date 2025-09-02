@@ -15,11 +15,11 @@ namespace cgs
         const uint32 height = renderWork.OutTexture.GetHeight();
 
         const Geometry* emissiveGeometryOrNull = nullptr;
-        for (const Geometry& geometry : renderWork.Work.Geometries)
+        for (const std::unique_ptr<Geometry>& geometry : renderWork.Work.Geometries)
         {
-            if (geometry.IsEmissive() == true)
+            if (geometry->IsEmissive() == true)
             {
-                emissiveGeometryOrNull = &geometry;
+                emissiveGeometryOrNull = geometry.get();
                 break;
             }
         }
@@ -35,10 +35,10 @@ namespace cgs
         const uint32 subRenderThreadsCount = static_cast<uint32>(gSubRenderThreads.size());
         std::vector<uint32> finalTileIndicesPerThread;
         finalTileIndicesPerThread.resize(subRenderThreadsCount, 0);
-        for (const Geometry& geometry : renderWork.Work.Geometries)
+        for (const std::unique_ptr<Geometry>& geometry : renderWork.Work.Geometries)
         {
-            const VertexBuffer& vertexBuffer = geometry.GetVertexBuffer();
-            const std::vector<uint16>& indices = geometry.GetIndices();
+            const VertexBuffer& vertexBuffer = geometry->GetVertexBuffer();
+            const std::vector<uint16>& indices = geometry->GetIndices();
 
             const uint32 trianglesCount = static_cast<uint32>(indices.size()) / 3;
             for (uint32 i = 0; i < trianglesCount; ++i)
@@ -104,7 +104,7 @@ namespace cgs
                                     SubRenderWork
                                     {
                                         .ParentRenderWork = renderWork,
-                                        .CurrentGeometry = geometry,
+                                        .CurrentGeometry = *geometry,
                                         .EmissiveGeometry = emissiveGeometry,
                                         .V0 = v0,
                                         .V1 = v1,
@@ -120,7 +120,7 @@ namespace cgs
                                 SubRenderWork subRenderWork
                                 {
                                     .ParentRenderWork = renderWork,
-                                    .CurrentGeometry = geometry,
+                                    .CurrentGeometry = *geometry,
                                     .EmissiveGeometry = emissiveGeometry,
                                     .V0 = v0,
                                     .V1 = v1,
@@ -181,13 +181,8 @@ namespace cgs
         }
     }
 
-    template <eRenderDeviceType RENDER_DEVICE_TYPE>
-    bool
-    InitializeRenderer(const RendererCreateInfo&) noexcept
-    {
-        static_assert(RENDER_DEVICE_TYPE != eRenderDeviceType::COUNT, "Invalid render device type");
-        return false;
-    }
+    CGS_INLINE constexpr void
+    DestroyRenderer() noexcept {}
 
     template<typename T>
     CGS_INLINE constexpr bool 

@@ -644,6 +644,7 @@ main(int argc, char** argv)
     }
 
     // Cleanup
+    cgs::DestroyRenderer();
     DestroyShmBuffer(gShmBuffer);
     if (gTopLevel)
     {

@@ -46,7 +46,7 @@ namespace cgs
     }
 
     void
-    CreateCornellBoxScene(std::vector<Geometry>& outGeometries) noexcept
+    CreateCornellBoxScene(std::vector<std::unique_ptr<Geometry>>& outGeometries) noexcept
     {
         InitializeCornellBoxCamera();
 
@@ -54,8 +54,8 @@ namespace cgs
         outGeometries.reserve(8);
 
         // Floor
-        outGeometries.push_back(Geometry(std::string("Floor")));
-        Geometry& floor = outGeometries.back();
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Floor")));
+        Geometry& floor = *outGeometries.back();
         {
             VertexBuffer floorVertexBuffer(
                 RenderResource::CreateInfo
@@ -78,8 +78,8 @@ namespace cgs
         }
 
         // Light
-        outGeometries.push_back(Geometry(std::string("Light")));
-        Geometry& light = outGeometries.back();
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Light")));
+        Geometry& light = *outGeometries.back();
         {
             VertexBuffer lightVertexBuffer(
                 RenderResource::CreateInfo
@@ -103,8 +103,8 @@ namespace cgs
         }
 
         // Ceiling
-        outGeometries.push_back(Geometry(std::string("Ceiling")));
-        Geometry& ceiling = outGeometries.back();
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Ceiling")));
+        Geometry& ceiling = *outGeometries.back();
         {
             VertexBuffer ceilingVertexBuffer(
                 RenderResource::CreateInfo
@@ -128,8 +128,8 @@ namespace cgs
         }
         
         // Back wall
-        outGeometries.push_back(Geometry(std::string("Back Wall")));
-        Geometry& backWall = outGeometries.back();
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Back Wall")));
+        Geometry& backWall = *outGeometries.back();
         {
             VertexBuffer backWallVertexBuffer(
                 RenderResource::CreateInfo
@@ -153,8 +153,8 @@ namespace cgs
         }
 
         // Right wall
-        outGeometries.push_back(Geometry(std::string("Right Wall")));
-        Geometry& rightWall = outGeometries.back();
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Right Wall")));
+        Geometry& rightWall = *outGeometries.back();
         {
             VertexBuffer rightWallVertexBuffer(
                 RenderResource::CreateInfo
@@ -177,8 +177,8 @@ namespace cgs
         }
 
         // Left wall
-        outGeometries.push_back(Geometry(std::string("Left Wall")));
-        Geometry& leftWall = outGeometries.back();
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Left Wall")));
+        Geometry& leftWall = *outGeometries.back();
         {
             VertexBuffer leftWallVertexBuffer(
                 RenderResource::CreateInfo
@@ -202,8 +202,8 @@ namespace cgs
         }
 
         // Short block
-        outGeometries.push_back(Geometry(std::string("Short Block")));
-        Geometry& shortBlock = outGeometries.back();
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Short Block")));
+        Geometry& shortBlock = *outGeometries.back();
         {
             VertexBuffer shortBlockVertexBuffer(
                 RenderResource::CreateInfo
@@ -253,8 +253,8 @@ namespace cgs
         }
 
         // Tall block
-        outGeometries.push_back(Geometry(std::string("Tall Block")));
-        Geometry& tallBlock = outGeometries.back();
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Tall Block")));
+        Geometry& tallBlock = *outGeometries.back();
         {
             VertexBuffer tallBlockVertexBuffer(
                 RenderResource::CreateInfo
@@ -585,11 +585,4 @@ namespace cgs
         }
     }
 }
-#else   // NOT defined(CGS_GRAPHICS_API_CPU)
-    template <>
-    bool
-    InitializeRenderer<eRenderDeviceType::CPU>(const RendererCreateInfo& createInfo) noexcept
-    {
-        return false;
-    }
-#endif  // NOT defined(CGS_GRAPHICS_API_CPU)
+#endif  // defined(CGS_GRAPHICS_API_CPU)
