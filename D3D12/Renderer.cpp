@@ -56,11 +56,14 @@ namespace cgs
         CGS_DESTROY_DXGI_OBJECT(gSwapChain);
 
         CGS_DESTROY_D3D12_OBJECT(gDevice);
+#if defined(CGS_DEBUG)
         CGS_DESTROY_D3D12_OBJECT(gD3D12Debug);
+#endif  // defined(CGS_DEBUG)
 
         CGS_DESTROY_DXGI_OBJECT(gAdapter);
         CGS_DESTROY_DXGI_OBJECT(gFactory);
 
+#if defined(CGS_DEBUG)
         if(gDxgiDebug != nullptr)
         {
             gDxgiDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
@@ -71,6 +74,7 @@ namespace cgs
         }
         CGS_DESTROY_DXGI_OBJECT(gInfoQueue);
         CGS_DESTROY_DXGI_OBJECT(gDxgiDebug);
+#endif  // defined(CGS_DEBUG)
     }
 
     static void
