@@ -5,6 +5,341 @@
 #if defined(CGS_GRAPHICS_API_D3D12)
 namespace cgs
 {
+    template<typename T>
+    class D3DPtr final
+    {
+    public:
+        CGS_INLINE explicit constexpr 
+        D3DPtr() noexcept
+            : mPtr()
+        {
+        }
+
+        CGS_INLINE constexpr
+        D3DPtr(const D3DPtr& other) noexcept
+            : mPtr(other.mPtr)
+        {
+            if (mPtr)
+            {
+                mPtr->AddRef();
+            }
+        }
+
+        CGS_INLINE constexpr
+        D3DPtr(D3DPtr&& other) noexcept
+            : mPtr(other.mPtr)
+        {
+            other.mPtr = nullptr;
+        }
+
+        CGS_INLINE 
+        ~D3DPtr()
+        {
+            if (mPtr)
+            {
+                mPtr->Release();
+            }
+        }
+
+        CGS_INLINE constexpr
+        D3DPtr& operator=(const D3DPtr& other) noexcept
+        {
+            if (this != &other)
+            {
+                if (mPtr)
+                {
+                    mPtr->Release();
+                }
+                mPtr = other.mPtr;
+
+                if(mPtr)
+                {
+                    mPtr->AddRef();
+                }
+            }
+            return *this;
+        }
+
+        CGS_INLINE constexpr
+        D3DPtr& operator=(D3DPtr&& other) noexcept
+        {
+            if (this != &other)
+            {
+                if (mPtr)
+                {
+                    mPtr->Release();
+                }
+                mPtr = other.mPtr;
+                other.mPtr = nullptr;
+            }
+            return *this;
+        }
+
+        CGS_INLINE T* 
+        Get() const noexcept
+        {
+            return mPtr;
+        }
+
+        CGS_INLINE T** 
+        GetAddressOf() noexcept
+        {
+            return &mPtr;
+        }
+
+        CGS_INLINE constexpr const T*
+        operator->() const noexcept
+        {
+            return mPtr;
+        }
+
+        CGS_INLINE constexpr T*
+        operator->() noexcept
+        {
+            return mPtr;
+        }
+
+        CGS_INLINE constexpr bool
+        operator==(std::nullptr_t) const noexcept
+        {
+            return mPtr == nullptr;
+        }
+
+        CGS_INLINE constexpr bool
+        operator!=(std::nullptr_t) const noexcept
+        {
+            return mPtr != nullptr;
+        }
+
+    private:
+        T* mPtr;
+    };
+
+#define CGS_DESTROY_D3D12_OBJECT_OR_NULL(object)    \
+    if (object != nullptr)                  \
+    {                                       \
+        [[maybe_unused]] const uint64 refCount = (object)->Release(); \
+        assert(refCount == 0 && #object " was not released properly"); \
+    }                                       
+
+#define CGS_DESTROY_D3D12_OBJECT(object)    \
+    if (object != nullptr)                  \
+    {                                       \
+        [[maybe_unused]] const uint64 refCount = (object)->Release(); \
+        assert(refCount == 0 && #object " was not released properly"); \
+    }                                       \
+    else                                    \
+    {                                       \
+        assert(false && #object " is null"); \
+    }
+
+#define CGS_DESTROY_DXGI_OBJECT(object) CGS_DESTROY_D3D12_OBJECT(object)
+
+    class RenderResource
+    {
+    public:
+        struct CreateInfo final
+        {
+            D3DPtr<ID3D12Resource> Data;
+            D3D12_CPU_DESCRIPTOR_HANDLE View;
+        };
+
+    public:
+        CGS_INLINE constexpr 
+        RenderResource() noexcept
+            : mData()
+            , mView()
+        {
+        }
+
+        CGS_INLINE constexpr 
+        RenderResource(CreateInfo&& createInfo) noexcept
+            : mData(std::move(createInfo.Data))
+            , mView(createInfo.View)
+        {
+        }
+
+        RenderResource(const RenderResource&) = delete;
+        CGS_INLINE constexpr
+        RenderResource(RenderResource&& other) noexcept
+            : mData(std::move(other.mData))
+            , mView(other.mView)
+        {
+        }
+
+        CGS_INLINE virtual
+        ~RenderResource() noexcept
+        {
+            CGS_DESTROY_D3D12_OBJECT_OR_NULL(mData);
+        }
+
+        RenderResource&
+        operator=(const RenderResource&) = delete;
+        CGS_INLINE constexpr
+        RenderResource& operator=(RenderResource&& other) noexcept
+        {
+            if (this != &other)
+            {
+                mData = std::move(other.mData);
+                mView = other.mView;
+            }
+            return *this;
+        }
+
+        CGS_INLINE void
+        Initialize(CreateInfo&& createInfo) noexcept
+        {
+            mData = std::move(createInfo.Data);
+            mView = createInfo.View;
+        }
+
+    private:
+        D3DPtr<ID3D12Resource> mData;
+        D3D12_CPU_DESCRIPTOR_HANDLE mView;
+    };
+
+    class Texture final : public RenderResource
+    {
+    public:
+        CGS_INLINE constexpr 
+        Texture() noexcept
+            : RenderResource()
+        {
+        }
+
+        CGS_INLINE constexpr 
+        Texture(CreateInfo&& createInfo) noexcept
+            : RenderResource(std::move(createInfo))
+        {
+        }
+
+        Texture(const Texture&) = delete;
+        CGS_INLINE constexpr
+        Texture(Texture&& other) noexcept = default;
+
+        CGS_INLINE 
+        ~Texture() noexcept = default;
+
+        Texture&
+        operator=(const Texture&) = delete;
+        CGS_INLINE constexpr
+        Texture& operator=(Texture&& other) noexcept = default;
+    };
+
+    class IndexBuffer final : public RenderResource
+    {
+    public:
+        struct CreateInfo final
+        {
+            RenderResource::CreateInfo  ParentCreateInfo;
+            D3D12_INDEX_BUFFER_VIEW     View;
+        };
+
+    public:
+        CGS_INLINE constexpr 
+        IndexBuffer() noexcept
+            : RenderResource()
+        {
+        }
+
+        CGS_INLINE constexpr 
+        IndexBuffer(CreateInfo&& createInfo) noexcept
+            : RenderResource(std::move(createInfo.ParentCreateInfo))
+            , mView(createInfo.View)
+        {
+        }
+
+        IndexBuffer(const IndexBuffer&) = delete;
+        CGS_INLINE constexpr
+        IndexBuffer(IndexBuffer&& other) noexcept
+            : RenderResource(std::move(other))
+            , mView(other.mView)
+        {}
+
+        CGS_INLINE 
+        ~IndexBuffer() noexcept = default;
+
+        IndexBuffer&
+        operator=(const IndexBuffer&) = delete;
+        CGS_INLINE constexpr
+        IndexBuffer& operator=(IndexBuffer&& other) noexcept
+        {
+            if (this != &other)
+            {
+                RenderResource::operator=(std::move(other));
+                mView = other.mView;
+            }
+            return *this;
+        }
+
+        CGS_INLINE void
+        Initialize(CreateInfo&& createInfo) noexcept
+        {
+            RenderResource::Initialize(std::move(createInfo.ParentCreateInfo));
+            mView = createInfo.View;
+        }
+
+    private:
+        D3D12_INDEX_BUFFER_VIEW    mView;
+    };
+
+    class VertexBuffer final : public RenderResource
+    {
+    public:
+        struct CreateInfo final
+        {
+            RenderResource::CreateInfo  ParentCreateInfo;
+            D3D12_VERTEX_BUFFER_VIEW    View;
+        };
+
+    public:
+        CGS_INLINE constexpr 
+        VertexBuffer() noexcept
+            : RenderResource()
+        {
+        }
+
+        CGS_INLINE constexpr 
+        VertexBuffer(CreateInfo&& createInfo) noexcept
+            : RenderResource(std::move(createInfo.ParentCreateInfo))
+            , mView(createInfo.View)
+        {
+        }
+
+        VertexBuffer(const VertexBuffer&) = delete;
+        CGS_INLINE constexpr
+        VertexBuffer(VertexBuffer&& other) noexcept
+            : RenderResource(std::move(other))
+            , mView(other.mView)
+        {}
+
+        CGS_INLINE 
+        ~VertexBuffer() noexcept = default;
+
+        VertexBuffer&
+        operator=(const VertexBuffer&) = delete;
+        CGS_INLINE constexpr
+        VertexBuffer& operator=(VertexBuffer&& other) noexcept
+        {
+            if (this != &other)
+            {
+                RenderResource::operator=(std::move(other));
+                mView = other.mView;
+            }
+            return *this;
+        }
+
+        CGS_INLINE void
+        Initialize(CreateInfo&& createInfo) noexcept
+        {
+            RenderResource::Initialize(std::move(createInfo.ParentCreateInfo));
+            mView = createInfo.View;
+        }
+
+    private:
+        D3D12_VERTEX_BUFFER_VIEW    mView;
+    };
+
     class Geometry final
     {
     public:
@@ -18,6 +353,10 @@ namespace cgs
         CGS_INLINE constexpr void
         SetIsEmissive(const bool isEmissive) noexcept { mIsEmissive = isEmissive; }
         CGS_INLINE constexpr void
+        SetVertexBuffer(VertexBuffer&& vertexBuffer) noexcept { mVertexBuffer = std::move(vertexBuffer); }
+        CGS_INLINE constexpr void
+        SetIndexBuffer(IndexBuffer&& indexBuffer) noexcept { mIndexBuffer = std::move(indexBuffer); }
+        CGS_INLINE constexpr void
         SetName(const std::string& name) noexcept { mName = name; }
 
         [[nodiscard]] CGS_INLINE constexpr bool
@@ -27,6 +366,8 @@ namespace cgs
 
     private:
         bool mIsEmissive;
+        VertexBuffer mVertexBuffer;
+        IndexBuffer mIndexBuffer;
         std::string mName;
     };
 

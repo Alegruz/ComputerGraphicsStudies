@@ -11,171 +11,6 @@ namespace cgs
 
     using TDXGIGetDebugInterface = HRESULT (*)(REFIID, void**);
 
-#define CGS_DESTROY_D3D12_OBJECT(object)    \
-    if (object != nullptr)                  \
-    {                                       \
-        [[maybe_unused]] const uint64 refCount = (object)->Release(); \
-        assert(refCount == 0 && #object " was not released properly"); \
-    }                                       \
-    else                                    \
-    {                                       \
-        assert(false && #object " is null"); \
-    }
-
-#define CGS_DESTROY_DXGI_OBJECT(object) CGS_DESTROY_D3D12_OBJECT(object)
-
-    template<typename T>
-    class D3DPtr final
-    {
-    public:
-        CGS_INLINE explicit constexpr 
-        D3DPtr() noexcept
-            : mPtr()
-        {
-        }
-
-        CGS_INLINE constexpr
-        D3DPtr(const D3DPtr& other) noexcept
-            : mPtr(other.mPtr)
-        {
-            if (mPtr)
-            {
-                mPtr->AddRef();
-            }
-        }
-
-        CGS_INLINE constexpr
-        D3DPtr(D3DPtr&& other) noexcept
-            : mPtr(other.mPtr)
-        {
-            other.mPtr = nullptr;
-        }
-
-        CGS_INLINE 
-        ~D3DPtr()
-        {
-            if (mPtr)
-            {
-                mPtr->Release();
-            }
-        }
-
-        CGS_INLINE constexpr
-        D3DPtr& operator=(const D3DPtr& other) noexcept
-        {
-            if (this != &other)
-            {
-                if (mPtr)
-                {
-                    mPtr->Release();
-                }
-                mPtr = other.mPtr;
-
-                if(mPtr)
-                {
-                    mPtr->AddRef();
-                }
-            }
-            return *this;
-        }
-
-        CGS_INLINE constexpr
-        D3DPtr& operator=(D3DPtr&& other) noexcept
-        {
-            if (this != &other)
-            {
-                if (mPtr)
-                {
-                    mPtr->Release();
-                }
-                mPtr = other.mPtr;
-                other.mPtr = nullptr;
-            }
-            return *this;
-        }
-
-        CGS_INLINE T* 
-        Get() const noexcept
-        {
-            return mPtr;
-        }
-
-        CGS_INLINE T** 
-        GetAddressOf() noexcept
-        {
-            return &mPtr;
-        }
-
-        CGS_INLINE constexpr const T*
-        operator->() const noexcept
-        {
-            return mPtr;
-        }
-
-        CGS_INLINE constexpr T*
-        operator->() noexcept
-        {
-            return mPtr;
-        }
-
-        CGS_INLINE constexpr bool
-        operator==(std::nullptr_t) const noexcept
-        {
-            return mPtr == nullptr;
-        }
-
-        CGS_INLINE constexpr bool
-        operator!=(std::nullptr_t) const noexcept
-        {
-            return mPtr != nullptr;
-        }
-
-    private:
-        T* mPtr;
-    };
-
-    class Texture final
-    {
-    public:
-        struct CreateInfo final
-        {
-            D3DPtr<ID3D12Resource> Data;
-            D3D12_CPU_DESCRIPTOR_HANDLE View;
-        };
-
-    public:
-        CGS_INLINE constexpr 
-        Texture() noexcept
-            : mData()
-            , mView()
-        {
-        }
-
-        CGS_INLINE constexpr 
-        Texture(CreateInfo&& createInfo) noexcept
-            : mData(std::move(createInfo.Data))
-            , mView(createInfo.View)
-        {
-        }
-
-        CGS_INLINE 
-        ~Texture() noexcept
-        {
-            CGS_DESTROY_D3D12_OBJECT(mData);
-        }
-
-        CGS_INLINE void
-        Initialize(CreateInfo&& createInfo) noexcept
-        {
-            mData = std::move(createInfo.Data);
-            mView = createInfo.View;
-        }
-
-    private:
-        D3DPtr<ID3D12Resource> mData;
-        D3D12_CPU_DESCRIPTOR_HANDLE mView;
-    };
-
     struct SceneRenderTarget final
     {
         Texture ColorBuffer;
@@ -238,10 +73,453 @@ namespace cgs
         CGS_DESTROY_DXGI_OBJECT(gDxgiDebug);
     }
 
+    static void
+    AddQuadVertices(std::vector<VertexPN>& inoutVertices, std::vector<uint16>& inoutIndices, const Coordinate<eCoordinateSpace::WORLD>& v0, const Coordinate<eCoordinateSpace::WORLD>& v1, const Coordinate<eCoordinateSpace::WORLD>& v2, const Coordinate<eCoordinateSpace::WORLD>& v3)
+    {
+        const Coordinate<eCoordinateSpace::WORLD> normal = Normalize(Cross(v1 - v0, v2 - v0));
+        inoutVertices.push_back(VertexPN{ v0, normal });
+        inoutVertices.push_back(VertexPN{ v1, normal });
+        inoutVertices.push_back(VertexPN{ v2, normal });
+        inoutVertices.push_back(VertexPN{ v3, normal });
+        inoutIndices.push_back(static_cast<uint16>(inoutVertices.size() - 4));
+        inoutIndices.push_back(static_cast<uint16>(inoutVertices.size() - 3));
+        inoutIndices.push_back(static_cast<uint16>(inoutVertices.size() - 2));
+        inoutIndices.push_back(static_cast<uint16>(inoutVertices.size() - 4));
+        inoutIndices.push_back(static_cast<uint16>(inoutVertices.size() - 2));
+        inoutIndices.push_back(static_cast<uint16>(inoutVertices.size() - 1));
+    }
+
+    [[nodiscard]] static bool
+    CreateVertexBuffer(VertexBuffer& outVertexBuffer, const std::vector<VertexPN>& vertices)
+    {
+        HRESULT hr = S_OK;
+        const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
+        {
+            .Type = D3D12_HEAP_TYPE_UPLOAD,
+            .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+            .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+            .CreationNodeMask = 1,
+            .VisibleNodeMask = 1,
+        };
+
+        D3D12_RESOURCE_DESC bufferDesc =
+        {
+            .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+            .Alignment = 0,
+            .Width = 0,
+            .Height = 1,
+            .DepthOrArraySize = 1,
+            .MipLevels = 1,
+            .Format = DXGI_FORMAT_UNKNOWN,
+            .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+            .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+            .Flags = D3D12_RESOURCE_FLAG_NONE,
+        };
+
+        VertexBuffer::CreateInfo vertexBufferCreateInfo;
+        bufferDesc.Width = sizeof(VertexPN) * vertices.size();
+        hr = gDevice->CreateCommittedResource(
+            &bufferHeapProperties,
+            D3D12_HEAP_FLAG_NONE,
+            &bufferDesc,
+            D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr,
+            IID_PPV_ARGS(vertexBufferCreateInfo.ParentCreateInfo.Data.GetAddressOf())
+        );
+        if(FAILED(hr))
+        {
+            assert(false && "Failed to create vertex buffer");
+            return false;
+        }
+        
+        D3D12_RANGE range = { .Begin = 0, .End = 0 };
+        byte* vertexDataBegin = nullptr;
+        hr = vertexBufferCreateInfo.ParentCreateInfo.Data->Map(
+            0,
+            &range,
+            reinterpret_cast<void**>(&vertexDataBegin)
+        );
+        if(FAILED(hr))
+        {
+            assert(false && "Failed to map vertex buffer");
+            return false;
+        }
+
+        std::memcpy(vertexDataBegin, vertices.data(), sizeof(VertexPN) * vertices.size());
+        vertexBufferCreateInfo.ParentCreateInfo.Data->Unmap(0, nullptr);
+
+        vertexBufferCreateInfo.View.BufferLocation = vertexBufferCreateInfo.ParentCreateInfo.Data->GetGPUVirtualAddress();
+        vertexBufferCreateInfo.View.StrideInBytes = sizeof(VertexPN);
+        vertexBufferCreateInfo.View.SizeInBytes = static_cast<uint32>(vertices.size());
+
+        outVertexBuffer.Initialize(std::move(vertexBufferCreateInfo));
+        return true;
+    }
+
+    [[nodiscard]] static bool
+    CreateIndexBuffer(IndexBuffer& outIndexBuffer, const std::vector<uint16>& indices)
+    {
+        HRESULT hr = S_OK;
+        const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
+        {
+            .Type = D3D12_HEAP_TYPE_UPLOAD,
+            .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+            .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+            .CreationNodeMask = 1,
+            .VisibleNodeMask = 1,
+        };
+
+        D3D12_RESOURCE_DESC bufferDesc =
+        {
+            .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+            .Alignment = 0,
+            .Width = 0,
+            .Height = 1,
+            .DepthOrArraySize = 1,
+            .MipLevels = 1,
+            .Format = DXGI_FORMAT_UNKNOWN,
+            .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+            .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+            .Flags = D3D12_RESOURCE_FLAG_NONE,
+        };
+
+        IndexBuffer::CreateInfo indexBufferCreateInfo;
+        bufferDesc.Width = sizeof(uint16) * indices.size();
+        hr = gDevice->CreateCommittedResource(
+            &bufferHeapProperties,
+            D3D12_HEAP_FLAG_NONE,
+            &bufferDesc,
+            D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr,
+            IID_PPV_ARGS(indexBufferCreateInfo.ParentCreateInfo.Data.GetAddressOf())
+        );
+        if(FAILED(hr))
+        {
+            assert(false && "Failed to create index buffer");
+            return false;
+        }
+        
+        D3D12_RANGE range = { .Begin = 0, .End = 0 };
+        byte* indexDataBegin = nullptr;
+        hr = indexBufferCreateInfo.ParentCreateInfo.Data->Map(
+            0,
+            &range,
+            reinterpret_cast<void**>(&indexDataBegin)
+        );
+        if(FAILED(hr))
+        {
+            assert(false && "Failed to map index buffer");
+            return false;
+        }
+
+        std::memcpy(indexDataBegin, indices.data(), sizeof(uint16) * indices.size());
+        indexBufferCreateInfo.ParentCreateInfo.Data->Unmap(0, nullptr);
+
+        indexBufferCreateInfo.View.BufferLocation = indexBufferCreateInfo.ParentCreateInfo.Data->GetGPUVirtualAddress();
+        indexBufferCreateInfo.View.SizeInBytes = static_cast<uint32>(indices.size());
+        indexBufferCreateInfo.View.Format = DXGI_FORMAT_R16_UINT;
+        outIndexBuffer.Initialize(std::move(indexBufferCreateInfo));
+        return true;
+    }
+
     void
-    CreateCornellBoxScene(std::vector<std::unique_ptr<Geometry>>&) noexcept
+    CreateCornellBoxScene(std::vector<std::unique_ptr<Geometry>>& outGeometries) noexcept
     {
         InitializeCornellBoxCamera();
+
+        outGeometries.clear();
+        outGeometries.reserve(8);
+
+        std::vector<VertexPN> vertices;
+        std::vector<uint16> indices;
+        bool result = false;
+
+        // Floor
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Floor")));
+        Geometry& floor = *outGeometries.back();
+        {
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 0.0f, 0.0f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -552.8f, 0.0f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -549.6f, 0.0f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 0.0f, 559.2f };
+            indices.reserve(6);
+            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+
+            VertexBuffer vertexBuffer;
+            result = CreateVertexBuffer(vertexBuffer, vertices);
+            floor.SetVertexBuffer(std::move(vertexBuffer));
+                
+            IndexBuffer indexBuffer;
+            result = CreateIndexBuffer(indexBuffer, indices);
+            floor.SetIndexBuffer(std::move(indexBuffer));
+            // floor.SetColor(WHITE);
+        }
+
+        if (result == false)
+        {
+            assert(false && "Failed to create vertex buffer");
+            outGeometries.pop_back();
+        }
+        
+        // Light
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Light")));
+        Geometry& light = *outGeometries.back();
+        {
+            vertices.clear();
+            indices.clear();
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -343.0f, 548.8f, 332.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -343.0f, 548.8f, 227.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -213.0f, 548.8f, 227.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -213.0f, 548.8f, 332.0f };
+            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+
+            VertexBuffer vertexBuffer;
+            result = CreateVertexBuffer(vertexBuffer, vertices);
+            light.SetVertexBuffer(std::move(vertexBuffer));
+
+            IndexBuffer indexBuffer;
+            result = CreateIndexBuffer(indexBuffer, indices);
+            light.SetIndexBuffer(std::move(indexBuffer));
+
+            // light.SetColor(WHITE);
+            light.SetIsEmissive(true);
+        }
+
+        if (result == false)
+        {
+            assert(false && "Failed to create vertex buffer");
+            outGeometries.pop_back();
+        }
+
+        // Ceiling
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Ceiling")));
+        Geometry& ceiling = *outGeometries.back();
+        {
+            vertices.clear();
+            indices.clear();
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -556.0f, 548.8f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -556.0f, 548.8f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 0.0f, 548.8f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 548.8f, 559.2f };
+            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+
+            VertexBuffer vertexBuffer;
+            result = CreateVertexBuffer(vertexBuffer, vertices);
+            ceiling.SetVertexBuffer(std::move(vertexBuffer));
+
+            IndexBuffer indexBuffer;
+            result = CreateIndexBuffer(indexBuffer, indices);
+            ceiling.SetIndexBuffer(std::move(indexBuffer));
+
+            // ceiling.SetColor(WHITE);
+        }
+
+        if (result == false)
+        {
+            assert(false && "Failed to create vertex buffer");
+            outGeometries.pop_back();
+        }
+        
+        // Back wall
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Back Wall")));
+        Geometry& backWall = *outGeometries.back();
+        {
+            vertices.clear();
+            indices.clear();
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 0.0f, 0.0f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -549.6f, 0.0f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -556.0f, 548.8f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 548.8f, 559.2f };
+            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+
+            VertexBuffer vertexBuffer;
+            result = CreateVertexBuffer(vertexBuffer, vertices);
+            backWall.SetVertexBuffer(std::move(vertexBuffer));
+
+            IndexBuffer indexBuffer;
+            result = CreateIndexBuffer(indexBuffer, indices);
+            backWall.SetIndexBuffer(std::move(indexBuffer));
+
+            // backWall.SetColor(WHITE);
+        }
+
+        if (result == false)
+        {
+            assert(false && "Failed to create vertex buffer");
+            outGeometries.pop_back();
+        }
+
+        // Right wall
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Right Wall")));
+        Geometry& rightWall = *outGeometries.back();
+        {
+            vertices.clear();
+            indices.clear();
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 0.0f, 0.0f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { 0.0f, 0.0f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 0.0f, 548.8f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 548.8f, 0.0f };
+            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+
+            VertexBuffer vertexBuffer;
+            result = CreateVertexBuffer(vertexBuffer, vertices);
+            rightWall.SetVertexBuffer(std::move(vertexBuffer));
+
+            IndexBuffer indexBuffer;
+            result = CreateIndexBuffer(indexBuffer, indices);
+            rightWall.SetIndexBuffer(std::move(indexBuffer));
+
+            // rightWall.SetColor(GREEN);
+        }
+
+        if (result == false)
+        {
+            assert(false && "Failed to create vertex buffer");
+            outGeometries.pop_back();
+        }
+
+        // Left wall
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Left Wall")));
+        Geometry& leftWall = *outGeometries.back();
+        {
+            vertices.clear();
+            indices.clear();
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -549.6f, 0.0f, 559.2f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -552.8f, 0.0f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -556.0f, 548.8f, 0.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -556.0f, 548.8f, 559.2f };
+            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+
+            VertexBuffer vertexBuffer;
+            result = CreateVertexBuffer(vertexBuffer, vertices);
+            leftWall.SetVertexBuffer(std::move(vertexBuffer));
+
+            IndexBuffer indexBuffer;
+            result = CreateIndexBuffer(indexBuffer, indices);
+            leftWall.SetIndexBuffer(std::move(indexBuffer));
+
+            // leftWall.SetColor(RED);
+        }
+
+        if (result == false)
+        {
+            assert(false && "Failed to create vertex buffer");
+            outGeometries.pop_back();
+        }
+
+        // Short block
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Short Block")));
+        Geometry& shortBlock = *outGeometries.back();
+        {
+            vertices.clear();
+            indices.clear();
+            indices.reserve(6 * 5);
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -82.0f, 165.0f, 225.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -130.0f, 165.0f, 65.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -290.0f, 165.0f, 114.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -240.0f, 165.0f, 272.0f };
+            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v4 = { -290.0f, 165.0f, 114.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v5 = { -290.0f, 0.0f, 114.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v6 = { -240.0f, 0.0f, 272.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v7 = { -240.0f, 165.0f, 272.0f };
+            AddQuadVertices(vertices, indices, v4, v5, v6, v7);
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v8 = { -130.0f, 165.0f, 65.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v9 = { -130.0f, 0.0f, 65.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v10 = { -290.0f, 0.0f, 114.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v11 = { -290.0f, 165.0f, 114.0f };
+            AddQuadVertices(vertices, indices, v8, v9, v10, v11);
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v12 = { -82.0f, 165.0f, 225.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v13 = { -82.0f, 0.0f, 225.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v14 = { -130.0f, 0.0f, 65.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v15 = { -130.0f, 165.0f, 65.0f };
+            AddQuadVertices(vertices, indices, v12, v13, v14, v15);
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v16 = { -240.0f, 165.0f, 272.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v17 = { -240.0f, 0.0f, 272.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v18 = { -82.0f, 0.0f, 225.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v19 = { -82.0f, 165.0f, 225.0f };
+            AddQuadVertices(vertices, indices, v16, v17, v18, v19);
+
+            VertexBuffer vertexBuffer;
+            result = CreateVertexBuffer(vertexBuffer, vertices);
+            shortBlock.SetVertexBuffer(std::move(vertexBuffer));
+
+            IndexBuffer indexBuffer;
+            result = CreateIndexBuffer(indexBuffer, indices);
+            shortBlock.SetIndexBuffer(std::move(indexBuffer));
+
+            // shortBlock.SetColor(WHITE);
+        }
+
+        if (result == false)
+        {
+            assert(false && "Failed to create vertex buffer");
+            outGeometries.pop_back();
+        }
+
+        // Tall block
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Tall Block")));
+        Geometry& tallBlock = *outGeometries.back();
+        {
+            vertices.clear();
+            indices.clear();
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -265.0f, 330.0f, 296.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -423.0f, 330.0f, 247.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -472.0f, 330.0f, 406.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -314.0f, 330.0f, 456.0f };
+            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v4 = { -423.0f, 330.0f, 247.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v5 = { -423.0f, 0.0f, 247.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v6 = { -472.0f, 0.0f, 406.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v7 = { -472.0f, 330.0f, 406.0f };
+            AddQuadVertices(vertices, indices, v4, v5, v6, v7);
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v8 = { -472.0f, 330.0f, 406.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v9 = { -472.0f, 0.0f, 406.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v10 = { -314.0f, 0.0f, 456.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v11 = { -314.0f, 330.0f, 456.0f };
+            AddQuadVertices(vertices, indices, v8, v9, v10, v11);
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v12 = { -314.0f, 330.0f, 456.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v13 = { -314.0f, 0.0f, 456.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v14 = { -265.0f, 0.0f, 296.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v15 = { -265.0f, 330.0f, 296.0f };
+            AddQuadVertices(vertices, indices, v12, v13, v14, v15);
+
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v16 = { -265.0f, 330.0f, 296.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v17 = { -265.0f, 0.0f, 296.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v18 = { -423.0f, 0.0f, 247.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v19 = { -423.0f, 330.0f, 247.0f };
+            AddQuadVertices(vertices, indices, v16, v17, v18, v19);
+
+            VertexBuffer vertexBuffer;
+            result = CreateVertexBuffer(vertexBuffer, vertices);
+            tallBlock.SetVertexBuffer(std::move(vertexBuffer));
+
+            IndexBuffer indexBuffer;
+            result = CreateIndexBuffer(indexBuffer, indices);
+            tallBlock.SetIndexBuffer(std::move(indexBuffer));
+
+            // tallBlock.SetColor(WHITE);
+        }
+
+        if (result == false)
+        {
+            assert(false && "Failed to create vertex buffer");
+            outGeometries.pop_back();
+        }
     }
 
     void
