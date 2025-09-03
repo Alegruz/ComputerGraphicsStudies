@@ -22,7 +22,7 @@ namespace cgs
         SceneRenderTarget& InoutRenderTarget;
         RenderWork& Work;
     };
-    
+
     // DXGI
 #if defined(CGS_DEBUG)
     static D3DPtr<IDXGIDebug> gDxgiDebug;
@@ -30,7 +30,7 @@ namespace cgs
 #endif  // defined(CGS_DEBUG)
     static D3DPtr<IDXGIFactory6> gFactory;
     static D3DPtr<IDXGIAdapter> gAdapter;
-    static D3DPtr<IDXGISwapChain1> gSwapChain;
+    static D3DPtr<IDXGISwapChain3> gSwapChain;
     
     // D3D12
 #if defined(CGS_DEBUG)
@@ -45,6 +45,26 @@ namespace cgs
     static uint32 gRtvIncrementSize = 0;
     static uint32 gDsvIncrementSize = 0;
     static std::vector<SceneRenderTarget> gSceneRenderTargets(BACK_BUFFERS_COUNT);
+
+    
+    void 
+    RenderResource::Transition(ID3D12GraphicsCommandList& commandList, const D3D12_RESOURCE_STATES newState) noexcept
+    {
+        const D3D12_RESOURCE_BARRIER barrier =
+        {
+            .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+            .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
+            .Transition =
+            {
+                .pResource = mData.Get(),
+                .Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+                .StateBefore = mState,
+                .StateAfter = newState,
+            },
+        };
+        commandList.ResourceBarrier(1, &barrier);
+        mState = newState;
+    }
 
     void
     DestroyRenderer() noexcept
@@ -94,7 +114,7 @@ namespace cgs
     }
 
     [[nodiscard]] static bool
-    CreateVertexBuffer(VertexBuffer& outVertexBuffer, const std::vector<VertexPN>& vertices)
+    CreateVertexBuffer(VertexBuffer& outVertexBuffer, const std::vector<VertexPN>& vertices, const std::string& name)
     {
         HRESULT hr = S_OK;
         const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
@@ -121,12 +141,14 @@ namespace cgs
         };
 
         VertexBuffer::CreateInfo vertexBufferCreateInfo;
+        vertexBufferCreateInfo.ParentCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
+        vertexBufferCreateInfo.ParentCreateInfo.Name = name;
         bufferDesc.Width = sizeof(VertexPN) * vertices.size();
         hr = gDevice->CreateCommittedResource(
             &bufferHeapProperties,
             D3D12_HEAP_FLAG_NONE,
             &bufferDesc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
+            vertexBufferCreateInfo.ParentCreateInfo.State,
             nullptr,
             IID_PPV_ARGS(vertexBufferCreateInfo.ParentCreateInfo.Data.GetAddressOf())
         );
@@ -161,7 +183,7 @@ namespace cgs
     }
 
     [[nodiscard]] static bool
-    CreateIndexBuffer(IndexBuffer& outIndexBuffer, const std::vector<uint16>& indices)
+    CreateIndexBuffer(IndexBuffer& outIndexBuffer, const std::vector<uint16>& indices, const std::string& name)
     {
         HRESULT hr = S_OK;
         const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
@@ -188,12 +210,14 @@ namespace cgs
         };
 
         IndexBuffer::CreateInfo indexBufferCreateInfo;
+        indexBufferCreateInfo.ParentCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
+        indexBufferCreateInfo.ParentCreateInfo.Name = name;
         bufferDesc.Width = sizeof(uint16) * indices.size();
         hr = gDevice->CreateCommittedResource(
             &bufferHeapProperties,
             D3D12_HEAP_FLAG_NONE,
             &bufferDesc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
+            indexBufferCreateInfo.ParentCreateInfo.State,
             nullptr,
             IID_PPV_ARGS(indexBufferCreateInfo.ParentCreateInfo.Data.GetAddressOf())
         );
@@ -250,11 +274,11 @@ namespace cgs
             AddQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices);
+            result = CreateVertexBuffer(vertexBuffer, vertices, "FloorVertexBuffer");
             floor.SetVertexBuffer(std::move(vertexBuffer));
                 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices);
+            result = CreateIndexBuffer(indexBuffer, indices, "FloorIndexBuffer");
             floor.SetIndexBuffer(std::move(indexBuffer));
             // floor.SetColor(WHITE);
         }
@@ -279,11 +303,11 @@ namespace cgs
             AddQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices);
+            result = CreateVertexBuffer(vertexBuffer, vertices, "LightVertexBuffer");
             light.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices);
+            result = CreateIndexBuffer(indexBuffer, indices, "LightIndexBuffer");
             light.SetIndexBuffer(std::move(indexBuffer));
 
             // light.SetColor(WHITE);
@@ -310,11 +334,11 @@ namespace cgs
             AddQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices);
+            result = CreateVertexBuffer(vertexBuffer, vertices, "CeilingVertexBuffer");
             ceiling.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices);
+            result = CreateIndexBuffer(indexBuffer, indices, "CeilingIndexBuffer");
             ceiling.SetIndexBuffer(std::move(indexBuffer));
 
             // ceiling.SetColor(WHITE);
@@ -340,11 +364,11 @@ namespace cgs
             AddQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices);
+            result = CreateVertexBuffer(vertexBuffer, vertices, "BackWallVertexBuffer");
             backWall.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices);
+            result = CreateIndexBuffer(indexBuffer, indices, "BackWallIndexBuffer");
             backWall.SetIndexBuffer(std::move(indexBuffer));
 
             // backWall.SetColor(WHITE);
@@ -370,11 +394,11 @@ namespace cgs
             AddQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices);
+            result = CreateVertexBuffer(vertexBuffer, vertices, "RightWallVertexBuffer");
             rightWall.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices);
+            result = CreateIndexBuffer(indexBuffer, indices, "RightWallIndexBuffer");
             rightWall.SetIndexBuffer(std::move(indexBuffer));
 
             // rightWall.SetColor(GREEN);
@@ -400,11 +424,11 @@ namespace cgs
             AddQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices);
+            result = CreateVertexBuffer(vertexBuffer, vertices, "LeftWallVertexBuffer");
             leftWall.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices);
+            result = CreateIndexBuffer(indexBuffer, indices, "LeftWallIndexBuffer");
             leftWall.SetIndexBuffer(std::move(indexBuffer));
 
             // leftWall.SetColor(RED);
@@ -455,11 +479,11 @@ namespace cgs
             AddQuadVertices(vertices, indices, v16, v17, v18, v19);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices);
+            result = CreateVertexBuffer(vertexBuffer, vertices, "ShortBlockVertexBuffer");
             shortBlock.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices);
+            result = CreateIndexBuffer(indexBuffer, indices, "ShortBlockIndexBuffer");
             shortBlock.SetIndexBuffer(std::move(indexBuffer));
 
             // shortBlock.SetColor(WHITE);
@@ -509,11 +533,11 @@ namespace cgs
             AddQuadVertices(vertices, indices, v16, v17, v18, v19);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices);
+            result = CreateVertexBuffer(vertexBuffer, vertices, "TallBlockVertexBuffer");
             tallBlock.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices);
+            result = CreateIndexBuffer(indexBuffer, indices, "TallBlockIndexBuffer");
             tallBlock.SetIndexBuffer(std::move(indexBuffer));
 
             // tallBlock.SetColor(WHITE);
@@ -524,6 +548,23 @@ namespace cgs
             assert(false && "Failed to create vertex buffer");
             outGeometries.pop_back();
         }
+    }
+    
+    void
+    Render(uint64& inoutWorkIndex, RenderThreadInfo& inoutRenderThreadInfo, const std::vector<std::unique_ptr<Geometry>>& geometries) noexcept
+    {
+        // assert(false && "Render function not implemented");
+        
+        const uint32 currentFrameIndexToRender = gSwapChain->GetCurrentBackBufferIndex();
+
+        const std::lock_guard lock(inoutRenderThreadInfo.RenderWorksMutex);
+        inoutRenderThreadInfo.RenderWorksPerFrame.push(
+            cgs::RenderWork
+            {
+                .Geometries = geometries,
+                .WorkIndex = inoutWorkIndex++,
+                .FrameIndex = currentFrameIndexToRender,
+            });
     }
 
     void
@@ -542,12 +583,13 @@ namespace cgs
             uniqueLock.lock();
             if (renderThreadInfo.RenderWorksPerFrame.empty() == false)
             {
+                HRESULT hr = S_OK;
                 RenderWork renderWork = std::move(renderThreadInfo.RenderWorksPerFrame.front());
                 renderThreadInfo.RenderWorksPerFrame.pop();
                 uniqueLock.unlock();
 
                 // Process the render work
-                assert(false && "Render work not implemented");
+                // assert(false && "Render work not implemented");
 #if 0
                 renderWork.OutTexture.Clear();
                 renderWork.OutDepthBuffer.Clear(std::numeric_limits<float>::max());
@@ -562,6 +604,50 @@ namespace cgs
                 {
                     assert(false && "Unsupported render method in RenderThreadMain");
                 }
+#else
+                renderThreadInfo.CurrentWorkIndex.store(renderWork.WorkIndex);
+                // TODO(alegruz): DX ERROR: ID3D12CommandAllocator::Reset: A command allocator 0x0000017DF4B5BBA0:'Unnamed ID3D12CommandAllocator Object' is being reset before previous executions associated with the allocator have completed. [ EXECUTION ERROR #552: ]
+                hr = gGraphicsCommandAllocator->Reset();
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to reset command allocator");
+                    renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
+                    continue;
+                }
+
+                hr = gGraphicsCommandList->Reset(gGraphicsCommandAllocator.Get(), nullptr);
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to reset command list");
+                    renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
+                    continue;
+                }
+
+                gSceneRenderTargets[renderWork.FrameIndex].ColorBuffer.Transition(*gGraphicsCommandList, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+                constexpr float BLACK_COLOR[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+                gGraphicsCommandList->ClearRenderTargetView(
+                    gSceneRenderTargets[renderWork.FrameIndex].ColorBuffer.GetView(),
+                    BLACK_COLOR,
+                    0,
+                    nullptr
+                );
+                gGraphicsCommandList->ClearDepthStencilView(
+                    gSceneRenderTargets[renderWork.FrameIndex].DepthBuffer.GetView(),
+                    D3D12_CLEAR_FLAG_DEPTH,
+                    1.0f,
+                    0,
+                    0,
+                    nullptr
+                );
+
+                gSceneRenderTargets[renderWork.FrameIndex].ColorBuffer.Transition(*gGraphicsCommandList, D3D12_RESOURCE_STATE_PRESENT);
+
+                gGraphicsCommandList->Close();
+                ID3D12CommandList* commandLists[] = { gGraphicsCommandList.Get(), };
+                gGraphicsCommandQueue->ExecuteCommandLists(CGS_ARRAYSIZE(commandLists), commandLists);
+                gSwapChain->Present(0, 0);
+                renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
 #endif
             }
             else
@@ -754,11 +840,21 @@ namespace cgs
             .AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED,
             .Flags = 0,
         };
-        hr = gFactory->CreateSwapChainForHwnd(gGraphicsCommandQueue.Get(), createInfo.Window, &swapChainDesc, nullptr, nullptr, gSwapChain.GetAddressOf());
-        if (FAILED(hr))
         {
-            assert(false && "Failed to create swap chain");
-            return false;
+            D3DPtr<IDXGISwapChain1> swapChain1;
+            hr = gFactory->CreateSwapChainForHwnd(gGraphicsCommandQueue.Get(), createInfo.Window, &swapChainDesc, nullptr, nullptr, swapChain1.GetAddressOf());
+            if (FAILED(hr))
+            {
+                assert(false && "Failed to create swap chain");
+                return false;
+            }
+
+            hr = swapChain1->QueryInterface(IID_PPV_ARGS(gSwapChain.GetAddressOf()));
+            if (FAILED(hr))
+            {
+                assert(false && "Failed to query swap chain interface");
+                return false;
+            }
         }
 
         gSwapChain->GetDesc1(&swapChainDesc);
@@ -821,17 +917,20 @@ namespace cgs
             }
 
             colorBufferInfo.View.ptr = rtvStartHandle.ptr + (frameIndex * gRtvIncrementSize);
-
+            colorBufferInfo.State = D3D12_RESOURCE_STATE_COMMON;    // https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-resource-barriers-to-synchronize-resource-states-in-direct3d-12#initial-states-for-resources
+            colorBufferInfo.Name = "SwapChainColorBuffer[" + std::to_string(frameIndex) + "]";
             gDevice->CreateRenderTargetView(colorBufferInfo.Data.Get(), &colorBufferViewDesc, colorBufferInfo.View);
 
             gSceneRenderTargets[frameIndex].ColorBuffer.Initialize(std::move(colorBufferInfo));
 
             Texture::CreateInfo depthBufferInfo;
+            depthBufferInfo.State = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+            depthBufferInfo.Name = "SwapChainDepthBuffer[" + std::to_string(frameIndex) + "]";
             hr = gDevice->CreateCommittedResource(
                 &depthBufferHeapProperties,
                 D3D12_HEAP_FLAG_NONE,
                 &depthBufferDesc,
-                D3D12_RESOURCE_STATE_DEPTH_WRITE,
+                depthBufferInfo.State,
                 &depthBufferClearValue,
                 IID_PPV_ARGS(depthBufferInfo.Data.GetAddressOf())
             );
@@ -846,6 +945,13 @@ namespace cgs
             gDevice->CreateDepthStencilView(depthBufferInfo.Data.Get(), nullptr, depthBufferInfo.View);
 
             gSceneRenderTargets[frameIndex].DepthBuffer.Initialize(std::move(depthBufferInfo));
+        }
+
+        hr = gDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(gGraphicsCommandAllocator.GetAddressOf()));
+        if (FAILED(hr))
+        {
+            assert(false && "Failed to create command allocator");
+            return false;
         }
 
         gGlobalRenderContext.RenderDeviceType = eRenderDeviceType::D3D12;

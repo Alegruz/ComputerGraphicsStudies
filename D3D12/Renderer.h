@@ -87,16 +87,28 @@ namespace cgs
             return &mPtr;
         }
 
-        CGS_INLINE constexpr const T*
+        CGS_INLINE constexpr const T*&
         operator->() const noexcept
         {
             return mPtr;
         }
 
-        CGS_INLINE constexpr T*
+        CGS_INLINE constexpr T*&
         operator->() noexcept
         {
             return mPtr;
+        }
+
+        CGS_INLINE constexpr T&
+        operator*() noexcept
+        {
+            return *mPtr;
+        }
+
+        CGS_INLINE constexpr const T&
+        operator*() const noexcept
+        {
+            return *mPtr;
         }
 
         CGS_INLINE constexpr bool
@@ -142,6 +154,8 @@ namespace cgs
         {
             D3DPtr<ID3D12Resource> Data;
             D3D12_CPU_DESCRIPTOR_HANDLE View;
+            D3D12_RESOURCE_STATES State;
+            std::string Name;
         };
 
     public:
@@ -149,22 +163,38 @@ namespace cgs
         RenderResource() noexcept
             : mData()
             , mView()
+            , mState(D3D12_RESOURCE_STATE_COMMON)
+            , mName()
         {
         }
 
-        CGS_INLINE constexpr 
+        CGS_INLINE CGS_CONSTEXPR_WITH_ASSERT 
         RenderResource(CreateInfo&& createInfo) noexcept
             : mData(std::move(createInfo.Data))
             , mView(createInfo.View)
+            , mState(createInfo.State)
+            , mName(std::move(createInfo.Name))
         {
+            const bool result = SetName(mName);
+            if(result == false)
+            {
+                assert(false && "Failed to set resource name");
+            }
         }
 
         RenderResource(const RenderResource&) = delete;
-        CGS_INLINE constexpr
+        CGS_INLINE CGS_CONSTEXPR_WITH_ASSERT
         RenderResource(RenderResource&& other) noexcept
             : mData(std::move(other.mData))
             , mView(other.mView)
+            , mState(other.mState)
+            , mName(std::move(other.mName))
         {
+            const bool result = SetName(mName);
+            if(result == false)
+            {
+                assert(false && "Failed to set resource name");
+            }
         }
 
         CGS_INLINE virtual
@@ -182,6 +212,14 @@ namespace cgs
             {
                 mData = std::move(other.mData);
                 mView = other.mView;
+                mState = other.mState;
+                mName = std::move(other.mName);
+                
+                const bool result = SetName(mName);
+                if(result == false)
+                {
+                    assert(false && "Failed to set resource name");
+                }
             }
             return *this;
         }
@@ -191,11 +229,56 @@ namespace cgs
         {
             mData = std::move(createInfo.Data);
             mView = createInfo.View;
+            mState = createInfo.State;
+            mName = std::move(createInfo.Name);
+
+            const bool result = SetName(mName);
+            if(result == false)
+            {
+                assert(false && "Failed to set resource name");
+            }
+        }
+
+        CGS_INLINE const D3DPtr<ID3D12Resource>&
+        GetResource() const noexcept
+        {
+            return mData;
+        }
+
+        CGS_INLINE const D3D12_CPU_DESCRIPTOR_HANDLE&
+        GetView() const noexcept
+        {
+            return mView;
+        }
+
+        void 
+        Transition(ID3D12GraphicsCommandList& commandList, const D3D12_RESOURCE_STATES newState) noexcept;
+
+        [[nodiscard]] CGS_INLINE bool
+        SetName(const std::string& name) noexcept
+        {
+            mName = name;
+
+            if(mData == nullptr)
+            {
+                assert(false && "SetName: resource is null");
+                return false;
+            }
+
+            HRESULT hr = mData->SetName(std::wstring(mName.begin(), mName.end()).c_str());
+            if (FAILED(hr))
+            {
+                assert(false && "Failed to set resource name");
+                return false;
+            }
+            return true;
         }
 
     private:
         D3DPtr<ID3D12Resource> mData;
         D3D12_CPU_DESCRIPTOR_HANDLE mView;
+        D3D12_RESOURCE_STATES mState;
+        std::string mName;
     };
 
     class Texture final : public RenderResource
@@ -207,7 +290,7 @@ namespace cgs
         {
         }
 
-        CGS_INLINE constexpr 
+        CGS_INLINE CGS_CONSTEXPR_WITH_ASSERT 
         Texture(CreateInfo&& createInfo) noexcept
             : RenderResource(std::move(createInfo))
         {
@@ -242,7 +325,7 @@ namespace cgs
         {
         }
 
-        CGS_INLINE constexpr 
+        CGS_INLINE CGS_CONSTEXPR_WITH_ASSERT 
         IndexBuffer(CreateInfo&& createInfo) noexcept
             : RenderResource(std::move(createInfo.ParentCreateInfo))
             , mView(createInfo.View)
@@ -250,7 +333,7 @@ namespace cgs
         }
 
         IndexBuffer(const IndexBuffer&) = delete;
-        CGS_INLINE constexpr
+        CGS_INLINE CGS_CONSTEXPR_WITH_ASSERT
         IndexBuffer(IndexBuffer&& other) noexcept
             : RenderResource(std::move(other))
             , mView(other.mView)
@@ -299,7 +382,7 @@ namespace cgs
         {
         }
 
-        CGS_INLINE constexpr 
+        CGS_INLINE CGS_CONSTEXPR_WITH_ASSERT 
         VertexBuffer(CreateInfo&& createInfo) noexcept
             : RenderResource(std::move(createInfo.ParentCreateInfo))
             , mView(createInfo.View)
@@ -307,7 +390,7 @@ namespace cgs
         }
 
         VertexBuffer(const VertexBuffer&) = delete;
-        CGS_INLINE constexpr
+        CGS_INLINE CGS_CONSTEXPR_WITH_ASSERT
         VertexBuffer(VertexBuffer&& other) noexcept
             : RenderResource(std::move(other))
             , mView(other.mView)

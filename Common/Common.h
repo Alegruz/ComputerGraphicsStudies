@@ -41,4 +41,10 @@ namespace cgs
     constexpr uint32_t gHeight = 1080;
 }
 
+#if defined(CGS_DEBUG)
+#define CGS_CONSTEXPR_WITH_ASSERT
+#else   // NOT defined(CGS_DEBUG)
+#define CGS_CONSTEXPR_WITH_ASSERT constexpr
+#endif  // NOT defined(CGS_DEBUG)
+
 #include "Core/Math.h"

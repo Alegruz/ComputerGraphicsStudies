@@ -80,6 +80,7 @@ private:
     HANDLE mFileHandle;
 };
 
+static HWND gWindow      = NULL;
 static HMENU gMenuBar    = NULL;
 static HMENU gFileMenu   = NULL;
 static HMENU gRecentMenu = NULL;
@@ -275,7 +276,7 @@ namespace cgs
 {
 #if defined(CGS_GRAPHICS_API_CPU)
     static void
-    Present(HWND window, const Texture& backBuffer) noexcept
+    Present(const Texture& backBuffer) noexcept
     {
         BITMAPINFO bitmapInfo =
         {
@@ -305,10 +306,12 @@ namespace cgs
                 }
             },
         };
-        HDC deviceContext = GetDC(window);
+        HDC deviceContext = GetDC(gWindow);
         StretchDIBits(deviceContext, 0, 0, backBuffer.GetWidth(), backBuffer.GetHeight(), 0, 0, backBuffer.GetWidth(), backBuffer.GetHeight(), backBuffer.GetData(), &bitmapInfo, DIB_RGB_COLORS, SRCCOPY);
-        ReleaseDC(window, deviceContext);
+        ReleaseDC(gWindow, deviceContext);
     }
+
+    PFN_Present gPresentFunc = Present;
 #endif  // defined(CGS_GRAPHICS_API_CPU)
 }
 
@@ -373,7 +376,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
     const int windowY = 0;
     const int windowWidth = cgs::gWidth;
     const int windowHeight = cgs::gHeight;
-    const HWND window = CreateWindow(
+    gWindow = CreateWindow(
         className,
         windowName,
         windowStyle,
@@ -381,15 +384,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
         NULL, NULL, instance, NULL
     );
 
-    if(window == NULL)
+    if(gWindow == NULL)
     {
         PrintErrorMessage();
         return GetLastError();
     }
 
-    BuildMenuBar(window);
+    BuildMenuBar(gWindow);
     // Sets the specified window's show state.
-    ShowWindow(window, commandShowFlag);
+    ShowWindow(gWindow, commandShowFlag);
 
     HACCEL accelerators = CreateAccelerators();
 
@@ -400,7 +403,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
         .Height = cgs::gHeight,
 #if defined(CGS_GRAPHICS_API_CPU)
 #elif defined(CGS_GRAPHICS_API_D3D12)
-        .Window = window,
+        .Window = gWindow,
 #else
 #error "Unknown graphics API type"
 #endif
@@ -452,42 +455,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
             }
         }
 
-        const uint32 currentFrameIndexToRender = static_cast<uint32>(workIndex % 3);
-        bool isFirstFrame = false;
-        while (true)
-        {
-            const uint64 lastCompleteWorkIndex = cgs::gRenderThread.LastCompleteWorkIndex.load();
-            isFirstFrame = workIndex < cgs::BACK_BUFFERS_COUNT;
-            const bool hasCompletedWork = lastCompleteWorkIndex != std::numeric_limits<uint64>::max();
-
-            if (isFirstFrame == true || (hasCompletedWork && lastCompleteWorkIndex >= static_cast<uint64>(static_cast<int64>(workIndex) - static_cast<int64>(cgs::BACK_BUFFERS_COUNT))))
-            {
-                break;
-            }
-            cgs::Yield();
-        }
-
-        {
-            if (isFirstFrame == false)
-            {
-#if defined(CGS_GRAPHICS_API_CPU)
-                cgs::Present(window, cgs::gBackBuffers[currentFrameIndexToRender]);
-#elif defined(CGS_GRAPHICS_API_D3D12)
-                assert(false && "D3D12 Present not implemented");
-#else   // NOT defined(CGS_GRAPHICS_API_CPU) && NOT defined(CGS_GRAPHICS_API_D3D12)
-#error "Unknown graphics API"
-#endif  // NOT defined(CGS_GRAPHICS_API_CPU) && NOT defined(CGS_GRAPHICS_API_D3D12)
-            }
-
-            const std::lock_guard lock(cgs::gRenderThread.RenderWorksMutex);
-            cgs::gRenderThread.RenderWorksPerFrame.push(
-                cgs::RenderWork
-                {
-                    .Geometries = cornellBox,
-                    .WorkIndex = workIndex++,
-                    .FrameIndex = currentFrameIndexToRender,
-                });
-        }
+        cgs::Render(workIndex, cgs::gRenderThread, cornellBox);
 
         QueryPerformanceCounter(&endTime);
         elapsedMicroseconds.QuadPart = (endTime.QuadPart - startTime.QuadPart) * 1000000 / frequency.QuadPart;

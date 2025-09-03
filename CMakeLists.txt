@@ -72,9 +72,22 @@ target_compile_options(project_warnings INTERFACE
     -fno-exceptions -fno-rtti>  # if that’s your policy; otherwise drop
 )
 
-add_library(project_sanitizers INTERFACE)
-target_compile_options(project_sanitizers INTERFACE $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<CONFIG:Debug>>:-fsanitize=address,undefined -fno-omit-frame-pointer>)
-target_link_options(project_sanitizers INTERFACE $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<CONFIG:Debug>>:-fsanitize=address,undefined>)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_library(project_sanitizers INTERFACE)
+
+    option(ENABLE_SANITIZERS "Enable {ASan,UBSan,TSan}" OFF)
+
+    if(ENABLE_SANITIZERS AND NOT MSVC)
+        target_compile_options(project_sanitizers INTERFACE $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<CONFIG:Debug>>:-fsanitize=address,undefined -fno-omit-frame-pointer -g>)
+        target_link_options(project_sanitizers INTERFACE $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<CONFIG:Debug>>:-fsanitize=address,undefined -fno-omit-frame-pointer>)
+    endif()
+endif()
+
+# MSVC ASan (x64 only, no /GL)
+if(ENABLE_SANITIZERS AND MSVC)
+    add_compile_options(/fsanitize=address /Zi /EHsc)
+    add_link_options(/INCREMENTAL /DEBUG)
+endif()
 
 if(CGS_WINDOWS)
     add_executable(ComputerGraphicsStudies 
@@ -146,7 +159,7 @@ endif()
 set_target_properties(ComputerGraphicsStudies PROPERTIES OUTPUT_NAME "ComputerGraphicsStudies_${CMAKE_SYSTEM_NAME}_${CMAKE_CXX_COMPILER_ID}_${CMAKE_BUILD_TYPE}_${GRAPHICS_API_TYPE}")
 
 target_link_libraries(ComputerGraphicsStudies PRIVATE project_warnings)
-if(ENABLE_SANITIZERS)
+if(ENABLE_SANITIZERS AND CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_link_libraries(ComputerGraphicsStudies PRIVATE project_sanitizers)
 endif()
 
@@ -156,6 +169,7 @@ if(CGS_WINDOWS)
 elseif(CGS_LINUX)
     target_compile_definitions(ComputerGraphicsStudies PRIVATE CGS_LINUX)
 endif()
+
 
 add_custom_command(TARGET ComputerGraphicsStudies POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:ComputerGraphicsStudies>" "${CMAKE_CURRENT_LIST_DIR}/${CMAKE_PROJECT_NAME}${CMAKE_EXECUTABLE_SUFFIX}"

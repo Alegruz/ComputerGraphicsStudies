@@ -405,6 +405,41 @@ namespace cgs
     }
 
     void
+    Render(uint64& inoutWorkIndex, RenderThreadInfo& inoutRenderThreadInfo, const std::vector<std::unique_ptr<Geometry>>& geometries) noexcept
+    {
+        const uint32 currentFrameIndexToRender = static_cast<uint32>(inoutWorkIndex % 3);
+        bool isFirstFrame = false;
+        while (true)
+        {
+            const uint64 lastCompleteWorkIndex = inoutRenderThreadInfo.LastCompleteWorkIndex.load();
+            isFirstFrame = inoutWorkIndex < cgs::BACK_BUFFERS_COUNT;
+            const bool hasCompletedWork = lastCompleteWorkIndex != std::numeric_limits<uint64>::max();
+
+            if (isFirstFrame == true || (hasCompletedWork && lastCompleteWorkIndex >= static_cast<uint64>(static_cast<int64>(inoutWorkIndex) - static_cast<int64>(cgs::BACK_BUFFERS_COUNT))))
+            {
+                break;
+            }
+            cgs::Yield();
+        }
+
+        {
+            if (isFirstFrame == false)
+            {
+                gPresentFunc(cgs::gBackBuffers[currentFrameIndexToRender]);
+            }
+
+            const std::lock_guard lock(inoutRenderThreadInfo.RenderWorksMutex);
+            inoutRenderThreadInfo.RenderWorksPerFrame.push(
+                cgs::RenderWork
+                {
+                    .Geometries = geometries,
+                    .WorkIndex = inoutWorkIndex++,
+                    .FrameIndex = currentFrameIndexToRender,
+                });
+        }
+    }
+
+    void
     RenderThreadMain(ThreadProcessArgument& arg) noexcept
     {
         if (arg.Argument == nullptr)

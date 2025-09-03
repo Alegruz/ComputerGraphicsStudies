@@ -338,6 +338,10 @@ namespace cgs
         uint32 mDepth;
     };
 
+    using PFN_Present = void(*)(const Texture& backBuffer);
+
+    extern PFN_Present gPresentFunc;
+    
     struct RendererCreateInfo final
     {
         uint32 Width;

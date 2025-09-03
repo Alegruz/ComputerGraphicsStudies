@@ -454,6 +454,8 @@ namespace cgs
 
         wl_display_flush(gDisplay); // send all queued requests
     }
+
+    PFN_Present gPresentFunc = Present;
 #endif  // defined(CGS_GRAPHICS_API_CPU)
 }
 
@@ -596,40 +598,7 @@ main(int argc, char** argv)
         gFrameCallback = wl_surface_frame(gSurface);
         wl_callback_add_listener(gFrameCallback, &gFrameListener, nullptr);
 
-        const uint32 currentFrameIndexToRender = static_cast<uint32>(workIndex % 3);
-        bool isFirstFrame = false;
-        while (true)
-        {
-            const uint64 lastCompleteWorkIndex = cgs::gRenderThread.LastCompleteWorkIndex.load();
-            isFirstFrame = workIndex < cgs::BACK_BUFFERS_COUNT;
-            const bool hasCompletedWork = lastCompleteWorkIndex != std::numeric_limits<uint64>::max();
-
-            if (isFirstFrame == true || (hasCompletedWork && lastCompleteWorkIndex >= static_cast<uint64>(static_cast<int64>(workIndex) - static_cast<int64>(cgs::BACK_BUFFERS_COUNT))))
-            {
-                break;
-            }
-            cgs::Yield();
-        }
-
-        {
-            if (isFirstFrame == false)
-            {
-#if defined(CGS_GRAPHICS_API_CPU)
-                cgs::Present(cgs::gBackBuffers[currentFrameIndexToRender]);
-#else   // NOT defined(CGS_GRAPHICS_API_CPU)
-#error Unsupported graphics API
-#endif  // NOT defined(CGS_GRAPHICS_API_CPU)
-            }
-
-            const std::lock_guard lock(cgs::gRenderThread.RenderWorksMutex);
-            cgs::gRenderThread.RenderWorksPerFrame.push(
-                cgs::RenderWork
-                {
-                    .Geometries = cornellBox,
-                    .WorkIndex = workIndex++,
-                    .FrameIndex = currentFrameIndexToRender,
-                });
-        }
+        cgs::Render(workIndex, cgs::gRenderThread, cornellBox);
 
         timespec endTime;
         clock_gettime(CLOCK_MONOTONIC_RAW, &endTime);

@@ -184,5 +184,5 @@ namespace cgs
     }
 
     void
-    Render(ThreadProcessArgument& arg) noexcept;
+    Render(uint64& inoutWorkIndex, RenderThreadInfo& inoutRenderThreadInfo, const std::vector<std::unique_ptr<Geometry>>& geometries) noexcept;
 }
