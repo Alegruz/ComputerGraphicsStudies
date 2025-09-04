@@ -41,8 +41,8 @@ namespace cgs
             }
         }
 
-        CGS_INLINE constexpr
-        D3DPtr& operator=(const D3DPtr& other) noexcept
+        CGS_INLINE constexpr D3DPtr& 
+        operator=(const D3DPtr& other) noexcept
         {
             if (this != &other)
             {
@@ -60,8 +60,8 @@ namespace cgs
             return *this;
         }
 
-        CGS_INLINE constexpr
-        D3DPtr& operator=(D3DPtr&& other) noexcept
+        CGS_INLINE constexpr D3DPtr& 
+        operator=(D3DPtr&& other) noexcept
         {
             if (this != &other)
             {
@@ -72,6 +72,13 @@ namespace cgs
                 mPtr = other.mPtr;
                 other.mPtr = nullptr;
             }
+            return *this;
+        }
+
+        CGS_INLINE constexpr D3DPtr&
+        operator=(std::nullptr_t) noexcept
+        {
+            mPtr = nullptr;
             return *this;
         }
 
@@ -127,25 +134,63 @@ namespace cgs
         T* mPtr;
     };
 
-#define CGS_DESTROY_D3D12_OBJECT_OR_NULL(object)    \
-    if (object != nullptr)                  \
-    {                                       \
-        [[maybe_unused]] const uint64 refCount = (object)->Release(); \
-        assert(refCount == 0 && #object " was not released properly"); \
-    }                                       
+    template<typename T>
+    concept IUnknownDerived = std::is_base_of_v<IUnknown, T>;
 
-#define CGS_DESTROY_D3D12_OBJECT(object)    \
-    if (object != nullptr)                  \
-    {                                       \
-        [[maybe_unused]] const uint64 refCount = (object)->Release(); \
-        assert(refCount == 0 && #object " was not released properly"); \
-    }                                       \
-    else                                    \
-    {                                       \
-        assert(false && #object " is null"); \
+    template<typename T>
+    concept D3D12ObjectDerived = std::is_base_of_v<ID3D12Object, T>;
+
+    template<IUnknownDerived T>
+    bool
+    DestroyD3D12ObjectOrNull(D3DPtr<T>& objectOrNull) noexcept
+    {
+        if (objectOrNull != nullptr)
+        {
+            if constexpr (std::is_base_of_v<ID3D12DeviceChild, T>)
+            {
+                D3DPtr<ID3D12Device> device;
+                HRESULT hr = objectOrNull->GetDevice(IID_PPV_ARGS(device.GetAddressOf()));
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to get device from object");
+                    return false;
+                }
+                device->Release();
+            }
+
+            uint64 refCount = 0;
+            do
+            {
+                refCount = objectOrNull->Release();
+                assert(refCount == 0 && "Object was not released properly");
+            } while (refCount > 0);
+            objectOrNull = nullptr;
+            return true;
+        }
+
+        return false;
     }
 
-#define CGS_DESTROY_DXGI_OBJECT(object) CGS_DESTROY_D3D12_OBJECT(object)
+    template<IUnknownDerived T>
+    void
+    DestroyD3D12Object(D3DPtr<T>& objectOrNull) noexcept
+    {
+        const bool result = DestroyD3D12ObjectOrNull(objectOrNull);
+        if(result == false)
+        {
+            assert(false && "Object is null");
+        }
+    }
+
+    template<typename T>
+    concept DXGIObjectDerived = std::is_base_of_v<IDXGIObject, T>;
+
+    template<IUnknownDerived T>
+    void
+    DestroyDXGIObject(D3DPtr<T>& objectOrNull) noexcept
+    {
+        DestroyD3D12Object(objectOrNull);
+    }
 
     class RenderResource
     {
@@ -196,17 +241,27 @@ namespace cgs
                 assert(false && "Failed to set resource name");
             }
         }
-
+        
         CGS_INLINE virtual
         ~RenderResource() noexcept
         {
-            CGS_DESTROY_D3D12_OBJECT_OR_NULL(mData);
+            if(mData != nullptr)
+            {
+                D3DPtr<ID3D12Device> device;
+                HRESULT hr = mData->GetDevice(IID_PPV_ARGS(device.GetAddressOf()));
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to get device from resource");
+                }
+                device->Release();
+            }
+            DestroyD3D12ObjectOrNull(mData);
         }
 
         RenderResource&
         operator=(const RenderResource&) = delete;
-        CGS_INLINE constexpr
-        RenderResource& operator=(RenderResource&& other) noexcept
+        CGS_INLINE constexpr RenderResource& 
+        operator=(RenderResource&& other) noexcept
         {
             if (this != &other)
             {
@@ -214,7 +269,6 @@ namespace cgs
                 mView = other.mView;
                 mState = other.mState;
                 mName = std::move(other.mName);
-                
                 const bool result = SetName(mName);
                 if(result == false)
                 {
@@ -224,7 +278,7 @@ namespace cgs
             return *this;
         }
 
-        CGS_INLINE void
+        virtual CGS_INLINE void
         Initialize(CreateInfo&& createInfo) noexcept
         {
             mData = std::move(createInfo.Data);
@@ -254,7 +308,7 @@ namespace cgs
         void 
         Transition(ID3D12GraphicsCommandList& commandList, const D3D12_RESOURCE_STATES newState) noexcept;
 
-        [[nodiscard]] CGS_INLINE bool
+        [[nodiscard]] CGS_INLINE CGS_CONSTEXPR_WITH_ASSERT bool
         SetName(const std::string& name) noexcept
         {
             mName = name;
@@ -274,7 +328,7 @@ namespace cgs
             return true;
         }
 
-    private:
+    protected:
         D3DPtr<ID3D12Resource> mData;
         D3D12_CPU_DESCRIPTOR_HANDLE mView;
         D3D12_RESOURCE_STATES mState;
@@ -284,15 +338,24 @@ namespace cgs
     class Texture final : public RenderResource
     {
     public:
+        struct CreateInfo final
+        {
+            RenderResource::CreateInfo ParentCreateInfo;
+            bool IsBackBuffer = false;
+        };
+
+    public:
         CGS_INLINE constexpr 
         Texture() noexcept
             : RenderResource()
+            , mIsBackBuffer(false)
         {
         }
 
         CGS_INLINE CGS_CONSTEXPR_WITH_ASSERT 
         Texture(CreateInfo&& createInfo) noexcept
-            : RenderResource(std::move(createInfo))
+            : RenderResource(std::move(createInfo.ParentCreateInfo))
+            , mIsBackBuffer(createInfo.IsBackBuffer)
         {
         }
 
@@ -301,12 +364,36 @@ namespace cgs
         Texture(Texture&& other) noexcept = default;
 
         CGS_INLINE 
-        ~Texture() noexcept = default;
+        ~Texture() noexcept
+        {
+            if(mIsBackBuffer)
+            {
+                if (mData != nullptr)
+                {
+                    mData->Release();
+                    mData = nullptr;
+                }
+            }
+        }
 
         Texture&
         operator=(const Texture&) = delete;
         CGS_INLINE constexpr
         Texture& operator=(Texture&& other) noexcept = default;
+
+        CGS_INLINE void
+        Initialize(CreateInfo&& createInfo) noexcept
+        {
+            RenderResource::Initialize(std::move(createInfo.ParentCreateInfo));
+            mIsBackBuffer = createInfo.IsBackBuffer;
+        }
+
+    protected:
+        CGS_INLINE void
+        Initialize(RenderResource::CreateInfo&&) noexcept override {}
+
+    private:
+        bool mIsBackBuffer;
     };
 
     class IndexBuffer final : public RenderResource

@@ -321,9 +321,9 @@ namespace cgs
 /// @param commandLine the command-line arguments as a Unicode string.
 /// @param commandShowFlag a flag that indicates whether the main application window is minimized, maximized, or shown normally.
 /// @return The exit value of the application.
-int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_unused]] int commandShowFlag)
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, [[maybe_unused]] int commandShowFlag)
 {
-    cgs::CommandLineParser commandLineParser(commandLine);
+    cgs::CommandLineParser commandLineParser(L"-v");
     const bool isOptionFound = commandLineParser.ParseArguments();
     if (isOptionFound == false)
     {

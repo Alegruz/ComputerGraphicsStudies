@@ -38,16 +38,21 @@ namespace cgs
     static D3DPtr<ID3D12InfoQueue1> gD3D12InfoQueue;
 #endif  // defined(CGS_DEBUG)
     static D3DPtr<ID3D12Device4> gDevice;
-    static D3DPtr<ID3D12GraphicsCommandList> gGraphicsCommandList;
-    static D3DPtr<ID3D12CommandAllocator> gGraphicsCommandAllocator;
+    static std::vector<D3DPtr<ID3D12GraphicsCommandList>> gGraphicsCommandLists(BACK_BUFFERS_COUNT);
+    static std::vector<D3DPtr<ID3D12CommandAllocator>> gGraphicsCommandAllocators(BACK_BUFFERS_COUNT);
     static D3DPtr<ID3D12CommandQueue> gGraphicsCommandQueue;
     static D3DPtr<ID3D12DescriptorHeap> gRtvHeap;
     static D3DPtr<ID3D12DescriptorHeap> gDsvHeap;
     static uint32 gRtvIncrementSize = 0;
     static uint32 gDsvIncrementSize = 0;
     static std::vector<SceneRenderTarget> gSceneRenderTargets(BACK_BUFFERS_COUNT);
-
+    static HANDLE gFenceEvent = NULL;
+    static D3DPtr<ID3D12Fence> gFence;
+    static std::vector<uint64> gFenceValues(BACK_BUFFERS_COUNT, std::numeric_limits<uint64>::max());
     
+    void
+    WaitForFrame(const uint32 frameIndex) noexcept;
+
     void 
     RenderResource::Transition(ID3D12GraphicsCommandList& commandList, const D3D12_RESOURCE_STATES newState) noexcept
     {
@@ -70,20 +75,42 @@ namespace cgs
     void
     DestroyRenderer() noexcept
     {
-        CGS_DESTROY_D3D12_OBJECT(gGraphicsCommandList);
-        CGS_DESTROY_D3D12_OBJECT(gGraphicsCommandAllocator);
-        CGS_DESTROY_D3D12_OBJECT(gGraphicsCommandQueue);
+        for(uint32 frameBufferIndex = 0; frameBufferIndex < BACK_BUFFERS_COUNT; ++frameBufferIndex)
+        {
+            WaitForFrame(frameBufferIndex);
+        }
 
-        CGS_DESTROY_DXGI_OBJECT(gSwapChain);
+        DestroyD3D12Object(gFence);
+        
+        gSceneRenderTargets.clear();
+        gSwapChain->Release();
 
-        CGS_DESTROY_D3D12_OBJECT(gDevice);
+        DestroyD3D12Object(gDsvHeap);
+        DestroyD3D12Object(gRtvHeap);
+
+        for(uint32 frameBufferIndex = 0; frameBufferIndex < BACK_BUFFERS_COUNT; ++frameBufferIndex)
+        {
+            DestroyD3D12Object(gGraphicsCommandLists[frameBufferIndex]);
+            DestroyD3D12Object(gGraphicsCommandAllocators[frameBufferIndex]);
+        }
+        gGraphicsCommandLists.clear();
+        gGraphicsCommandAllocators.clear();
+
+        DestroyDXGIObject(gSwapChain);
+
+        DestroyD3D12Object(gGraphicsCommandQueue);
+
 #if defined(CGS_DEBUG)
-        CGS_DESTROY_D3D12_OBJECT(gD3D12InfoQueue);
-        CGS_DESTROY_D3D12_OBJECT(gD3D12Debug);
+        DestroyD3D12Object(gD3D12InfoQueue);
 #endif  // defined(CGS_DEBUG)
 
-        CGS_DESTROY_DXGI_OBJECT(gAdapter);
-        CGS_DESTROY_DXGI_OBJECT(gFactory);
+        DestroyD3D12Object(gDevice);
+#if defined(CGS_DEBUG)
+        DestroyD3D12Object(gD3D12Debug);
+#endif  // defined(CGS_DEBUG)
+
+        DestroyDXGIObject(gAdapter);
+        DestroyDXGIObject(gFactory);
 
 #if defined(CGS_DEBUG)
         if(gDxgiDebug != nullptr)
@@ -94,8 +121,8 @@ namespace cgs
         {
             assert(false && "gDxgiDebug is null");
         }
-        CGS_DESTROY_DXGI_OBJECT(gInfoQueue);
-        CGS_DESTROY_DXGI_OBJECT(gDxgiDebug);
+        DestroyDXGIObject(gInfoQueue);
+        DestroyDXGIObject(gDxgiDebug);
 #endif  // defined(CGS_DEBUG)
     }
 
@@ -556,16 +583,13 @@ namespace cgs
     Render(uint64& inoutWorkIndex, RenderThreadInfo& inoutRenderThreadInfo, const std::vector<std::unique_ptr<Geometry>>& geometries) noexcept
     {
         // assert(false && "Render function not implemented");
-        
-        const uint32 currentFrameIndexToRender = gSwapChain->GetCurrentBackBufferIndex();
-
         const std::lock_guard lock(inoutRenderThreadInfo.RenderWorksMutex);
         inoutRenderThreadInfo.RenderWorksPerFrame.push(
             cgs::RenderWork
             {
                 .Geometries = geometries,
                 .WorkIndex = inoutWorkIndex++,
-                .FrameIndex = currentFrameIndexToRender,
+                .FrameIndex = 0,
             });
     }
 
@@ -607,9 +631,32 @@ namespace cgs
                     assert(false && "Unsupported render method in RenderThreadMain");
                 }
 #else
+                renderWork.FrameIndex = gSwapChain->GetCurrentBackBufferIndex();
+                WaitForFrame(renderWork.FrameIndex);
                 renderThreadInfo.CurrentWorkIndex.store(renderWork.WorkIndex);
+
+                D3DPtr<ID3D12CommandAllocator>& graphicsCommandAllocatorOrNull = gGraphicsCommandAllocators[renderWork.FrameIndex];
+                if(graphicsCommandAllocatorOrNull == nullptr)
+                {
+                    assert(false && "Command allocator is null");
+                    renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
+                    continue;
+                }
+                ID3D12CommandAllocator& graphicsCommandAllocator = *graphicsCommandAllocatorOrNull.Get();
+
+                D3DPtr<ID3D12GraphicsCommandList>& graphicsCommandListOrNull = gGraphicsCommandLists[renderWork.FrameIndex];
+                if(graphicsCommandListOrNull == nullptr)
+                {
+                    assert(false && "Command list is null");
+                    renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
+                    continue;
+                }
+                ID3D12GraphicsCommandList& graphicsCommandList = *graphicsCommandListOrNull.Get();
+
+                SceneRenderTarget& sceneRenderTarget = gSceneRenderTargets[renderWork.FrameIndex];
+
                 // TODO(alegruz): DX ERROR: ID3D12CommandAllocator::Reset: A command allocator 0x0000017DF4B5BBA0:'Unnamed ID3D12CommandAllocator Object' is being reset before previous executions associated with the allocator have completed. [ EXECUTION ERROR #552: ]
-                hr = gGraphicsCommandAllocator->Reset();
+                hr = graphicsCommandAllocator.Reset();
                 if(FAILED(hr))
                 {
                     assert(false && "Failed to reset command allocator");
@@ -617,7 +664,7 @@ namespace cgs
                     continue;
                 }
 
-                hr = gGraphicsCommandList->Reset(gGraphicsCommandAllocator.Get(), nullptr);
+                hr = graphicsCommandList.Reset(&graphicsCommandAllocator, nullptr);
                 if(FAILED(hr))
                 {
                     assert(false && "Failed to reset command list");
@@ -625,17 +672,17 @@ namespace cgs
                     continue;
                 }
 
-                gSceneRenderTargets[renderWork.FrameIndex].ColorBuffer.Transition(*gGraphicsCommandList, D3D12_RESOURCE_STATE_RENDER_TARGET);
+                sceneRenderTarget.ColorBuffer.Transition(graphicsCommandList, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
                 constexpr float BLACK_COLOR[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
-                gGraphicsCommandList->ClearRenderTargetView(
-                    gSceneRenderTargets[renderWork.FrameIndex].ColorBuffer.GetView(),
+                graphicsCommandList.ClearRenderTargetView(
+                    sceneRenderTarget.ColorBuffer.GetView(),
                     BLACK_COLOR,
                     0,
                     nullptr
                 );
-                gGraphicsCommandList->ClearDepthStencilView(
-                    gSceneRenderTargets[renderWork.FrameIndex].DepthBuffer.GetView(),
+                graphicsCommandList.ClearDepthStencilView(
+                    sceneRenderTarget.DepthBuffer.GetView(),
                     D3D12_CLEAR_FLAG_DEPTH,
                     1.0f,
                     0,
@@ -643,12 +690,14 @@ namespace cgs
                     nullptr
                 );
 
-                gSceneRenderTargets[renderWork.FrameIndex].ColorBuffer.Transition(*gGraphicsCommandList, D3D12_RESOURCE_STATE_PRESENT);
+                sceneRenderTarget.ColorBuffer.Transition(graphicsCommandList, D3D12_RESOURCE_STATE_PRESENT);
 
-                gGraphicsCommandList->Close();
-                ID3D12CommandList* commandLists[] = { gGraphicsCommandList.Get(), };
+                graphicsCommandList.Close();
+                ID3D12CommandList* commandLists[] = { &graphicsCommandList, };
                 gGraphicsCommandQueue->ExecuteCommandLists(CGS_ARRAYSIZE(commandLists), commandLists);
                 gSwapChain->Present(0, 0);
+                gGraphicsCommandQueue->Signal(gFence.Get(), renderWork.WorkIndex);
+                gFenceValues[renderWork.FrameIndex] = renderWork.WorkIndex;
                 renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
 #endif
             }
@@ -674,7 +723,7 @@ namespace cgs
             assert(false && "Failed to get DXGI Debug Interface");
             return false;
         }
-        
+
         hr = DXGIGetDebugInterface(IID_PPV_ARGS(gInfoQueue.GetAddressOf()));
         if(FAILED(hr))
         {
@@ -759,6 +808,7 @@ namespace cgs
                 assert(false && "Failed to get D3D12 Device");
                 return false;
             }
+            gDevice->SetName(TEXT("Main D3D12 Device"));
         }
 
 #if defined(CGS_DEBUG)
@@ -787,17 +837,23 @@ namespace cgs
             assert(false && "Failed to create command queue");
             return false;
         }
+        gGraphicsCommandQueue->SetName(TEXT("Main Graphics Command Queue"));
 
-        hr = gDevice->CreateCommandList1(
-            0,
-            D3D12_COMMAND_LIST_TYPE_DIRECT,
-            D3D12_COMMAND_LIST_FLAG_NONE,
-            IID_PPV_ARGS(gGraphicsCommandList.GetAddressOf())
-        );
-        if (FAILED(hr))
+        for (uint32 frameBufferIndex = 0; frameBufferIndex < BACK_BUFFERS_COUNT; ++frameBufferIndex)
         {
-            assert(false && "Failed to create command list");
-            return false;
+            hr = gDevice->CreateCommandList1(
+                0,
+                D3D12_COMMAND_LIST_TYPE_DIRECT,
+                D3D12_COMMAND_LIST_FLAG_NONE,
+                IID_PPV_ARGS(gGraphicsCommandLists[frameBufferIndex].GetAddressOf())
+            );
+            if (FAILED(hr))
+            {
+                assert(false && "Failed to create command list");
+                return false;
+            }
+            const std::wstring commandListName = L"Main Graphics Command List [" + std::to_wstring(frameBufferIndex) + L"]";
+            gGraphicsCommandLists[frameBufferIndex]->SetName(commandListName.c_str());
         }
 
         const D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc =
@@ -813,6 +869,7 @@ namespace cgs
             assert(false && "Failed to create RTV descriptor heap");
             return false;
         }
+        gRtvHeap->SetName(TEXT("Main RTV Descriptor Heap"));
 
         const D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc =
         {
@@ -827,6 +884,7 @@ namespace cgs
             assert(false && "Failed to create DSV descriptor heap");
             return false;
         }
+        gDsvHeap->SetName(TEXT("Main DSV Descriptor Heap"));
 
         DXGI_SWAP_CHAIN_DESC1 swapChainDesc = 
         {
@@ -911,30 +969,33 @@ namespace cgs
         for(uint32 frameIndex = 0; frameIndex < BACK_BUFFERS_COUNT; ++frameIndex)
         {
             Texture::CreateInfo colorBufferInfo;
-            hr = gSwapChain->GetBuffer(frameIndex, IID_PPV_ARGS(colorBufferInfo.Data.GetAddressOf()));
+            colorBufferInfo.IsBackBuffer = true;
+
+            hr = gSwapChain->GetBuffer(frameIndex, IID_PPV_ARGS(colorBufferInfo.ParentCreateInfo.Data.GetAddressOf()));
             if(FAILED(hr))
             {
                 assert(false && "Failed to get swap chain buffer");
                 return false;
             }
+            colorBufferInfo.ParentCreateInfo.Data->AddRef(); // Compensate for the reference count increase when calling GetBuffer
 
-            colorBufferInfo.View.ptr = rtvStartHandle.ptr + (frameIndex * gRtvIncrementSize);
-            colorBufferInfo.State = D3D12_RESOURCE_STATE_COMMON;    // https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-resource-barriers-to-synchronize-resource-states-in-direct3d-12#initial-states-for-resources
-            colorBufferInfo.Name = "SwapChainColorBuffer[" + std::to_string(frameIndex) + "]";
-            gDevice->CreateRenderTargetView(colorBufferInfo.Data.Get(), &colorBufferViewDesc, colorBufferInfo.View);
+            colorBufferInfo.ParentCreateInfo.View.ptr = rtvStartHandle.ptr + (frameIndex * gRtvIncrementSize);
+            colorBufferInfo.ParentCreateInfo.State = D3D12_RESOURCE_STATE_COMMON;    // https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-resource-barriers-to-synchronize-resource-states-in-direct3d-12#initial-states-for-resources
+            colorBufferInfo.ParentCreateInfo.Name = "SwapChainColorBuffer[" + std::to_string(frameIndex) + "]";
+            gDevice->CreateRenderTargetView(colorBufferInfo.ParentCreateInfo.Data.Get(), &colorBufferViewDesc, colorBufferInfo.ParentCreateInfo.View);
 
             gSceneRenderTargets[frameIndex].ColorBuffer.Initialize(std::move(colorBufferInfo));
 
             Texture::CreateInfo depthBufferInfo;
-            depthBufferInfo.State = D3D12_RESOURCE_STATE_DEPTH_WRITE;
-            depthBufferInfo.Name = "SwapChainDepthBuffer[" + std::to_string(frameIndex) + "]";
+            depthBufferInfo.ParentCreateInfo.State = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+            depthBufferInfo.ParentCreateInfo.Name = "SwapChainDepthBuffer[" + std::to_string(frameIndex) + "]";
             hr = gDevice->CreateCommittedResource(
                 &depthBufferHeapProperties,
                 D3D12_HEAP_FLAG_NONE,
                 &depthBufferDesc,
-                depthBufferInfo.State,
+                depthBufferInfo.ParentCreateInfo.State,
                 &depthBufferClearValue,
-                IID_PPV_ARGS(depthBufferInfo.Data.GetAddressOf())
+                IID_PPV_ARGS(depthBufferInfo.ParentCreateInfo.Data.GetAddressOf())
             );
             if (FAILED(hr))
             {
@@ -942,22 +1003,63 @@ namespace cgs
                 return false;
             }
 
-            depthBufferInfo.View.ptr = dsvStartHandle.ptr + (frameIndex * gDsvIncrementSize);
+            depthBufferInfo.ParentCreateInfo.View.ptr = dsvStartHandle.ptr + (frameIndex * gDsvIncrementSize);
 
-            gDevice->CreateDepthStencilView(depthBufferInfo.Data.Get(), nullptr, depthBufferInfo.View);
+            gDevice->CreateDepthStencilView(depthBufferInfo.ParentCreateInfo.Data.Get(), nullptr, depthBufferInfo.ParentCreateInfo.View);
 
             gSceneRenderTargets[frameIndex].DepthBuffer.Initialize(std::move(depthBufferInfo));
         }
 
-        hr = gDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(gGraphicsCommandAllocator.GetAddressOf()));
+        for(uint32 frameBufferIndex = 0; frameBufferIndex < BACK_BUFFERS_COUNT; ++frameBufferIndex)
+        {
+            hr = gDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(gGraphicsCommandAllocators[frameBufferIndex].GetAddressOf()));
+            if (FAILED(hr))
+            {
+                assert(false && "Failed to create command allocator");
+                return false;
+            }
+            const std::wstring allocatorName = L"Graphics Command Allocator [" + std::to_wstring(frameBufferIndex) + L"]";
+            gGraphicsCommandAllocators[frameBufferIndex]->SetName(allocatorName.c_str());
+        }
+
+        hr = gDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(gFence.GetAddressOf()));
         if (FAILED(hr))
         {
-            assert(false && "Failed to create command allocator");
+            assert(false && "Failed to create frame fence");
+            return false;
+        }
+        gFence->SetName(TEXT("Main Frame Fence"));
+
+        gFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        if (gFenceEvent == NULL)
+        {
+            assert(false && "Failed to create fence event");
             return false;
         }
 
         gGlobalRenderContext.RenderDeviceType = eRenderDeviceType::D3D12;
         return true;
+    }
+
+    void WaitForFrame(const uint32 frameIndex) noexcept
+    {
+        const uint64 fenceValue = gFenceValues[frameIndex];
+        if (fenceValue == std::numeric_limits<uint64>::max())
+        {
+            return;
+        }
+
+        const uint64 completedFenceValue = gFence->GetCompletedValue();
+        if (completedFenceValue < fenceValue)
+        {
+            HRESULT hr = gFence->SetEventOnCompletion(fenceValue, gFenceEvent);
+            if (FAILED(hr))
+            {
+                assert(false && "Failed to set event on fence completion");
+                return;
+            }
+            WaitForSingleObject(gFenceEvent, INFINITE);
+        }
     }
 }
 #endif  // defined(CGS_GRAPHICS_API_D3D12)
