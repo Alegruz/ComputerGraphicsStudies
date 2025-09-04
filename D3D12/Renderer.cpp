@@ -35,6 +35,7 @@ namespace cgs
     // D3D12
 #if defined(CGS_DEBUG)
     static D3DPtr<ID3D12Debug5> gD3D12Debug;
+    static D3DPtr<ID3D12InfoQueue1> gD3D12InfoQueue;
 #endif  // defined(CGS_DEBUG)
     static D3DPtr<ID3D12Device4> gDevice;
     static D3DPtr<ID3D12GraphicsCommandList> gGraphicsCommandList;
@@ -77,6 +78,7 @@ namespace cgs
 
         CGS_DESTROY_D3D12_OBJECT(gDevice);
 #if defined(CGS_DEBUG)
+        CGS_DESTROY_D3D12_OBJECT(gD3D12InfoQueue);
         CGS_DESTROY_D3D12_OBJECT(gD3D12Debug);
 #endif  // defined(CGS_DEBUG)
 
@@ -740,7 +742,6 @@ namespace cgs
         gD3D12Debug->SetEnableGPUBasedValidation(TRUE);
         gD3D12Debug->SetEnableSynchronizedCommandQueueValidation(TRUE);
         gD3D12Debug->SetEnableAutoName(TRUE);
-
 #endif  // defined(CGS_DEBUG)
 
         {
@@ -760,17 +761,18 @@ namespace cgs
             }
         }
 
-#if 0
-        hr = gDevice->CreateCommandAllocator(
-            D3D12_COMMAND_LIST_TYPE_DIRECT,
-            IID_PPV_ARGS(gGraphicsCommandAllocator.GetAddressOf())
-        );
+#if defined(CGS_DEBUG)
+        hr = gDevice->QueryInterface(IID_PPV_ARGS(gD3D12InfoQueue.GetAddressOf()));
         if(FAILED(hr))
         {
-            assert(false && "Failed to create command allocator");
+            assert(false && "Failed to get D3D12 Info Queue");
             return false;
         }
-#endif
+
+        gD3D12InfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+        gD3D12InfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
+        gD3D12InfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, TRUE);
+#endif  // defined(CGS_DEBUG)
 
         const D3D12_COMMAND_QUEUE_DESC commandQueueDesc = 
         {
