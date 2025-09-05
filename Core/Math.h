@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 namespace cgs
 {
     enum class eCoordinateSpace : uint8

@@ -205,7 +205,7 @@ namespace cgs
 
         vertexBufferCreateInfo.View.BufferLocation = vertexBufferCreateInfo.ParentCreateInfo.Data->GetGPUVirtualAddress();
         vertexBufferCreateInfo.View.StrideInBytes = sizeof(VertexPN);
-        vertexBufferCreateInfo.View.SizeInBytes = static_cast<uint32>(vertices.size());
+        vertexBufferCreateInfo.View.SizeInBytes = vertexBufferCreateInfo.View.StrideInBytes * static_cast<uint32>(vertices.size());
 
         outVertexBuffer.Initialize(std::move(vertexBufferCreateInfo));
         return true;
@@ -273,7 +273,7 @@ namespace cgs
         indexBufferCreateInfo.ParentCreateInfo.Data->Unmap(0, nullptr);
 
         indexBufferCreateInfo.View.BufferLocation = indexBufferCreateInfo.ParentCreateInfo.Data->GetGPUVirtualAddress();
-        indexBufferCreateInfo.View.SizeInBytes = static_cast<uint32>(indices.size());
+        indexBufferCreateInfo.View.SizeInBytes = static_cast<uint32>(sizeof(uint16) * indices.size());
         indexBufferCreateInfo.View.Format = DXGI_FORMAT_R16_UINT;
         outIndexBuffer.Initialize(std::move(indexBufferCreateInfo));
         return true;
@@ -674,7 +674,7 @@ namespace cgs
 
                 sceneRenderTarget.ColorBuffer.Transition(graphicsCommandList, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-                constexpr float BLACK_COLOR[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+                constexpr float BLACK_COLOR[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
                 graphicsCommandList.ClearRenderTargetView(
                     sceneRenderTarget.ColorBuffer.GetView(),
                     BLACK_COLOR,
@@ -893,7 +893,7 @@ namespace cgs
             .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
             .Stereo = FALSE,
             .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
-            .BufferUsage = DXGI_USAGE_BACK_BUFFER,
+            .BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT,
             .BufferCount = BACK_BUFFERS_COUNT,
             .Scaling = DXGI_SCALING_STRETCH,
             .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,

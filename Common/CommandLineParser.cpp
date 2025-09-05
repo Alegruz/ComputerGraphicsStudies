@@ -11,8 +11,8 @@ namespace cgs
         { TEXT("--help"), {.LongOption = TEXT("--help"), .ShortOption = TEXT("-h"), .Type = eOptionType::HELP, .Description = TEXT("Show help information.") } },
         { TEXT("--version"), {.LongOption = TEXT("--version"), .ShortOption = TEXT("-v"), .Type = eOptionType::VERSION, .Description = TEXT("Show version information.") } },
         { TEXT("--input-resource"), {.LongOption = TEXT("--input-resource"), .ShortOption = TEXT("-i"), .Type = eOptionType::INPUT_RESOURCE, .Description = TEXT("Path to the input model file.") } },
-        { TEXT("--width"), {.LongOption = TEXT("--width"), .ShortOption = TEXT("-w"), .Type = eOptionType::WIDTH, .Description = TEXT("Specify the width.") } },
-        { TEXT("--height"), {.LongOption = TEXT("--height"), .ShortOption = TEXT("-h"), .Type = eOptionType::HEIGHT, .Description = TEXT("Specify the height.") } },
+        { TEXT("--width"), {.LongOption = TEXT("--width"), .ShortOption = TEXT("-W"), .Type = eOptionType::WIDTH, .Description = TEXT("Specify the width.") } },
+        { TEXT("--height"), {.LongOption = TEXT("--height"), .ShortOption = TEXT("-H"), .Type = eOptionType::HEIGHT, .Description = TEXT("Specify the height.") } },
     };
 
     CommandLineParser::CommandLineParser(const CommandLineParser::CharType* commandLine) noexcept

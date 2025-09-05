@@ -6,6 +6,7 @@
 #include <cassert>
 #include <codecvt>
 #include <concepts>
+#include <cstdarg>
 #include <cstdint>
 #include <cwctype>
 #include <filesystem>
