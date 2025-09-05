@@ -139,31 +139,38 @@ namespace cgs
 
     template<typename T>
     concept D3D12ObjectDerived = std::is_base_of_v<ID3D12Object, T>;
+    
+    template<IUnknownDerived T>
+    static void
+    checkRefCountValue(D3DPtr<T>& object) noexcept
+    {
+        if(object == nullptr)
+        {
+            return;
+        }
+        [[maybe_unused]] volatile const uint32 refCount = object->AddRef() - 1;
+        object->Release();
+    }
 
     template<IUnknownDerived T>
     bool
-    DestroyD3D12ObjectOrNull(D3DPtr<T>& objectOrNull) noexcept
+    DestroyD3D12ObjectOrNull(D3DPtr<T>& objectOrNull, const bool assertOnRemainingRefCountValues = true) noexcept
     {
         if (objectOrNull != nullptr)
         {
-            if constexpr (std::is_base_of_v<ID3D12DeviceChild, T>)
+            [[maybe_unused]] const uint64 refCount = objectOrNull->Release();
+            if constexpr (std::is_base_of_v<ID3D12Device, T> == false 
+                || std::is_same_v<T, ID3D12Device> == true
+                || std::is_same_v<T, ID3D12Device1> == true
+                || std::is_same_v<T, ID3D12Device2> == true 
+                || std::is_same_v<T, ID3D12Device3> == true 
+                || std::is_same_v<T, ID3D12Device4> == true)
             {
-                D3DPtr<ID3D12Device> device;
-                HRESULT hr = objectOrNull->GetDevice(IID_PPV_ARGS(device.GetAddressOf()));
-                if(FAILED(hr))
+                if(assertOnRemainingRefCountValues == true)
                 {
-                    assert(false && "Failed to get device from object");
-                    return false;
+                    assert(refCount == 0 && "Object was not released properly");
                 }
-                device->Release();
             }
-
-            uint64 refCount = 0;
-            do
-            {
-                refCount = objectOrNull->Release();
-                assert(refCount == 0 && "Object was not released properly");
-            } while (refCount > 0);
             objectOrNull = nullptr;
             return true;
         }
@@ -173,9 +180,9 @@ namespace cgs
 
     template<IUnknownDerived T>
     void
-    DestroyD3D12Object(D3DPtr<T>& objectOrNull) noexcept
+    DestroyD3D12Object(D3DPtr<T>& objectOrNull, const bool assertOnRemainingRefCountValues = true) noexcept
     {
-        const bool result = DestroyD3D12ObjectOrNull(objectOrNull);
+        const bool result = DestroyD3D12ObjectOrNull(objectOrNull, assertOnRemainingRefCountValues);
         if(result == false)
         {
             assert(false && "Object is null");
@@ -187,9 +194,9 @@ namespace cgs
 
     template<IUnknownDerived T>
     void
-    DestroyDXGIObject(D3DPtr<T>& objectOrNull) noexcept
+    DestroyDXGIObject(D3DPtr<T>& objectOrNull, const bool assertOnRemainingRefCountValues = true) noexcept
     {
-        DestroyD3D12Object(objectOrNull);
+        DestroyD3D12Object(objectOrNull, assertOnRemainingRefCountValues);
     }
 
     class RenderResource
@@ -245,16 +252,6 @@ namespace cgs
         CGS_INLINE virtual
         ~RenderResource() noexcept
         {
-            if(mData != nullptr)
-            {
-                D3DPtr<ID3D12Device> device;
-                HRESULT hr = mData->GetDevice(IID_PPV_ARGS(device.GetAddressOf()));
-                if(FAILED(hr))
-                {
-                    assert(false && "Failed to get device from resource");
-                }
-                device->Release();
-            }
             DestroyD3D12ObjectOrNull(mData);
         }
 

@@ -49,7 +49,7 @@ namespace cgs
     static HANDLE gFenceEvent = NULL;
     static D3DPtr<ID3D12Fence> gFence;
     static std::vector<uint64> gFenceValues(BACK_BUFFERS_COUNT, std::numeric_limits<uint64>::max());
-    
+
     void
     WaitForFrame(const uint32 frameIndex) noexcept;
 
@@ -101,10 +101,9 @@ namespace cgs
         DestroyD3D12Object(gGraphicsCommandQueue);
 
 #if defined(CGS_DEBUG)
-        DestroyD3D12Object(gD3D12InfoQueue);
+        DestroyD3D12Object(gD3D12InfoQueue, false);
 #endif  // defined(CGS_DEBUG)
-
-        DestroyD3D12Object(gDevice);
+        DestroyD3D12Object(gDevice, false);
 #if defined(CGS_DEBUG)
         DestroyD3D12Object(gD3D12Debug);
 #endif  // defined(CGS_DEBUG)
@@ -121,8 +120,8 @@ namespace cgs
         {
             assert(false && "gDxgiDebug is null");
         }
-        DestroyDXGIObject(gInfoQueue);
-        DestroyDXGIObject(gDxgiDebug);
+        DestroyDXGIObject(gInfoQueue, false);
+        DestroyDXGIObject(gDxgiDebug, false);
 #endif  // defined(CGS_DEBUG)
     }
 
@@ -582,15 +581,30 @@ namespace cgs
     void
     Render(uint64& inoutWorkIndex, RenderThreadInfo& inoutRenderThreadInfo, const std::vector<std::unique_ptr<Geometry>>& geometries) noexcept
     {
-        // assert(false && "Render function not implemented");
-        const std::lock_guard lock(inoutRenderThreadInfo.RenderWorksMutex);
-        inoutRenderThreadInfo.RenderWorksPerFrame.push(
-            cgs::RenderWork
+        bool isFirstFrame = false;
+        while (true)
+        {
+            const uint64 lastCompleteWorkIndex = inoutRenderThreadInfo.LastCompleteWorkIndex.load();
+            isFirstFrame = inoutWorkIndex < cgs::BACK_BUFFERS_COUNT;
+            const bool hasCompletedWork = lastCompleteWorkIndex != std::numeric_limits<uint64>::max();
+
+            if (isFirstFrame == true || (hasCompletedWork && lastCompleteWorkIndex >= static_cast<uint64>(static_cast<int64>(inoutWorkIndex) - static_cast<int64>(cgs::BACK_BUFFERS_COUNT))))
             {
-                .Geometries = geometries,
-                .WorkIndex = inoutWorkIndex++,
-                .FrameIndex = 0,
-            });
+                break;
+            }
+            cgs::Yield();
+        }
+
+        {
+            const std::lock_guard lock(inoutRenderThreadInfo.RenderWorksMutex);
+            inoutRenderThreadInfo.RenderWorksPerFrame.push(
+                cgs::RenderWork
+                {
+                    .Geometries = geometries,
+                    .WorkIndex = inoutWorkIndex++,
+                    .FrameIndex = 0,
+                });
+        }
     }
 
     void
@@ -607,6 +621,7 @@ namespace cgs
         {
             std::unique_lock<std::mutex> uniqueLock(renderThreadInfo.RenderWorksMutex, std::defer_lock);
             uniqueLock.lock();
+            assert(renderThreadInfo.RenderWorksPerFrame.size() <= BACK_BUFFERS_COUNT);
             if (renderThreadInfo.RenderWorksPerFrame.empty() == false)
             {
                 HRESULT hr = S_OK;
@@ -615,22 +630,6 @@ namespace cgs
                 uniqueLock.unlock();
 
                 // Process the render work
-                // assert(false && "Render work not implemented");
-#if 0
-                renderWork.OutTexture.Clear();
-                renderWork.OutDepthBuffer.Clear(std::numeric_limits<float>::max());
-                if (renderThreadInfo.RenderMethod == eRenderMethod::RASTERIZATION)
-                {
-                    renderThreadInfo.CurrentWorkIndex.store(renderWork.WorkIndex);
-                    Rasterize(renderWork);
-                    renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
-                    // std::cout << "RenderWork completed: " << renderWork.WorkIndex << std::endl;
-                }
-                else
-                {
-                    assert(false && "Unsupported render method in RenderThreadMain");
-                }
-#else
                 renderWork.FrameIndex = gSwapChain->GetCurrentBackBufferIndex();
                 WaitForFrame(renderWork.FrameIndex);
                 renderThreadInfo.CurrentWorkIndex.store(renderWork.WorkIndex);
@@ -689,7 +688,6 @@ namespace cgs
                     0,
                     nullptr
                 );
-
                 sceneRenderTarget.ColorBuffer.Transition(graphicsCommandList, D3D12_RESOURCE_STATE_PRESENT);
 
                 graphicsCommandList.Close();
@@ -699,7 +697,6 @@ namespace cgs
                 gGraphicsCommandQueue->Signal(gFence.Get(), renderWork.WorkIndex);
                 gFenceValues[renderWork.FrameIndex] = renderWork.WorkIndex;
                 renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
-#endif
             }
             else
             {
@@ -1021,7 +1018,7 @@ namespace cgs
             const std::wstring allocatorName = L"Graphics Command Allocator [" + std::to_wstring(frameBufferIndex) + L"]";
             gGraphicsCommandAllocators[frameBufferIndex]->SetName(allocatorName.c_str());
         }
-
+        
         hr = gDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(gFence.GetAddressOf()));
         if (FAILED(hr))
         {

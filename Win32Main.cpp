@@ -465,10 +465,25 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
 
     if(cgs::IsThreadValid(*cgs::gRenderThread.CurrentThreadHandle))
     {
+        {
+            while(true)
+            {
+                {
+                    std::lock_guard<std::mutex> lockGuard(cgs::gRenderThread.RenderWorksMutex);
+                    if(cgs::gRenderThread.RenderWorksPerFrame.empty() == true)
+                    {
+                        break;
+                    }
+                }
+                
+                cgs::Yield();
+            }
+        }
         cgs::gRenderThread.IsActive.store(false);
         cgs::Join(*cgs::gRenderThread.CurrentThreadHandle);
     }
 
+    cornellBox.clear();
     cgs::DestroyRenderer();
 
     if(accelerators)
