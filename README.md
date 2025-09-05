@@ -47,3 +47,4 @@ Target platforms (sorted by priority):
 * **[2025.09.02]**: added simple d3d12 objects initialization from dxgi objects and d3d12device to swap chain and back buffer render targets
 * **[2025.09.03]**: implemented cornell box scene for d3d12
 * **[2025.09.04]**: added d3d12 command allocator and command list, implemented simple rendering to back buffer. added per-frame synchronization.
+* **[2025.09.05]**: fixed ref count issues when destroying d3d12 objects
