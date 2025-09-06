@@ -59,6 +59,7 @@ namespace cgs
 
     public:
         static int FormatString(CharType* str, const size_t bufferSize, const CharType* format, ...) noexcept;
+        CGS_INLINE static void Destroy() noexcept { sOptionsMap.clear(); }
 
     public:
         CGS_INLINE CommandLineParser() noexcept: mArguments() { initializeOptionsMap(); }

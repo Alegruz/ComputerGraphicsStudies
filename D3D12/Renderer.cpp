@@ -83,7 +83,6 @@ namespace cgs
         DestroyD3D12Object(gFence);
         
         gSceneRenderTargets.clear();
-        gSwapChain->Release();
 
         DestroyD3D12Object(gDsvHeap);
         DestroyD3D12Object(gRtvHeap);
@@ -836,23 +835,6 @@ namespace cgs
         }
         gGraphicsCommandQueue->SetName(TEXT("Main Graphics Command Queue"));
 
-        for (uint32 frameBufferIndex = 0; frameBufferIndex < BACK_BUFFERS_COUNT; ++frameBufferIndex)
-        {
-            hr = gDevice->CreateCommandList1(
-                0,
-                D3D12_COMMAND_LIST_TYPE_DIRECT,
-                D3D12_COMMAND_LIST_FLAG_NONE,
-                IID_PPV_ARGS(gGraphicsCommandLists[frameBufferIndex].GetAddressOf())
-            );
-            if (FAILED(hr))
-            {
-                assert(false && "Failed to create command list");
-                return false;
-            }
-            const std::wstring commandListName = L"Main Graphics Command List [" + std::to_wstring(frameBufferIndex) + L"]";
-            gGraphicsCommandLists[frameBufferIndex]->SetName(commandListName.c_str());
-        }
-
         const D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc =
         {
             .Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
@@ -974,7 +956,6 @@ namespace cgs
                 assert(false && "Failed to get swap chain buffer");
                 return false;
             }
-            colorBufferInfo.ParentCreateInfo.Data->AddRef(); // Compensate for the reference count increase when calling GetBuffer
 
             colorBufferInfo.ParentCreateInfo.View.ptr = rtvStartHandle.ptr + (frameIndex * gRtvIncrementSize);
             colorBufferInfo.ParentCreateInfo.State = D3D12_RESOURCE_STATE_COMMON;    // https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-resource-barriers-to-synchronize-resource-states-in-direct3d-12#initial-states-for-resources
@@ -1017,6 +998,23 @@ namespace cgs
             }
             const std::wstring allocatorName = L"Graphics Command Allocator [" + std::to_wstring(frameBufferIndex) + L"]";
             gGraphicsCommandAllocators[frameBufferIndex]->SetName(allocatorName.c_str());
+        }
+
+        for (uint32 frameBufferIndex = 0; frameBufferIndex < BACK_BUFFERS_COUNT; ++frameBufferIndex)
+        {
+            hr = gDevice->CreateCommandList1(
+                0,
+                D3D12_COMMAND_LIST_TYPE_DIRECT,
+                D3D12_COMMAND_LIST_FLAG_NONE,
+                IID_PPV_ARGS(gGraphicsCommandLists[frameBufferIndex].GetAddressOf())
+            );
+            if (FAILED(hr))
+            {
+                assert(false && "Failed to create command list");
+                return false;
+            }
+            const std::wstring commandListName = L"Main Graphics Command List [" + std::to_wstring(frameBufferIndex) + L"]";
+            gGraphicsCommandLists[frameBufferIndex]->SetName(commandListName.c_str());
         }
         
         hr = gDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(gFence.GetAddressOf()));

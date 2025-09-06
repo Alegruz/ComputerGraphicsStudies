@@ -491,6 +491,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
         DestroyAcceleratorTable(accelerators);
     }
 
+    cgs::gRecentFiles.clear();
+    cgs::CommandLineParser::Destroy();
 #if defined(_CRTDBG_MAP_ALLOC)
 	_CrtDumpMemoryLeaks(); // Check for memory leaks if using MSVC
 #endif	// defined(_CRTDBG_MAP_ALLOC)

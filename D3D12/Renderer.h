@@ -11,7 +11,13 @@ namespace cgs
     public:
         CGS_INLINE explicit constexpr 
         D3DPtr() noexcept
-            : mPtr()
+            : mPtr(nullptr)
+        {
+        }
+
+        CGS_INLINE constexpr
+        D3DPtr(std::nullptr_t) noexcept
+            : mPtr(nullptr)
         {
         }
 
