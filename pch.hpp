@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cwctype>
 #include <filesystem>
+#include <fstream>
 #include <locale>
 #include <memory>
 #include <mutex>
@@ -69,4 +70,6 @@
 #if defined(CGS_DEBUG)
 #include <dxgidebug.h>
 #endif  // defined(CGS_DEBUG)
+#include "slang-com-ptr.h"
+#include "slang.h"
 #endif  // defined(CGS_GRAPHICS_API_D3D12)
