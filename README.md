@@ -48,3 +48,4 @@ Target platforms (sorted by priority):
 * **[2025.09.03]**: implemented cornell box scene for d3d12
 * **[2025.09.04]**: added d3d12 command allocator and command list, implemented simple rendering to back buffer. added per-frame synchronization.
 * **[2025.09.05]**: fixed ref count issues when destroying d3d12 objects
+* **[2025.09.06]**: added slang and d3d12 root signature and pipeline state object
