@@ -17,10 +17,24 @@ namespace cgs
         Texture DepthBuffer;
     };
 
+    struct Viewport final
+    {
+        float Left;
+        float Top;
+        float Right;
+        float Bottom;
+    };
+
     struct GpuRenderWork final
     {
         SceneRenderTarget& InoutRenderTarget;
         RenderWork& Work;
+    };
+
+    struct RayGenConstantBuffer final
+    {
+        Viewport CurrentViewport;
+        Viewport CurrentStencil;
     };
 
     // DXGI
@@ -57,6 +71,13 @@ namespace cgs
     static D3DPtr<ID3D12RootSignature> gRootSignature;
     static D3DPtr<ID3D12PipelineState> gPipelineState;
     static std::unique_ptr<ConstantBuffer> gCameraBuffer;
+    static std::unique_ptr<ConstantBuffer> gEmissiveBuffer;
+
+    // Raytracing
+    static D3DPtr<ID3D12Resource> gRaytracingOutput;
+    static D3D12_GPU_DESCRIPTOR_HANDLE gRaytracingOutputResourceUAVGpuDescriptor;
+    static uint32 gRaytracingOutputResourceUAVDescriptorHeapIndex = std::numeric_limits<uint32>::max();
+    static RayGenConstantBuffer gRayGenConstantBuffer;
 
     enum class ShaderType : uint8
     {
@@ -349,6 +370,25 @@ namespace cgs
                     .RegisterSpace = 0,
                 },
                 .ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX,
+            },
+            {
+                .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+                .Descriptor = 
+                {
+                    .ShaderRegister = 1,
+                    .RegisterSpace = 0,
+                },
+                .ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL,
+            },
+            {
+                .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
+                .Constants =
+                {
+                    .ShaderRegister = 2,
+                    .RegisterSpace = 0,
+                    .Num32BitValues = 4,
+                },
+                .ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL,
             }
         };
 
@@ -476,6 +516,7 @@ namespace cgs
         }
 
         geometries.clear();
+        gEmissiveBuffer.reset();
         gCameraBuffer.reset();
 
         DestroyD3D12Object(gPipelineState);
@@ -703,72 +744,99 @@ namespace cgs
         
         HRESULT hr = S_OK;
 
-        const D3D12_RESOURCE_DESC cameraBufferDesc =
         {
-            .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
-            .Alignment = 0,
-            .Width = Align(sizeof(Camera::Buffer), static_cast<size_t>(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT)),
-            .Height = 1,
-            .DepthOrArraySize = 1,
-            .MipLevels = 1,
-            .Format = DXGI_FORMAT_UNKNOWN,
-            .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
-            .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
-            .Flags = D3D12_RESOURCE_FLAG_NONE,
-        };
+            const D3D12_RESOURCE_DESC cameraBufferDesc =
+            {
+                .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+                .Alignment = 0,
+                .Width = Align(sizeof(Camera::Buffer), static_cast<size_t>(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT)),
+                .Height = 1,
+                .DepthOrArraySize = 1,
+                .MipLevels = 1,
+                .Format = DXGI_FORMAT_UNKNOWN,
+                .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+                .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+                .Flags = D3D12_RESOURCE_FLAG_NONE,
+            };
 
-        const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
+            const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
+            {
+                .Type = D3D12_HEAP_TYPE_UPLOAD,
+                .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+                .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+                .CreationNodeMask = 1,
+                .VisibleNodeMask = 1,
+            };
+            
+            ConstantBuffer::CreateInfo cameraBufferCreateInfo;
+            cameraBufferCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
+            hr = gDevice->CreateCommittedResource(
+                &bufferHeapProperties,
+                D3D12_HEAP_FLAG_NONE,
+                &cameraBufferDesc,
+                cameraBufferCreateInfo.State,
+                nullptr,
+                IID_PPV_ARGS(cameraBufferCreateInfo.Data.GetAddressOf())
+            );
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to create vertex buffer");
+                return false;
+            }
+            
+            const D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = 
+            {
+                .BufferLocation = cameraBufferCreateInfo.Data->GetGPUVirtualAddress(),
+                .SizeInBytes = static_cast<uint32>(cameraBufferDesc.Width),
+            };
+            cameraBufferCreateInfo.View = gCbvSrvUavHeap->GetCPUDescriptorHandleForHeapStart();
+            gDevice->CreateConstantBufferView(&cbvDesc, cameraBufferCreateInfo.View);
+
+            D3D12_RANGE range = { .Begin = 0, .End = 0 };
+            byte* cameraDataBegin = nullptr;
+            hr = cameraBufferCreateInfo.Data->Map(
+                0,
+                &range,
+                reinterpret_cast<void**>(&cameraDataBegin)
+            );
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to map camera buffer");
+                return false;
+            }
+
+            const Camera::Buffer& cameraBuffer = mainCamera.GetBuffer();
+            std::memcpy(cameraDataBegin, &cameraBuffer, sizeof(Camera::Buffer));
+            cameraBufferCreateInfo.Data->Unmap(0, nullptr);
+
+            gCameraBuffer = std::make_unique<ConstantBuffer>(std::move(cameraBufferCreateInfo));
+        }
+
+        const float border = 0.1f;
+        const uint32 width = gSceneRenderTargets[0].ColorBuffer.GetWidth();
+        const uint32 height = gSceneRenderTargets[0].ColorBuffer.GetHeight();
+        const float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
+        if(width <= height)
         {
-            .Type = D3D12_HEAP_TYPE_UPLOAD,
-            .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
-            .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
-            .CreationNodeMask = 1,
-            .VisibleNodeMask = 1,
-        };
-        
-        ConstantBuffer::CreateInfo cameraBufferCreateInfo;
-        cameraBufferCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
-        hr = gDevice->CreateCommittedResource(
-            &bufferHeapProperties,
-            D3D12_HEAP_FLAG_NONE,
-            &cameraBufferDesc,
-            cameraBufferCreateInfo.State,
-            nullptr,
-            IID_PPV_ARGS(cameraBufferCreateInfo.Data.GetAddressOf())
-        );
-        if(FAILED(hr))
+            gRayGenConstantBuffer.CurrentStencil =
+            {
+                .Left = -1.0f + border,
+                .Top = -1.0f + border * aspectRatio,
+                .Right = 1.0f - border,
+                .Bottom = 1.0f - border * aspectRatio,
+            };
+        }
+        else
         {
-            assert(false && "Failed to create vertex buffer");
-            return false;
+            gRayGenConstantBuffer.CurrentStencil =
+            {
+                .Left = -1.0f + border,
+                .Top = -1.0f + border / aspectRatio,
+                .Right = 1.0f - border,
+                .Bottom = 1.0f - border / aspectRatio,
+            };
         }
         
-        const D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = 
-        {
-            .BufferLocation = cameraBufferCreateInfo.Data->GetGPUVirtualAddress(),
-            .SizeInBytes = static_cast<uint32>(cameraBufferDesc.Width),
-        };
-        cameraBufferCreateInfo.View = gCbvSrvUavHeap->GetCPUDescriptorHandleForHeapStart();
-        gDevice->CreateConstantBufferView(&cbvDesc, cameraBufferCreateInfo.View);
-
-        D3D12_RANGE range = { .Begin = 0, .End = 0 };
-        byte* cameraDataBegin = nullptr;
-        hr = cameraBufferCreateInfo.Data->Map(
-            0,
-            &range,
-            reinterpret_cast<void**>(&cameraDataBegin)
-        );
-        if(FAILED(hr))
-        {
-            assert(false && "Failed to map camera buffer");
-            return false;
-        }
-
-        const Camera::Buffer& cameraBuffer = mainCamera.GetBuffer();
-        std::memcpy(cameraDataBegin, &cameraBuffer, sizeof(Camera::Buffer));
-        cameraBufferCreateInfo.Data->Unmap(0, nullptr);
-
-        gCameraBuffer = std::make_unique<ConstantBuffer>(std::move(cameraBufferCreateInfo));
-
         outGeometries.clear();
         outGeometries.reserve(8);
 
@@ -794,7 +862,7 @@ namespace cgs
             IndexBuffer indexBuffer;
             result = createIndexBuffer(indexBuffer, indices, "FloorIndexBuffer");
             floor.SetIndexBuffer(std::move(indexBuffer));
-            // floor.SetColor(WHITE);
+            floor.SetColor(WHITE);
         }
 
         if (result == false)
@@ -804,6 +872,13 @@ namespace cgs
         }
         
         // Light
+        struct EmissiveBuffer final
+        {
+            float4 Position;
+            float3 Color;
+        };
+        EmissiveBuffer emissiveBuffer;
+
         outGeometries.push_back(std::make_unique<Geometry>(std::string("Light")));
         Geometry& light = *outGeometries.back();
         {
@@ -816,6 +891,13 @@ namespace cgs
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -213.0f, 548.8f, 332.0f };
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
 
+            emissiveBuffer.Position = v0;
+            emissiveBuffer.Position += v1;
+            emissiveBuffer.Position += v2;
+            emissiveBuffer.Position += v3;
+            emissiveBuffer.Position /= 4.0f;
+            emissiveBuffer.Position.W = 1.0f;
+
             VertexBuffer vertexBuffer;
             result = createVertexBuffer(vertexBuffer, vertices, "LightVertexBuffer");
             light.SetVertexBuffer(std::move(vertexBuffer));
@@ -824,7 +906,8 @@ namespace cgs
             result = createIndexBuffer(indexBuffer, indices, "LightIndexBuffer");
             light.SetIndexBuffer(std::move(indexBuffer));
 
-            // light.SetColor(WHITE);
+            light.SetColor(WHITE);
+            emissiveBuffer.Color = float3{1.0f, 1.0f, 1.0f};
             light.SetIsEmissive(true);
         }
 
@@ -832,6 +915,73 @@ namespace cgs
         {
             assert(false && "Failed to create vertex buffer");
             outGeometries.pop_back();
+        }
+
+        {
+            const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
+            {
+                .Type = D3D12_HEAP_TYPE_UPLOAD,
+                .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+                .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+                .CreationNodeMask = 1,
+                .VisibleNodeMask = 1,
+            };
+
+            const D3D12_RESOURCE_DESC emissiveBufferDesc =
+            {
+                .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+                .Alignment = 0,
+                .Width = Align(sizeof(EmissiveBuffer), static_cast<size_t>(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT)),
+                .Height = 1,
+                .DepthOrArraySize = 1,
+                .MipLevels = 1,
+                .Format = DXGI_FORMAT_UNKNOWN,
+                .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+                .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+                .Flags = D3D12_RESOURCE_FLAG_NONE,
+            };
+            
+            ConstantBuffer::CreateInfo emissiveBufferCreateInfo;
+            emissiveBufferCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
+            hr = gDevice->CreateCommittedResource(
+                &bufferHeapProperties,
+                D3D12_HEAP_FLAG_NONE,
+                &emissiveBufferDesc,
+                emissiveBufferCreateInfo.State,
+                nullptr,
+                IID_PPV_ARGS(emissiveBufferCreateInfo.Data.GetAddressOf())
+            );
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to create vertex buffer");
+                return false;
+            }
+            
+            const D3D12_CONSTANT_BUFFER_VIEW_DESC emissiveCbvDesc = 
+            {
+                .BufferLocation = emissiveBufferCreateInfo.Data->GetGPUVirtualAddress(),
+                .SizeInBytes = static_cast<uint32>(emissiveBufferDesc.Width),
+            };
+            emissiveBufferCreateInfo.View = gCbvSrvUavHeap->GetCPUDescriptorHandleForHeapStart();
+            gDevice->CreateConstantBufferView(&emissiveCbvDesc, emissiveBufferCreateInfo.View);
+
+            D3D12_RANGE range = { .Begin = 0, .End = 0 };
+            byte* emissiveDataBegin = nullptr;
+            hr = emissiveBufferCreateInfo.Data->Map(
+                0,
+                &range,
+                reinterpret_cast<void**>(&emissiveDataBegin)
+            );
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to map emissive buffer");
+                return false;
+            }
+
+            std::memcpy(emissiveDataBegin, &emissiveBuffer, sizeof(EmissiveBuffer));
+            emissiveBufferCreateInfo.Data->Unmap(0, nullptr);
+
+            gEmissiveBuffer = std::make_unique<ConstantBuffer>(std::move(emissiveBufferCreateInfo));
         }
 
         // Ceiling
@@ -855,7 +1005,7 @@ namespace cgs
             result = createIndexBuffer(indexBuffer, indices, "CeilingIndexBuffer");
             ceiling.SetIndexBuffer(std::move(indexBuffer));
 
-            // ceiling.SetColor(WHITE);
+            ceiling.SetColor(WHITE);
         }
 
         if (result == false)
@@ -885,7 +1035,7 @@ namespace cgs
             result = createIndexBuffer(indexBuffer, indices, "BackWallIndexBuffer");
             backWall.SetIndexBuffer(std::move(indexBuffer));
 
-            // backWall.SetColor(WHITE);
+            backWall.SetColor(WHITE);
         }
 
         if (result == false)
@@ -915,7 +1065,7 @@ namespace cgs
             result = createIndexBuffer(indexBuffer, indices, "RightWallIndexBuffer");
             rightWall.SetIndexBuffer(std::move(indexBuffer));
 
-            // rightWall.SetColor(GREEN);
+            rightWall.SetColor(GREEN);
         }
 
         if (result == false)
@@ -945,7 +1095,7 @@ namespace cgs
             result = createIndexBuffer(indexBuffer, indices, "LeftWallIndexBuffer");
             leftWall.SetIndexBuffer(std::move(indexBuffer));
 
-            // leftWall.SetColor(RED);
+            leftWall.SetColor(RED);
         }
 
         if (result == false)
@@ -1000,7 +1150,7 @@ namespace cgs
             result = createIndexBuffer(indexBuffer, indices, "ShortBlockIndexBuffer");
             shortBlock.SetIndexBuffer(std::move(indexBuffer));
 
-            // shortBlock.SetColor(WHITE);
+            shortBlock.SetColor(WHITE);
         }
 
         if (result == false)
@@ -1054,7 +1204,7 @@ namespace cgs
             result = createIndexBuffer(indexBuffer, indices, "TallBlockIndexBuffer");
             tallBlock.SetIndexBuffer(std::move(indexBuffer));
 
-            // tallBlock.SetColor(WHITE);
+            tallBlock.SetColor(WHITE);
         }
 
         if (result == false)
@@ -1164,7 +1314,8 @@ namespace cgs
                 ID3D12DescriptorHeap* heaps[] = { gCbvSrvUavHeap.Get() };
                 graphicsCommandList.SetDescriptorHeaps(CGS_ARRAYSIZE(heaps), heaps);
 
-                graphicsCommandList.SetGraphicsRootConstantBufferView (0, gCameraBuffer->GetGPUVirtualAddress());
+                graphicsCommandList.SetGraphicsRootConstantBufferView(0, gCameraBuffer->GetGPUVirtualAddress());
+                graphicsCommandList.SetGraphicsRootConstantBufferView(1, gEmissiveBuffer->GetGPUVirtualAddress());
                 const D3D12_VIEWPORT viewport =
                 {
                     .TopLeftX = 0.0f,
@@ -1213,6 +1364,9 @@ namespace cgs
                         assert(false && "Geometry is null");
                         continue;
                     }
+
+                    const float4& pushConstantColor = geometry->GetColor();
+                    graphicsCommandList.SetGraphicsRoot32BitConstants(2, 4, &pushConstantColor, 0);
 
                     const VertexBuffer& vertexBuffer = geometry->GetVertexBuffer();
                     const IndexBuffer& indexBuffer = geometry->GetIndexBuffer();
@@ -1293,6 +1447,7 @@ namespace cgs
             factory2->Release();
         }
 
+        D3D12_FEATURE_DATA_D3D12_OPTIONS5 featureSupportData = {};
         for(UINT adapterIndex = 0; ; ++adapterIndex)
         {
             D3DPtr<IDXGIAdapter> adapter;
@@ -1304,11 +1459,21 @@ namespace cgs
             }
 
             // Check if the adapter supports D3D12
-            hr = D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_2, _uuidof(ID3D12Device), nullptr);
+            D3DPtr<ID3D12Device> testDevice;
+            hr = D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_2, IID_PPV_ARGS(testDevice.GetAddressOf()));
             if(SUCCEEDED(hr))
             {
-                gAdapter = adapter;
-                break;
+                hr = testDevice->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &featureSupportData, sizeof(featureSupportData));
+                if(FAILED(hr))
+                {
+                    continue;
+                }
+
+                if(featureSupportData.RaytracingTier != D3D12_RAYTRACING_TIER_NOT_SUPPORTED)
+                {
+                    gAdapter = adapter;
+                    break;
+                }
             }
         }
 

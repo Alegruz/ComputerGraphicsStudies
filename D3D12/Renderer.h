@@ -596,6 +596,10 @@ namespace cgs
         CGS_INLINE constexpr void
         SetIsEmissive(const bool isEmissive) noexcept { mIsEmissive = isEmissive; }
         CGS_INLINE constexpr void
+        SetColor(const float4& color) noexcept { mColor = color; }
+        CGS_INLINE constexpr void
+        SetColor(const Rgba8& color) noexcept { mColor = float4{ static_cast<float>(color.R) / 255.0f, static_cast<float>(color.G) / 255.0f, static_cast<float>(color.B) / 255.0f, static_cast<float>(color.A) / 255.0f }; }
+        CGS_INLINE constexpr void
         SetVertexBuffer(VertexBuffer&& vertexBuffer) noexcept { mVertexBuffer = std::move(vertexBuffer); }
         CGS_INLINE constexpr void
         SetIndexBuffer(IndexBuffer&& indexBuffer) noexcept { mIndexBuffer = std::move(indexBuffer); }
@@ -604,6 +608,8 @@ namespace cgs
 
         [[nodiscard]] CGS_INLINE constexpr bool
         IsEmissive() const noexcept { return mIsEmissive; }
+        [[nodiscard]] CGS_INLINE constexpr const float4&
+        GetColor() const noexcept { return mColor; }
         [[nodiscard]] CGS_INLINE constexpr const VertexBuffer&
         GetVertexBuffer() const noexcept { return mVertexBuffer; }
         [[nodiscard]] CGS_INLINE constexpr const IndexBuffer&
@@ -613,6 +619,7 @@ namespace cgs
 
     private:
         bool mIsEmissive;
+        float4 mColor;
         VertexBuffer mVertexBuffer;
         IndexBuffer mIndexBuffer;
         std::string mName;

@@ -65,6 +65,42 @@ namespace cgs
         return float3{ lhs.X / rhs, lhs.Y / rhs, lhs.Z / rhs };
     }
 
+    CGS_INLINE constexpr float3&
+    operator+=(float3& lhs, const float3& rhs) noexcept
+    {
+        lhs.X += rhs.X;
+        lhs.Y += rhs.Y;
+        lhs.Z += rhs.Z;
+        return lhs;
+    }
+
+    CGS_INLINE constexpr float3&
+    operator-=(float3& lhs, const float3& rhs) noexcept
+    {
+        lhs.X -= rhs.X;
+        lhs.Y -= rhs.Y;
+        lhs.Z -= rhs.Z;
+        return lhs;
+    }
+
+    CGS_INLINE constexpr float3&
+    operator*=(float3& lhs, const float rhs) noexcept
+    {
+        lhs.X *= rhs;
+        lhs.Y *= rhs;
+        lhs.Z *= rhs;
+        return lhs;
+    }
+
+    CGS_INLINE constexpr float3&
+    operator/=(float3& lhs, const float rhs) noexcept
+    {
+        lhs.X /= rhs;
+        lhs.Y /= rhs;
+        lhs.Z /= rhs;
+        return lhs;
+    }
+
     CGS_INLINE constexpr float 
     Dot(const float3& lhs, const float3& rhs) noexcept
     {
@@ -147,6 +183,32 @@ namespace cgs
         operator=(const float4&) noexcept = default;
         CGS_INLINE constexpr float4& 
         operator=(float4&&) noexcept = default;
+        CGS_INLINE constexpr float4&
+        operator=(const float3& other) noexcept
+        {
+            if(static_cast<const void*>(this) != static_cast<const void*>(&other))
+            {
+                X = other.X;
+                Y = other.Y;
+                Z = other.Z;
+                W = 0.0f;
+            }
+
+            return *this;
+        }
+        CGS_INLINE constexpr float4&
+        operator=(float3&& other) noexcept
+        {
+            if(static_cast<const void*>(this) != static_cast<const void*>(&other))
+            {
+                X = other.X;
+                Y = other.Y;
+                Z = other.Z;
+                W = 0.0f;
+            }
+
+            return *this;
+        }
 
         CGS_INLINE constexpr float& 
         operator[](size_t index) noexcept
@@ -195,6 +257,55 @@ namespace cgs
     operator/(const float4& lhs, const float rhs) noexcept
     {
         return float4( lhs.X / rhs, lhs.Y / rhs, lhs.Z / rhs, lhs.W / rhs );
+    }
+
+    CGS_INLINE constexpr float4&
+    operator+=(float4& lhs, const float4& rhs) noexcept
+    {
+        lhs.X += rhs.X;
+        lhs.Y += rhs.Y;
+        lhs.Z += rhs.Z;
+        lhs.W += rhs.W;
+        return lhs;
+    }
+
+    CGS_INLINE constexpr float4&
+    operator+=(float4& lhs, const float3& rhs) noexcept
+    {
+        lhs.X += rhs.X;
+        lhs.Y += rhs.Y;
+        lhs.Z += rhs.Z;
+        return lhs;
+    }
+
+    CGS_INLINE constexpr float4&
+    operator-=(float4& lhs, const float4& rhs) noexcept
+    {
+        lhs.X -= rhs.X;
+        lhs.Y -= rhs.Y;
+        lhs.Z -= rhs.Z;
+        lhs.W -= rhs.W;
+        return lhs;
+    }
+
+    CGS_INLINE constexpr float4&
+    operator*=(float4& lhs, const float rhs) noexcept
+    {
+        lhs.X *= rhs;
+        lhs.Y *= rhs;
+        lhs.Z *= rhs;
+        lhs.W *= rhs;
+        return lhs;
+    }
+
+    CGS_INLINE constexpr float4&
+    operator/=(float4& lhs, const float rhs) noexcept
+    {
+        lhs.X /= rhs;
+        lhs.Y /= rhs;
+        lhs.Z /= rhs;
+        lhs.W /= rhs;
+        return lhs;
     }
 
     CGS_INLINE constexpr float 
