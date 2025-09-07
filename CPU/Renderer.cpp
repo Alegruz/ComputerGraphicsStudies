@@ -310,8 +310,8 @@ namespace cgs
     CornellBoxVertexShader(const VertexPN& input) noexcept
     {
         const HomogenousCoordinate<eCoordinateSpace::WORLD> wsInput(input.Position, 1.0f);
-        const HomogenousCoordinate<eCoordinateSpace::VIEW> vsInput = gViewMatrix * wsInput;
-        const HomogenousCoordinate<eCoordinateSpace::PERSPECTIVE> psInput = gProjectionMatrix * vsInput;
+        const HomogenousCoordinate<eCoordinateSpace::VIEW> vsInput = gMainCamera.GetBuffer().ViewMatrix * wsInput;
+        const HomogenousCoordinate<eCoordinateSpace::PERSPECTIVE> psInput = gMainCamera.GetBuffer().ProjectionMatrix * vsInput;
         const Coordinate<eCoordinateSpace::NORMALIZED_DEVICE_COORDINATE> ndcInput = psInput.GetXYZ() / psInput.W;
         return { ndcInput, wsInput.GetXYZ(), input.Normal };
     }

@@ -32,6 +32,7 @@ namespace cgs
         
         const Geometry& emissiveGeometry = *emissiveGeometryOrNull;
 
+        bool hasSubmittedJob = false;
         const uint32 subRenderThreadsCount = static_cast<uint32>(gSubRenderThreads.size());
         std::vector<uint32> finalTileIndicesPerThread;
         finalTileIndicesPerThread.resize(subRenderThreadsCount, 0);
@@ -99,6 +100,7 @@ namespace cgs
                                 finalTileIndicesPerThread[subRenderThreadIndex] = tileIndex;
 
 #if 1
+                                hasSubmittedJob = true;
                                 std::lock_guard<std::mutex> lock(gSubRenderThreads[subRenderThreadIndex].RenderWorksMutex);
                                 gSubRenderThreads[subRenderThreadIndex].SubRenderWorks.push(
                                     SubRenderWork
@@ -140,21 +142,24 @@ namespace cgs
             }
         }
 
-        for (uint32 i = 0; i < subRenderThreadsCount; ++i)
+        if (hasSubmittedJob == true)
         {
-            const uint64 currentThreadFinalWorkIndex = finalTileIndicesPerThread[i];
-            SubRenderThreadInfo& subRenderThreadInfo = gSubRenderThreads[i];
-            while (true)
+            for (uint32 i = 0; i < subRenderThreadsCount; ++i)
             {
-                const uint64 lastCompleteWorkIndex = subRenderThreadInfo.LastCompleteWorkIndex.load();
-                const bool isThreadIdle = lastCompleteWorkIndex == std::numeric_limits<uint64>::max();
-                std::lock_guard<std::mutex> lockGuard(subRenderThreadInfo.RenderWorksMutex);
-                if (isThreadIdle == false && subRenderThreadInfo.SubRenderWorks.empty() == true && lastCompleteWorkIndex >= currentThreadFinalWorkIndex)
+                const uint64 currentThreadFinalWorkIndex = finalTileIndicesPerThread[i];
+                SubRenderThreadInfo& subRenderThreadInfo = gSubRenderThreads[i];
+                while (true)
                 {
-                    break;
-                }
+                    const uint64 lastCompleteWorkIndex = subRenderThreadInfo.LastCompleteWorkIndex.load();
+                    const bool isThreadIdle = lastCompleteWorkIndex == std::numeric_limits<uint64>::max();
+                    std::lock_guard<std::mutex> lockGuard(subRenderThreadInfo.RenderWorksMutex);
+                    if (isThreadIdle == false && subRenderThreadInfo.SubRenderWorks.empty() == true && lastCompleteWorkIndex >= currentThreadFinalWorkIndex)
+                    {
+                        break;
+                    }
 
-                cgs::Yield();
+                    cgs::Yield();
+                }
             }
         }
     }

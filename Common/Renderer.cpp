@@ -3,9 +3,6 @@
 namespace cgs
 {
     static Camera gMainCamera;
-
-    static float4x4 gViewMatrix;
-    static float4x4 gProjectionMatrix;
     
     Camera::Camera(Camera::CreateInfo&& createInfo) noexcept
         : mPosition(createInfo.Position)
