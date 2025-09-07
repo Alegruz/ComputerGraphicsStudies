@@ -45,10 +45,10 @@ namespace cgs
         }
     }
 
-    void
+    bool
     CreateCornellBoxScene(std::vector<std::unique_ptr<Geometry>>& outGeometries) noexcept
     {
-        InitializeCornellBoxCamera();
+        [[maybe_unused]] Camera& mainCamera = InitializeCornellBoxCamera();
 
         outGeometries.clear();
         outGeometries.reserve(8);
@@ -302,6 +302,8 @@ namespace cgs
             tallBlock.SetIndices(std::move(tallBlockIndices));
             tallBlock.SetColor(WHITE);
         }
+
+        return true;
     }
 
     CornellBoxVertexShaderOutput

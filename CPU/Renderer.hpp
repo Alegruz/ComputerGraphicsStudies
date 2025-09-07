@@ -182,7 +182,10 @@ namespace cgs
     }
 
     CGS_INLINE constexpr void
-    DestroyRenderer() noexcept {}
+    DestroyRenderer(std::vector<std::unique_ptr<Geometry>>& geometries) noexcept
+    {
+        geometries.clear();
+    }
 
     template<typename T>
     CGS_INLINE constexpr bool 

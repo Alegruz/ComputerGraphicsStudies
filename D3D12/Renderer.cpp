@@ -43,6 +43,7 @@ namespace cgs
     static D3DPtr<ID3D12CommandQueue> gGraphicsCommandQueue;
     static D3DPtr<ID3D12DescriptorHeap> gRtvHeap;
     static D3DPtr<ID3D12DescriptorHeap> gDsvHeap;
+    static D3DPtr<ID3D12DescriptorHeap> gCbvSrvUavHeap;
     static uint32 gRtvIncrementSize = 0;
     static uint32 gDsvIncrementSize = 0;
     static std::vector<SceneRenderTarget> gSceneRenderTargets(BACK_BUFFERS_COUNT);
@@ -55,6 +56,7 @@ namespace cgs
     static Slang::ComPtr<slang::IBlob> gFsShader;
     static D3DPtr<ID3D12RootSignature> gRootSignature;
     static D3DPtr<ID3D12PipelineState> gPipelineState;
+    static std::unique_ptr<ConstantBuffer> gCameraBuffer;
 
     enum class ShaderType : uint8
     {
@@ -63,14 +65,23 @@ namespace cgs
         Fragment,
     };
 
-    Slang::ComPtr<slang::IBlob>
-    CompileShader(Slang::ComPtr<slang::IComponentType>& program, const std::filesystem::path& shaderAbsPath, const ShaderType type, const uint32 index) noexcept;
+    static void
+    addQuadVertices(std::vector<VertexPN>& inoutVertices, std::vector<uint16>& inoutIndices, const Coordinate<eCoordinateSpace::WORLD>& v0, const Coordinate<eCoordinateSpace::WORLD>& v1, const Coordinate<eCoordinateSpace::WORLD>& v2, const Coordinate<eCoordinateSpace::WORLD>& v3);
 
-    bool
-    CreateShaders() noexcept;
+    [[nodiscard]] static Slang::ComPtr<slang::IBlob>
+    compileShader(Slang::ComPtr<slang::IComponentType>& program, const std::filesystem::path& shaderAbsPath, const ShaderType type, const uint32 index) noexcept;
+
+    [[nodiscard]] static bool
+    createIndexBuffer(IndexBuffer& outIndexBuffer, const std::vector<uint16>& indices, const std::string& name);
+
+    [[nodiscard]] static bool
+    createShaders() noexcept;
+    
+    [[nodiscard]] static bool
+    createVertexBuffer(VertexBuffer& outVertexBuffer, const std::vector<VertexPN>& vertices, const std::string& name);
 
     void
-    WaitForFrame(const uint32 frameIndex) noexcept;
+    waitForFrame(const uint32 frameIndex) noexcept;
 
     void 
     RenderResource::Transition(ID3D12GraphicsCommandList& commandList, const D3D12_RESOURCE_STATES newState) noexcept
@@ -92,7 +103,7 @@ namespace cgs
     }
 
     Slang::ComPtr<slang::IBlob>
-    CompileShader(Slang::ComPtr<slang::IComponentType>& program, const std::filesystem::path& shaderAbsPath, const ShaderType type, const uint32 index) noexcept
+    compileShader(Slang::ComPtr<slang::IComponentType>& program, const std::filesystem::path& shaderAbsPath, const ShaderType type, const uint32 index) noexcept
     {
         const std::string shaderName = shaderAbsPath.stem().string() + "_" + (type == ShaderType::Vertex ? "vs" : (type == ShaderType::Fragment ? "fs" : "invalid"));
         std::filesystem::path shaderCacheFilePath = shaderAbsPath.parent_path() / (shaderName + ".dxil");
@@ -165,7 +176,7 @@ namespace cgs
     }
 
     bool
-    CreateShaders() noexcept
+    createShaders() noexcept
     {
         SlangGlobalSessionDesc slangGlobalSessionDesc = {};
         slang::createGlobalSession(&slangGlobalSessionDesc, gSlangGlobalSession.writeRef());
@@ -206,7 +217,7 @@ namespace cgs
 					.intValue0 = 1,
 				},
 			},
-#if defined(_DEBUG)
+#if defined(CGS_DEBUG)
 			slang::CompilerOptionEntry
 			{
 				.name = slang::CompilerOptionName::DebugInformation,
@@ -225,18 +236,18 @@ namespace cgs
 					.intValue0 = SlangDebugInfoFormat::SLANG_DEBUG_INFO_FORMAT_PDB,
 				},
 			},
-#endif	// NOT defined(_DEBUG)
+#endif	// NOT defined(CGS_DEBUG)
 			slang::CompilerOptionEntry
 			{
 				.name = slang::CompilerOptionName::Optimization,
 				.value = slang::CompilerOptionValue
 				{
 					.kind = slang::CompilerOptionValueKind::Int,
-#if defined(_DEBUG)
+#if defined(CGS_DEBUG)
 					.intValue0 = SlangOptimizationLevel::SLANG_OPTIMIZATION_LEVEL_NONE,
-#else	// NOT defined(_DEBUG)
+#else	// NOT defined(CGS_DEBUG)
 					.intValue0 = SlangOptimizationLevel::SLANG_OPTIMIZATION_LEVEL_HIGH,
-#endif	// NOT defined(_DEBUG)
+#endif	// NOT defined(CGS_DEBUG)
 				},
 			},
 			slang::CompilerOptionEntry
@@ -313,13 +324,13 @@ namespace cgs
             }
 		}
 
-        gVsShader = CompileShader(program, shaderAbsPath, ShaderType::Vertex, 0);
+        gVsShader = compileShader(program, shaderAbsPath, ShaderType::Vertex, 0);
         if(gVsShader == nullptr)
         {
             assert(false && "Failed to compile vertex shader");
             return false;
         }
-        gFsShader = CompileShader(program, shaderAbsPath, ShaderType::Fragment, 1);
+        gFsShader = compileShader(program, shaderAbsPath, ShaderType::Fragment, 1);
         if(gFsShader == nullptr)
         {
             assert(false && "Failed to compile fragment shader");
@@ -406,6 +417,7 @@ namespace cgs
                 {
                     {
                         .BlendEnable = FALSE,
+                        .RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL,
                     },
                 },             
             },
@@ -456,12 +468,15 @@ namespace cgs
     }
 
     void
-    DestroyRenderer() noexcept
+    DestroyRenderer(std::vector<std::unique_ptr<Geometry>>& geometries) noexcept
     {
         for(uint32 frameBufferIndex = 0; frameBufferIndex < BACK_BUFFERS_COUNT; ++frameBufferIndex)
         {
-            WaitForFrame(frameBufferIndex);
+            waitForFrame(frameBufferIndex);
         }
+
+        geometries.clear();
+        gCameraBuffer.reset();
 
         DestroyD3D12Object(gPipelineState);
         DestroyD3D12Object(gRootSignature);
@@ -487,6 +502,7 @@ namespace cgs
         
         gSceneRenderTargets.clear();
 
+        DestroyD3D12Object(gCbvSrvUavHeap);
         DestroyD3D12Object(gDsvHeap);
         DestroyD3D12Object(gRtvHeap);
 
@@ -528,7 +544,7 @@ namespace cgs
     }
 
     static void
-    AddQuadVertices(std::vector<VertexPN>& inoutVertices, std::vector<uint16>& inoutIndices, const Coordinate<eCoordinateSpace::WORLD>& v0, const Coordinate<eCoordinateSpace::WORLD>& v1, const Coordinate<eCoordinateSpace::WORLD>& v2, const Coordinate<eCoordinateSpace::WORLD>& v3)
+    addQuadVertices(std::vector<VertexPN>& inoutVertices, std::vector<uint16>& inoutIndices, const Coordinate<eCoordinateSpace::WORLD>& v0, const Coordinate<eCoordinateSpace::WORLD>& v1, const Coordinate<eCoordinateSpace::WORLD>& v2, const Coordinate<eCoordinateSpace::WORLD>& v3)
     {
         const Coordinate<eCoordinateSpace::WORLD> normal = Normalize(Cross(v1 - v0, v2 - v0));
         inoutVertices.push_back(VertexPN{ v0, normal });
@@ -544,7 +560,7 @@ namespace cgs
     }
 
     [[nodiscard]] static bool
-    CreateVertexBuffer(VertexBuffer& outVertexBuffer, const std::vector<VertexPN>& vertices, const std::string& name)
+    createVertexBuffer(VertexBuffer& outVertexBuffer, const std::vector<VertexPN>& vertices, const std::string& name)
     {
         HRESULT hr = S_OK;
         const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
@@ -613,7 +629,7 @@ namespace cgs
     }
 
     [[nodiscard]] static bool
-    CreateIndexBuffer(IndexBuffer& outIndexBuffer, const std::vector<uint16>& indices, const std::string& name)
+    createIndexBuffer(IndexBuffer& outIndexBuffer, const std::vector<uint16>& indices, const std::string& name)
     {
         HRESULT hr = S_OK;
         const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
@@ -680,10 +696,78 @@ namespace cgs
         return true;
     }
 
-    void
+    bool
     CreateCornellBoxScene(std::vector<std::unique_ptr<Geometry>>& outGeometries) noexcept
     {
-        InitializeCornellBoxCamera();
+        Camera& mainCamera = InitializeCornellBoxCamera();
+        
+        HRESULT hr = S_OK;
+
+        const D3D12_RESOURCE_DESC cameraBufferDesc =
+        {
+            .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+            .Alignment = 0,
+            .Width = Align(sizeof(Camera::Buffer), static_cast<size_t>(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT)),
+            .Height = 1,
+            .DepthOrArraySize = 1,
+            .MipLevels = 1,
+            .Format = DXGI_FORMAT_UNKNOWN,
+            .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+            .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+            .Flags = D3D12_RESOURCE_FLAG_NONE,
+        };
+
+        const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
+        {
+            .Type = D3D12_HEAP_TYPE_UPLOAD,
+            .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+            .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+            .CreationNodeMask = 1,
+            .VisibleNodeMask = 1,
+        };
+        
+        ConstantBuffer::CreateInfo cameraBufferCreateInfo;
+        cameraBufferCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
+        hr = gDevice->CreateCommittedResource(
+            &bufferHeapProperties,
+            D3D12_HEAP_FLAG_NONE,
+            &cameraBufferDesc,
+            cameraBufferCreateInfo.State,
+            nullptr,
+            IID_PPV_ARGS(cameraBufferCreateInfo.Data.GetAddressOf())
+        );
+        if(FAILED(hr))
+        {
+            assert(false && "Failed to create vertex buffer");
+            return false;
+        }
+        
+        const D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = 
+        {
+            .BufferLocation = cameraBufferCreateInfo.Data->GetGPUVirtualAddress(),
+            .SizeInBytes = static_cast<uint32>(cameraBufferDesc.Width),
+        };
+        cameraBufferCreateInfo.View = gCbvSrvUavHeap->GetCPUDescriptorHandleForHeapStart();
+        gDevice->CreateConstantBufferView(&cbvDesc, cameraBufferCreateInfo.View);
+
+        D3D12_RANGE range = { .Begin = 0, .End = 0 };
+        byte* cameraDataBegin = nullptr;
+        hr = cameraBufferCreateInfo.Data->Map(
+            0,
+            &range,
+            reinterpret_cast<void**>(&cameraDataBegin)
+        );
+        if(FAILED(hr))
+        {
+            assert(false && "Failed to map camera buffer");
+            return false;
+        }
+
+        const Camera::Buffer& cameraBuffer = mainCamera.GetBuffer();
+        std::memcpy(cameraDataBegin, &cameraBuffer, sizeof(Camera::Buffer));
+        cameraBufferCreateInfo.Data->Unmap(0, nullptr);
+
+        gCameraBuffer = std::make_unique<ConstantBuffer>(std::move(cameraBufferCreateInfo));
 
         outGeometries.clear();
         outGeometries.reserve(8);
@@ -701,14 +785,14 @@ namespace cgs
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -549.6f, 0.0f, 559.2f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 0.0f, 559.2f };
             indices.reserve(6);
-            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+            addQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices, "FloorVertexBuffer");
+            result = createVertexBuffer(vertexBuffer, vertices, "FloorVertexBuffer");
             floor.SetVertexBuffer(std::move(vertexBuffer));
                 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices, "FloorIndexBuffer");
+            result = createIndexBuffer(indexBuffer, indices, "FloorIndexBuffer");
             floor.SetIndexBuffer(std::move(indexBuffer));
             // floor.SetColor(WHITE);
         }
@@ -730,14 +814,14 @@ namespace cgs
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -343.0f, 548.8f, 227.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -213.0f, 548.8f, 227.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -213.0f, 548.8f, 332.0f };
-            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+            addQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices, "LightVertexBuffer");
+            result = createVertexBuffer(vertexBuffer, vertices, "LightVertexBuffer");
             light.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices, "LightIndexBuffer");
+            result = createIndexBuffer(indexBuffer, indices, "LightIndexBuffer");
             light.SetIndexBuffer(std::move(indexBuffer));
 
             // light.SetColor(WHITE);
@@ -761,14 +845,14 @@ namespace cgs
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -556.0f, 548.8f, 0.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 0.0f, 548.8f, 0.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 548.8f, 559.2f };
-            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+            addQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices, "CeilingVertexBuffer");
+            result = createVertexBuffer(vertexBuffer, vertices, "CeilingVertexBuffer");
             ceiling.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices, "CeilingIndexBuffer");
+            result = createIndexBuffer(indexBuffer, indices, "CeilingIndexBuffer");
             ceiling.SetIndexBuffer(std::move(indexBuffer));
 
             // ceiling.SetColor(WHITE);
@@ -791,14 +875,14 @@ namespace cgs
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -549.6f, 0.0f, 559.2f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -556.0f, 548.8f, 559.2f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 548.8f, 559.2f };
-            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+            addQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices, "BackWallVertexBuffer");
+            result = createVertexBuffer(vertexBuffer, vertices, "BackWallVertexBuffer");
             backWall.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices, "BackWallIndexBuffer");
+            result = createIndexBuffer(indexBuffer, indices, "BackWallIndexBuffer");
             backWall.SetIndexBuffer(std::move(indexBuffer));
 
             // backWall.SetColor(WHITE);
@@ -821,14 +905,14 @@ namespace cgs
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { 0.0f, 0.0f, 559.2f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 0.0f, 548.8f, 559.2f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 548.8f, 0.0f };
-            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+            addQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices, "RightWallVertexBuffer");
+            result = createVertexBuffer(vertexBuffer, vertices, "RightWallVertexBuffer");
             rightWall.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices, "RightWallIndexBuffer");
+            result = createIndexBuffer(indexBuffer, indices, "RightWallIndexBuffer");
             rightWall.SetIndexBuffer(std::move(indexBuffer));
 
             // rightWall.SetColor(GREEN);
@@ -851,14 +935,14 @@ namespace cgs
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -552.8f, 0.0f, 0.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -556.0f, 548.8f, 0.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -556.0f, 548.8f, 559.2f };
-            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+            addQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices, "LeftWallVertexBuffer");
+            result = createVertexBuffer(vertexBuffer, vertices, "LeftWallVertexBuffer");
             leftWall.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices, "LeftWallIndexBuffer");
+            result = createIndexBuffer(indexBuffer, indices, "LeftWallIndexBuffer");
             leftWall.SetIndexBuffer(std::move(indexBuffer));
 
             // leftWall.SetColor(RED);
@@ -882,38 +966,38 @@ namespace cgs
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -130.0f, 165.0f, 65.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -290.0f, 165.0f, 114.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -240.0f, 165.0f, 272.0f };
-            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+            addQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v4 = { -290.0f, 165.0f, 114.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v5 = { -290.0f, 0.0f, 114.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v6 = { -240.0f, 0.0f, 272.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v7 = { -240.0f, 165.0f, 272.0f };
-            AddQuadVertices(vertices, indices, v4, v5, v6, v7);
+            addQuadVertices(vertices, indices, v4, v5, v6, v7);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v8 = { -130.0f, 165.0f, 65.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v9 = { -130.0f, 0.0f, 65.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v10 = { -290.0f, 0.0f, 114.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v11 = { -290.0f, 165.0f, 114.0f };
-            AddQuadVertices(vertices, indices, v8, v9, v10, v11);
+            addQuadVertices(vertices, indices, v8, v9, v10, v11);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v12 = { -82.0f, 165.0f, 225.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v13 = { -82.0f, 0.0f, 225.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v14 = { -130.0f, 0.0f, 65.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v15 = { -130.0f, 165.0f, 65.0f };
-            AddQuadVertices(vertices, indices, v12, v13, v14, v15);
+            addQuadVertices(vertices, indices, v12, v13, v14, v15);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v16 = { -240.0f, 165.0f, 272.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v17 = { -240.0f, 0.0f, 272.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v18 = { -82.0f, 0.0f, 225.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v19 = { -82.0f, 165.0f, 225.0f };
-            AddQuadVertices(vertices, indices, v16, v17, v18, v19);
+            addQuadVertices(vertices, indices, v16, v17, v18, v19);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices, "ShortBlockVertexBuffer");
+            result = createVertexBuffer(vertexBuffer, vertices, "ShortBlockVertexBuffer");
             shortBlock.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices, "ShortBlockIndexBuffer");
+            result = createIndexBuffer(indexBuffer, indices, "ShortBlockIndexBuffer");
             shortBlock.SetIndexBuffer(std::move(indexBuffer));
 
             // shortBlock.SetColor(WHITE);
@@ -936,38 +1020,38 @@ namespace cgs
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -423.0f, 330.0f, 247.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -472.0f, 330.0f, 406.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -314.0f, 330.0f, 456.0f };
-            AddQuadVertices(vertices, indices, v0, v1, v2, v3);
+            addQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v4 = { -423.0f, 330.0f, 247.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v5 = { -423.0f, 0.0f, 247.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v6 = { -472.0f, 0.0f, 406.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v7 = { -472.0f, 330.0f, 406.0f };
-            AddQuadVertices(vertices, indices, v4, v5, v6, v7);
+            addQuadVertices(vertices, indices, v4, v5, v6, v7);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v8 = { -472.0f, 330.0f, 406.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v9 = { -472.0f, 0.0f, 406.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v10 = { -314.0f, 0.0f, 456.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v11 = { -314.0f, 330.0f, 456.0f };
-            AddQuadVertices(vertices, indices, v8, v9, v10, v11);
+            addQuadVertices(vertices, indices, v8, v9, v10, v11);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v12 = { -314.0f, 330.0f, 456.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v13 = { -314.0f, 0.0f, 456.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v14 = { -265.0f, 0.0f, 296.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v15 = { -265.0f, 330.0f, 296.0f };
-            AddQuadVertices(vertices, indices, v12, v13, v14, v15);
+            addQuadVertices(vertices, indices, v12, v13, v14, v15);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v16 = { -265.0f, 330.0f, 296.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v17 = { -265.0f, 0.0f, 296.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v18 = { -423.0f, 0.0f, 247.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v19 = { -423.0f, 330.0f, 247.0f };
-            AddQuadVertices(vertices, indices, v16, v17, v18, v19);
+            addQuadVertices(vertices, indices, v16, v17, v18, v19);
 
             VertexBuffer vertexBuffer;
-            result = CreateVertexBuffer(vertexBuffer, vertices, "TallBlockVertexBuffer");
+            result = createVertexBuffer(vertexBuffer, vertices, "TallBlockVertexBuffer");
             tallBlock.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = CreateIndexBuffer(indexBuffer, indices, "TallBlockIndexBuffer");
+            result = createIndexBuffer(indexBuffer, indices, "TallBlockIndexBuffer");
             tallBlock.SetIndexBuffer(std::move(indexBuffer));
 
             // tallBlock.SetColor(WHITE);
@@ -978,6 +1062,8 @@ namespace cgs
             assert(false && "Failed to create vertex buffer");
             outGeometries.pop_back();
         }
+
+        return true;
     }
     
     void
@@ -1033,7 +1119,7 @@ namespace cgs
 
                 // Process the render work
                 renderWork.FrameIndex = gSwapChain->GetCurrentBackBufferIndex();
-                WaitForFrame(renderWork.FrameIndex);
+                waitForFrame(renderWork.FrameIndex);
                 renderThreadInfo.CurrentWorkIndex.store(renderWork.WorkIndex);
 
                 D3DPtr<ID3D12CommandAllocator>& graphicsCommandAllocatorOrNull = gGraphicsCommandAllocators[renderWork.FrameIndex];
@@ -1065,13 +1151,41 @@ namespace cgs
                     continue;
                 }
 
-                hr = graphicsCommandList.Reset(&graphicsCommandAllocator, nullptr);
+                hr = graphicsCommandList.Reset(&graphicsCommandAllocator, gPipelineState.Get());
                 if(FAILED(hr))
                 {
                     assert(false && "Failed to reset command list");
                     renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
                     continue;
                 }
+
+                graphicsCommandList.SetGraphicsRootSignature(gRootSignature.Get());
+
+                ID3D12DescriptorHeap* heaps[] = { gCbvSrvUavHeap.Get() };
+                graphicsCommandList.SetDescriptorHeaps(CGS_ARRAYSIZE(heaps), heaps);
+
+                graphicsCommandList.SetGraphicsRootConstantBufferView (0, gCameraBuffer->GetGPUVirtualAddress());
+                const D3D12_VIEWPORT viewport =
+                {
+                    .TopLeftX = 0.0f,
+                    .TopLeftY = 0.0f,
+                    .Width = static_cast<float>(sceneRenderTarget.ColorBuffer.GetWidth()),
+                    .Height = static_cast<float>(sceneRenderTarget.ColorBuffer.GetHeight()),
+                    .MinDepth = 0.0f,
+                    .MaxDepth = 1.0f,
+                };
+                graphicsCommandList.RSSetViewports(1, &viewport);
+                const D3D12_RECT scissorRect = 
+                { 
+                    .left = 0, 
+                    .top = 0, 
+                    .right = static_cast<LONG>(sceneRenderTarget.ColorBuffer.GetWidth()), 
+                    .bottom = static_cast<LONG>(sceneRenderTarget.ColorBuffer.GetHeight()) 
+                };
+                graphicsCommandList.RSSetScissorRects(1, &scissorRect);
+
+                D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[] = { sceneRenderTarget.ColorBuffer.GetView(), };
+                graphicsCommandList.OMSetRenderTargets(CGS_ARRAYSIZE(rtvHandles), rtvHandles, FALSE, &sceneRenderTarget.DepthBuffer.GetView());
 
                 sceneRenderTarget.ColorBuffer.Transition(graphicsCommandList, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
@@ -1090,6 +1204,36 @@ namespace cgs
                     0,
                     nullptr
                 );
+
+                graphicsCommandList.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                for(const std::unique_ptr<Geometry>& geometry : renderWork.Geometries)
+                {
+                    if(geometry == nullptr)
+                    {
+                        assert(false && "Geometry is null");
+                        continue;
+                    }
+
+                    const VertexBuffer& vertexBuffer = geometry->GetVertexBuffer();
+                    const IndexBuffer& indexBuffer = geometry->GetIndexBuffer();
+
+                    const D3D12_VERTEX_BUFFER_VIEW& vbView = vertexBuffer.GetVertexBufferView();
+                    graphicsCommandList.IASetVertexBuffers(0, 1, &vbView);
+
+                    const D3D12_INDEX_BUFFER_VIEW& ibView = indexBuffer.GetIndexBufferView();
+                    graphicsCommandList.IASetIndexBuffer(&ibView);
+
+                    // TODO(alegruz): Set per-object constants (like world matrix)
+
+                    graphicsCommandList.DrawIndexedInstanced(
+                        static_cast<UINT>(ibView.SizeInBytes / sizeof(uint16)), // IndexCountPerInstance
+                        1,                                                      // InstanceCount
+                        0,                                                      // StartIndexLocation
+                        0,                                                      // BaseVertexLocation
+                        0                                                       // StartInstanceLocation
+                    );
+                }
+
                 sceneRenderTarget.ColorBuffer.Transition(graphicsCommandList, D3D12_RESOURCE_STATE_PRESENT);
 
                 graphicsCommandList.Close();
@@ -1268,6 +1412,22 @@ namespace cgs
         }
         gDsvHeap->SetName(TEXT("Main DSV Descriptor Heap"));
 
+
+        const D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc =
+        {
+            .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+            .NumDescriptors = BACK_BUFFERS_COUNT,
+            .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
+            .NodeMask = 0,
+        };
+        hr = gDevice->CreateDescriptorHeap(&cbvHeapDesc, IID_PPV_ARGS(gCbvSrvUavHeap.GetAddressOf()));
+        if (FAILED(hr))
+        {
+            assert(false && "Failed to create CBV descriptor heap");
+            return false;
+        }
+        gCbvSrvUavHeap->SetName(TEXT("Main CBV Descriptor Heap"));
+
         DXGI_SWAP_CHAIN_DESC1 swapChainDesc = 
         {
             .Width = createInfo.Width,
@@ -1435,7 +1595,7 @@ namespace cgs
             return false;
         }
 
-        const bool result = CreateShaders();
+        const bool result = createShaders();
         if(result == false)
         {
             assert(false && "Failed to create shaders");
@@ -1446,7 +1606,7 @@ namespace cgs
         return true;
     }
 
-    void WaitForFrame(const uint32 frameIndex) noexcept
+    void waitForFrame(const uint32 frameIndex) noexcept
     {
         const uint64 fenceValue = gFenceValues[frameIndex];
         if (fenceValue == std::numeric_limits<uint64>::max())

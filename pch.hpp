@@ -14,6 +14,7 @@
 #include <locale>
 #include <memory>
 #include <mutex>
+#include <numbers>
 #include <queue>
 #include <span>
 #include <string>

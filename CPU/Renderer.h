@@ -415,7 +415,7 @@ namespace cgs
     };
 
     constexpr void
-    DestroyRenderer() noexcept;
+    DestroyRenderer(std::vector<std::unique_ptr<Geometry>>& geometries) noexcept;
 
     bool
     InitializeRenderer(const RendererCreateInfo& createInfo) noexcept;

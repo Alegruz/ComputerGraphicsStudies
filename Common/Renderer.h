@@ -89,6 +89,16 @@ namespace cgs
             Coordinate<eCoordinateSpace::WORLD> Position;
             Coordinate<eCoordinateSpace::WORLD> Front;
             Coordinate<eCoordinateSpace::WORLD> Up;
+            float FieldOfViewYAxis = std::numbers::pi_v<float> / 4.0f;
+            float AspectRatio;
+            float NearPlane = 0.1f;
+            float FarPlane = 2000.0f;
+        };
+
+        struct Buffer final
+        {
+            float4x4 ViewMatrix;
+            float4x4 ProjectionMatrix;
         };
 
     public:
@@ -99,13 +109,7 @@ namespace cgs
             , mUp()
         {
         }
-        CGS_INLINE constexpr 
-        Camera(CreateInfo&& createInfo) noexcept
-            : mPosition(createInfo.Position)
-            , mFront(createInfo.Front)
-            , mUp(createInfo.Up)
-        {
-        }
+        Camera(CreateInfo&& createInfo) noexcept;
         CGS_INLINE constexpr
         Camera(const Camera&) noexcept = default;
         CGS_INLINE constexpr
@@ -124,14 +128,18 @@ namespace cgs
         GetFront() const noexcept { return mFront; }
         CGS_INLINE constexpr Coordinate<eCoordinateSpace::WORLD>
         GetUp() const noexcept { return mUp; }
+        CGS_INLINE constexpr const Buffer&
+        GetBuffer() const noexcept { return mBuffer; }
 
     private:
         Coordinate<eCoordinateSpace::WORLD> mPosition;
         Coordinate<eCoordinateSpace::WORLD> mFront;
         Coordinate<eCoordinateSpace::WORLD> mUp;
+
+        Buffer mBuffer;
     };
 
-    void
+    [[nodiscard]] bool
     CreateCornellBoxScene(std::vector<std::unique_ptr<Geometry>>& outGeometries) noexcept;
 
     CornellBoxVertexShaderOutput
@@ -182,6 +190,9 @@ namespace cgs
         }
         return eRenderDeviceType::CPU;
     }
+
+    [[nodiscard]] Camera&
+    InitializeCornellBoxCamera() noexcept;
 
     void
     Render(uint64& inoutWorkIndex, RenderThreadInfo& inoutRenderThreadInfo, const std::vector<std::unique_ptr<Geometry>>& geometries) noexcept;

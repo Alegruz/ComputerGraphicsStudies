@@ -275,4 +275,11 @@ namespace cgs
     using Direction = float3;
     template<eCoordinateSpace SPACE>
     using HomogenousCoordinate = float4;
+
+    template<std::unsigned_integral T>
+    CGS_INLINE constexpr T
+    Align(const T value, const T alignment) noexcept
+    {
+        return ((value + alignment - 1) / alignment) * alignment;
+    }
 }

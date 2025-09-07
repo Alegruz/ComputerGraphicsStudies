@@ -302,6 +302,12 @@ namespace cgs
             return mData;
         }
 
+        CGS_INLINE const D3D12_GPU_VIRTUAL_ADDRESS
+        GetGPUVirtualAddress() noexcept
+        {
+            return mData->GetGPUVirtualAddress();
+        }
+
         CGS_INLINE const D3D12_CPU_DESCRIPTOR_HANDLE&
         GetView() const noexcept
         {
@@ -360,6 +366,9 @@ namespace cgs
             : RenderResource(std::move(createInfo.ParentCreateInfo))
             , mIsBackBuffer(createInfo.IsBackBuffer)
         {
+            const D3D12_RESOURCE_DESC desc = mData->GetDesc();
+            mWidth = static_cast<uint32>(desc.Width);
+            mHeight = static_cast<uint32>(desc.Height);
         }
 
         Texture(const Texture&) = delete;
@@ -389,7 +398,15 @@ namespace cgs
         {
             RenderResource::Initialize(std::move(createInfo.ParentCreateInfo));
             mIsBackBuffer = createInfo.IsBackBuffer;
+            const D3D12_RESOURCE_DESC desc = mData->GetDesc();
+            mWidth = static_cast<uint32>(desc.Width);
+            mHeight = static_cast<uint32>(desc.Height);
         }
+
+        CGS_INLINE constexpr uint32
+        GetWidth() const noexcept { return mWidth; }
+        CGS_INLINE constexpr uint32
+        GetHeight() const noexcept { return mHeight; }
 
     protected:
         CGS_INLINE void
@@ -397,6 +414,8 @@ namespace cgs
 
     private:
         bool mIsBackBuffer;
+        uint32 mWidth;
+        uint32 mHeight;
     };
 
     class IndexBuffer final : public RenderResource
@@ -451,6 +470,13 @@ namespace cgs
             RenderResource::Initialize(std::move(createInfo.ParentCreateInfo));
             mView = createInfo.View;
         }
+
+        CGS_INLINE constexpr const D3D12_INDEX_BUFFER_VIEW&
+        GetIndexBufferView() const noexcept { return mView; }
+
+    protected:
+        CGS_INLINE void
+        Initialize(RenderResource::CreateInfo&&) noexcept override {}
 
     private:
         D3D12_INDEX_BUFFER_VIEW    mView;
@@ -509,8 +535,52 @@ namespace cgs
             mView = createInfo.View;
         }
 
+        CGS_INLINE constexpr const D3D12_VERTEX_BUFFER_VIEW&
+        GetVertexBufferView() const noexcept { return mView; }
+
+    protected:
+        CGS_INLINE void
+        Initialize(RenderResource::CreateInfo&&) noexcept override {}
+
     private:
         D3D12_VERTEX_BUFFER_VIEW    mView;
+    };
+
+    class ConstantBuffer final : public RenderResource
+    {
+    public:
+        CGS_INLINE constexpr 
+        ConstantBuffer() noexcept
+            : RenderResource()
+        {
+        }
+
+        CGS_INLINE CGS_CONSTEXPR_WITH_ASSERT 
+        ConstantBuffer(CreateInfo&& createInfo) noexcept
+            : RenderResource(std::move(createInfo))
+        {
+        }
+
+        ConstantBuffer(const ConstantBuffer&) = delete;
+        CGS_INLINE CGS_CONSTEXPR_WITH_ASSERT
+        ConstantBuffer(ConstantBuffer&& other) noexcept
+            : RenderResource(std::move(other))
+        {}
+
+        CGS_INLINE 
+        ~ConstantBuffer() noexcept = default;
+
+        ConstantBuffer&
+        operator=(const ConstantBuffer&) = delete;
+        CGS_INLINE constexpr ConstantBuffer& 
+        operator=(ConstantBuffer&& other) noexcept
+        {
+            if (this != &other)
+            {
+                RenderResource::operator=(std::move(other));
+            }
+            return *this;
+        }
     };
 
     class Geometry final
@@ -534,6 +604,10 @@ namespace cgs
 
         [[nodiscard]] CGS_INLINE constexpr bool
         IsEmissive() const noexcept { return mIsEmissive; }
+        [[nodiscard]] CGS_INLINE constexpr const VertexBuffer&
+        GetVertexBuffer() const noexcept { return mVertexBuffer; }
+        [[nodiscard]] CGS_INLINE constexpr const IndexBuffer&
+        GetIndexBuffer() const noexcept { return mIndexBuffer; }
         [[nodiscard]] CGS_INLINE constexpr const std::string&
         GetName() const noexcept { return mName; }
 
@@ -552,7 +626,7 @@ namespace cgs
     };
 
     void
-    DestroyRenderer() noexcept;
+    DestroyRenderer(std::vector<std::unique_ptr<Geometry>>& geometries) noexcept;
 
     bool
     InitializeRenderer(const RendererCreateInfo& createInfo) noexcept;

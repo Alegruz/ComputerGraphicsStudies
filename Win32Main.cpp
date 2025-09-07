@@ -420,7 +420,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
 
     [[maybe_unused]] float deltaTimeInMs = 0.0f;
     std::vector<std::unique_ptr<cgs::Geometry>> cornellBox;
-    cgs::CreateCornellBoxScene(cornellBox);
+    const bool result = cgs::CreateCornellBoxScene(cornellBox);
+    if(result == false)
+    {
+        assert(false && "Failed to create cornell box scene");
+        return 4;
+    }
 
     cgs::gRenderThread.RenderMethod = cgs::eRenderMethod::RASTERIZATION;
     cgs::ThreadCreateInfo createInfo =
@@ -483,8 +488,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
         cgs::Join(*cgs::gRenderThread.CurrentThreadHandle);
     }
 
-    cornellBox.clear();
-    cgs::DestroyRenderer();
+    cgs::DestroyRenderer(cornellBox);
 
     if(accelerators)
     {
