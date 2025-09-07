@@ -11,6 +11,19 @@ namespace cgs
 
     using TDXGIGetDebugInterface = HRESULT (*)(REFIID, void**);
 
+    enum class GlobalRootSignatureParams : uint8
+    {
+        OUTPUT_VIEW_SLOT = 0,
+        ACCELERATION_STRUCTURE_SLOT,
+        COUNT,
+    };
+
+    enum class LocalRootSignatureParams : uint8
+    {
+        VIEWPORT_CONSTANT_SLOT = 0,
+        COUNT,
+    };
+
     struct SceneRenderTarget final
     {
         Texture ColorBuffer;
@@ -51,8 +64,8 @@ namespace cgs
     static D3DPtr<ID3D12Debug5> gD3D12Debug;
     static D3DPtr<ID3D12InfoQueue1> gD3D12InfoQueue;
 #endif  // defined(CGS_DEBUG)
-    static D3DPtr<ID3D12Device4> gDevice;
-    static std::vector<D3DPtr<ID3D12GraphicsCommandList>> gGraphicsCommandLists(BACK_BUFFERS_COUNT);
+    static D3DPtr<ID3D12Device5> gDevice;
+    static std::vector<D3DPtr<ID3D12GraphicsCommandList4>> gGraphicsCommandLists(BACK_BUFFERS_COUNT);
     static std::vector<D3DPtr<ID3D12CommandAllocator>> gGraphicsCommandAllocators(BACK_BUFFERS_COUNT);
     static D3DPtr<ID3D12CommandQueue> gGraphicsCommandQueue;
     static D3DPtr<ID3D12DescriptorHeap> gRtvHeap;
@@ -68,8 +81,8 @@ namespace cgs
     static Slang::ComPtr<slang::IGlobalSession> gSlangGlobalSession;
     static Slang::ComPtr<slang::IBlob> gVsShader;
     static Slang::ComPtr<slang::IBlob> gFsShader;
-    static D3DPtr<ID3D12RootSignature> gRootSignature;
-    static D3DPtr<ID3D12PipelineState> gPipelineState;
+    static D3DPtr<ID3D12RootSignature> gRasterizationRootSignature;
+    static D3DPtr<ID3D12PipelineState> gRasterizationPipelineState;
     static std::unique_ptr<ConstantBuffer> gCameraBuffer;
     static std::unique_ptr<ConstantBuffer> gEmissiveBuffer;
 
@@ -78,12 +91,24 @@ namespace cgs
     static D3D12_GPU_DESCRIPTOR_HANDLE gRaytracingOutputResourceUAVGpuDescriptor;
     static uint32 gRaytracingOutputResourceUAVDescriptorHeapIndex = std::numeric_limits<uint32>::max();
     static RayGenConstantBuffer gRayGenConstantBuffer;
+    static D3DPtr<ID3D12RootSignature> gRaytracingGlobalRootSignature;
+    static D3DPtr<ID3D12RootSignature> gRaytracingLocalRootSignature;
+    static Slang::ComPtr<slang::IBlob> gRayGenShader;
+    static Slang::ComPtr<slang::IBlob> gClosestHitShader;
+    static Slang::ComPtr<slang::IBlob> gMissShader;
+    static D3DPtr<ID3D12StateObject> gRaytracingStateObject;
+    static D3DPtr<ID3D12Resource> gAccelerationStructure;
+    static D3DPtr<ID3D12Resource> gBottomLevelAccelerationStructure;
+    static D3DPtr<ID3D12Resource> gTopLevelAccelerationStructure;
 
     enum class ShaderType : uint8
     {
-        Invalid = 0,
-        Vertex,
-        Fragment,
+        INVALID = 0,
+        VERTEX,
+        FRAGMENT,
+        RAY_GEN,
+        CLOSEST_HIT,
+        MISS,
     };
 
     static void
@@ -126,16 +151,49 @@ namespace cgs
     Slang::ComPtr<slang::IBlob>
     compileShader(Slang::ComPtr<slang::IComponentType>& program, const std::filesystem::path& shaderAbsPath, const ShaderType type, const uint32 index) noexcept
     {
-        const std::string shaderName = shaderAbsPath.stem().string() + "_" + (type == ShaderType::Vertex ? "vs" : (type == ShaderType::Fragment ? "fs" : "invalid"));
+        std::string shaderName = shaderAbsPath.stem().string() + "_";
+        switch(type)
+        {
+        case ShaderType::VERTEX:
+        {
+            shaderName += "vs";
+        }
+        break;
+        case ShaderType::FRAGMENT:
+        {
+            shaderName += "fs";
+        }
+        break;
+        case ShaderType::RAY_GEN:
+        {
+            shaderName += "rg";
+        }
+        break;
+        case ShaderType::CLOSEST_HIT:
+        {
+            shaderName += "ch";
+        }
+        break;
+        case ShaderType::MISS:
+        {
+            shaderName += "m";
+        }
+        break;
+        case ShaderType::INVALID:
+            [[fallthrough]];
+        default:
+            assert(false && "compileShader: invalid shader type");
+            return nullptr;
+        };
         std::filesystem::path shaderCacheFilePath = shaderAbsPath.parent_path() / (shaderName + ".dxil");
 
-        Slang::ComPtr<slang::IBlob> spirvBlob;
+        Slang::ComPtr<slang::IBlob> dxilBlob;
         {
             Slang::ComPtr<slang::IBlob> diagnosticBlob;
             SlangResult result = program->getEntryPointCode(
                 index,
                 0,
-                spirvBlob.writeRef(),
+                dxilBlob.writeRef(),
                 diagnosticBlob.writeRef()
             );
             if (diagnosticBlob)
@@ -146,20 +204,20 @@ namespace cgs
                 return nullptr;
             }
 
-            if(result != SLANG_OK || spirvBlob == nullptr)
+            if(result != SLANG_OK || dxilBlob == nullptr)
             {
                 assert(false && "Failed to compile shader");
                 return nullptr;
             }
         }
 
-        Slang::ComPtr<slang::IBlob> spirvAsmBlob;
+        Slang::ComPtr<slang::IBlob> dxilAsmBlob;
         {
             Slang::ComPtr<slang::IBlob> diagnosticBlob;
             SlangResult result = program->getEntryPointCode(
                 index,
                 1,
-                spirvAsmBlob.writeRef(),
+                dxilAsmBlob.writeRef(),
                 diagnosticBlob.writeRef()
             );
             if (diagnosticBlob)
@@ -170,7 +228,7 @@ namespace cgs
                 return nullptr;
             }
 
-            if(result != SLANG_OK || spirvAsmBlob == nullptr)
+            if(result != SLANG_OK || dxilAsmBlob == nullptr)
             {
                 assert(false && "Failed to compile shader");
                 return nullptr;
@@ -179,7 +237,7 @@ namespace cgs
 
         std::ofstream ofs(shaderCacheFilePath.string(), std::ios::binary);
         assert(ofs.is_open());
-        ofs.write(reinterpret_cast<const char*>(spirvBlob->getBufferPointer()), spirvBlob->getBufferSize());
+        ofs.write(reinterpret_cast<const char*>(dxilBlob->getBufferPointer()), dxilBlob->getBufferSize());
         ofs.close();
         
         const std::filesystem::path shaderCacheAsmPath = shaderAbsPath.parent_path() / "asms";
@@ -190,33 +248,18 @@ namespace cgs
         std::filesystem::path shaderCacheAsmFilePath = shaderCacheAsmPath / (shaderName + ".asm");
         ofs.open(shaderCacheAsmFilePath.string(), std::ios::binary);
         assert(ofs.is_open());
-        ofs.write(reinterpret_cast<const char*>(spirvAsmBlob->getBufferPointer()), spirvAsmBlob->getBufferSize());
+        ofs.write(reinterpret_cast<const char*>(dxilAsmBlob->getBufferPointer()), dxilAsmBlob->getBufferSize());
         ofs.close();
 
-        return spirvBlob;
+        return dxilBlob;
     }
 
     bool
     createShaders() noexcept
     {
+        HRESULT hr = S_OK;
         SlangGlobalSessionDesc slangGlobalSessionDesc = {};
         slang::createGlobalSession(&slangGlobalSessionDesc, gSlangGlobalSession.writeRef());
-
-        std::vector<slang::TargetDesc> targetDescs = 
-		{
-			slang::TargetDesc
-			{
-				.format = SlangCompileTarget::SLANG_DXIL,
-				.profile = gSlangGlobalSession->findProfile("sm_6_6"),
-				.flags = 0,
-			},
-			slang::TargetDesc
-			{
-				.format = SlangCompileTarget::SLANG_DXIL_ASM,
-				.profile = gSlangGlobalSession->findProfile("sm_6_6"),
-				.flags = 0,
-			},
-		};
 
 		std::vector<slang::CompilerOptionEntry> compilerOptions =
 		{
@@ -282,226 +325,611 @@ namespace cgs
 			},
 		};
 
-		slang::SessionDesc sessionDesc = 
-		{
-			.targets = targetDescs.data(),
-			.targetCount = static_cast<uint32_t>(targetDescs.size()),
-			.compilerOptionEntries = compilerOptions.data(),
-			.compilerOptionEntryCount = static_cast<uint32_t>(compilerOptions.size()),
-		};
+        // Rasterization
+        {
+            std::vector<slang::TargetDesc> targetDescs = 
+            {
+                slang::TargetDesc
+                {
+                    .format = SlangCompileTarget::SLANG_DXIL,
+                    .profile = gSlangGlobalSession->findProfile("sm_6_6"),
+                    .flags = 0,
+                },
+                slang::TargetDesc
+                {
+                    .format = SlangCompileTarget::SLANG_DXIL_ASM,
+                    .profile = gSlangGlobalSession->findProfile("sm_6_6"),
+                    .flags = 0,
+                },
+            };
+
+            slang::SessionDesc sessionDesc = 
+            {
+                .targets = targetDescs.data(),
+                .targetCount = static_cast<uint32_t>(targetDescs.size()),
+                .compilerOptionEntries = compilerOptions.data(),
+                .compilerOptionEntryCount = static_cast<uint32_t>(compilerOptions.size()),
+            };
 
 
-		Slang::ComPtr<slang::ISession> session;
-		gSlangGlobalSession->createSession(sessionDesc, session.writeRef());
-        const std::filesystem::path shaderAbsoluteParentPath = std::filesystem::current_path() / "Assets/Shaders";
-        const std::filesystem::path shaderAbsPath = shaderAbsoluteParentPath / "SimpleRasterization.slang";
+            Slang::ComPtr<slang::ISession> session;
+            gSlangGlobalSession->createSession(sessionDesc, session.writeRef());
+            const std::filesystem::path shaderAbsoluteParentPath = std::filesystem::current_path() / "Assets/Shaders";
+            const std::filesystem::path shaderAbsPath = shaderAbsoluteParentPath / "SimpleRasterization.slang";
 
-		slang::IModule* module = nullptr;
-		{
-			Slang::ComPtr<slang::IBlob> diagnosticBlob;
-			module = session->loadModule(shaderAbsPath.string().c_str(), diagnosticBlob.writeRef());
-			if (diagnosticBlob)
-			{
-                OutputDebugStringA(reinterpret_cast<const char*>(diagnosticBlob->getBufferPointer()));
-                OutputDebugStringA("\n");
-				DebugBreak();
-                return false;
-			}
+            slang::IModule* module = nullptr;
+            {
+                Slang::ComPtr<slang::IBlob> diagnosticBlob;
+                module = session->loadModule(shaderAbsPath.string().c_str(), diagnosticBlob.writeRef());
+                if (diagnosticBlob)
+                {
+                    OutputDebugStringA(reinterpret_cast<const char*>(diagnosticBlob->getBufferPointer()));
+                    OutputDebugStringA("\n");
+                    DebugBreak();
+                    return false;
+                }
+                
+                if(module == nullptr)
+                {
+                    assert(false && "Failed to load shader module");
+                    return false;
+                }
+            }
             
-            if(module == nullptr)
+            std::vector<slang::IComponentType*> componentTypes =
             {
-                assert(false && "Failed to load shader module");
+                module,
+            };
+            Slang::ComPtr<slang::IEntryPoint> vsEntryPoint;
+            module->findEntryPointByName("VSMain", vsEntryPoint.writeRef());
+            componentTypes.push_back(vsEntryPoint);
+            Slang::ComPtr<slang::IEntryPoint> fsEntryPoint;
+            module->findEntryPointByName("FSMain", fsEntryPoint.writeRef());
+            componentTypes.push_back(fsEntryPoint);
+            
+            Slang::ComPtr<slang::IComponentType> program;
+            {
+                Slang::ComPtr<slang::IBlob> diagnosticBlob;
+                session->createCompositeComponentType(componentTypes.data(), componentTypes.size(), program.writeRef(), diagnosticBlob.writeRef());
+                if (diagnosticBlob)
+                {
+                    OutputDebugStringA(reinterpret_cast<const char*>(diagnosticBlob->getBufferPointer()));
+                    OutputDebugStringA("\n");
+                    DebugBreak();
+                    return false;
+                }
+
+                if(program == nullptr)
+                {
+                    assert(false && "Failed to create composite component type");
+                    return false;
+                }
+            }
+
+            gVsShader = compileShader(program, shaderAbsPath, ShaderType::VERTEX, 0);
+            if(gVsShader == nullptr)
+            {
+                assert(false && "Failed to compile vertex shader");
                 return false;
             }
-		}
-		
-		std::vector<slang::IComponentType*> componentTypes =
-		{
-			module,
-		};
-        Slang::ComPtr<slang::IEntryPoint> vsEntryPoint;
-        module->findEntryPointByName("VSMain", vsEntryPoint.writeRef());
-        componentTypes.push_back(vsEntryPoint);
-        Slang::ComPtr<slang::IEntryPoint> fsEntryPoint;
-        module->findEntryPointByName("FSMain", fsEntryPoint.writeRef());
-        componentTypes.push_back(fsEntryPoint);
-		
-		Slang::ComPtr<slang::IComponentType> program;
-		{
-			Slang::ComPtr<slang::IBlob> diagnosticBlob;
-			session->createCompositeComponentType(componentTypes.data(), componentTypes.size(), program.writeRef(), diagnosticBlob.writeRef());
-			if (diagnosticBlob)
-			{
-                OutputDebugStringA(reinterpret_cast<const char*>(diagnosticBlob->getBufferPointer()));
-                OutputDebugStringA("\n");
-				DebugBreak();
-                return false;
-			}
-
-            if(program == nullptr)
+            gFsShader = compileShader(program, shaderAbsPath, ShaderType::FRAGMENT, 1);
+            if(gFsShader == nullptr)
             {
-                assert(false && "Failed to create composite component type");
+                assert(false && "Failed to compile fragment shader");
                 return false;
             }
-		}
+            
+            // Create an empty root signature.
+            const std::vector<D3D12_ROOT_PARAMETER> rootParameters =
+            {
+                {
+                    .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+                    .Descriptor = 
+                    {
+                        .ShaderRegister = 0,
+                        .RegisterSpace = 0,
+                    },
+                    .ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX,
+                },
+                {
+                    .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+                    .Descriptor = 
+                    {
+                        .ShaderRegister = 1,
+                        .RegisterSpace = 0,
+                    },
+                    .ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL,
+                },
+                {
+                    .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
+                    .Constants =
+                    {
+                        .ShaderRegister = 2,
+                        .RegisterSpace = 0,
+                        .Num32BitValues = 4,
+                    },
+                    .ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL,
+                }
+            };
 
-        gVsShader = compileShader(program, shaderAbsPath, ShaderType::Vertex, 0);
-        if(gVsShader == nullptr)
-        {
-            assert(false && "Failed to compile vertex shader");
-            return false;
-        }
-        gFsShader = compileShader(program, shaderAbsPath, ShaderType::Fragment, 1);
-        if(gFsShader == nullptr)
-        {
-            assert(false && "Failed to compile fragment shader");
-            return false;
-        }
+            const D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc =
+            {
+                .NumParameters = static_cast<UINT>(rootParameters.size()),
+                .pParameters = rootParameters.data(),
+                .NumStaticSamplers = 0,
+                .pStaticSamplers = nullptr,
+                .Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT
+            };
+
+            D3DPtr<ID3DBlob> signature;
+            D3DPtr<ID3DBlob> error;
+            hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, signature.GetAddressOf(), error.GetAddressOf());
+            if (FAILED(hr))
+            {
+                if (error != nullptr)
+                {
+                    OutputDebugStringA(reinterpret_cast<const char*>(error->GetBufferPointer()));
+                    OutputDebugStringA("\n");
+                }
+                DebugBreak();
+                return false;
+            }
+
+            hr = gDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(gRasterizationRootSignature.GetAddressOf()));
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to create root signature");
+                return false;
+            }
+
+            constexpr D3D12_INPUT_ELEMENT_DESC INPUT_ELEMENT_DESCS[2] = 
+            {
+                {
+                    .SemanticName = "POSITION",
+                    .SemanticIndex = 0,
+                    .Format = DXGI_FORMAT_R32G32B32_FLOAT,
+                    .InputSlot = 0,
+                    .AlignedByteOffset = 0,
+                    .InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
+                    .InstanceDataStepRate = 0,
+                },
+                {
+                    .SemanticName = "NORMAL",
+                    .SemanticIndex = 0,
+                    .Format = DXGI_FORMAT_R32G32B32_FLOAT,
+                    .InputSlot = 0,
+                    .AlignedByteOffset = 12,
+                    .InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
+                    .InstanceDataStepRate = 0,
+                },
+            };
+
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc = 
+            {
+                .pRootSignature = gRasterizationRootSignature.Get(),
+                .VS = gVsShader ? D3D12_SHADER_BYTECODE{ gVsShader->getBufferPointer(), gVsShader->getBufferSize() } : D3D12_SHADER_BYTECODE{ nullptr, 0 },
+                .PS = gFsShader ? D3D12_SHADER_BYTECODE{ gFsShader->getBufferPointer(), gFsShader->getBufferSize() } : D3D12_SHADER_BYTECODE{ nullptr, 0 },
+                .BlendState =
+                {
+                    .AlphaToCoverageEnable = FALSE,
+                    .IndependentBlendEnable = FALSE,
+                    .RenderTarget = 
+                    {
+                        {
+                            .BlendEnable = FALSE,
+                            .RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL,
+                        },
+                    },             
+                },
+                .SampleMask = std::numeric_limits<uint32>::max(),
+                .RasterizerState = 
+                {
+                    .FillMode = D3D12_FILL_MODE_SOLID,
+                    .CullMode = D3D12_CULL_MODE_BACK,
+                    .FrontCounterClockwise = FALSE,
+                    .DepthBias = 0,
+                    .DepthBiasClamp = 0.0f,
+                    .SlopeScaledDepthBias = 0.0f,
+                    .DepthClipEnable = TRUE,
+                    .MultisampleEnable = FALSE,
+                    .AntialiasedLineEnable = FALSE,
+                    .ForcedSampleCount = 0,
+                    .ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF
+                },
+                .DepthStencilState =
+                {
+                    .DepthEnable = TRUE,
+                    .DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL,
+                    .DepthFunc = D3D12_COMPARISON_FUNC_LESS,
+                },
+                .InputLayout = 
+                {
+                    .pInputElementDescs = INPUT_ELEMENT_DESCS,
+                    .NumElements = static_cast<UINT>(CGS_ARRAYSIZE(INPUT_ELEMENT_DESCS)),
+                },
+                .PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
+                .NumRenderTargets = 1,
+                .RTVFormats = { DXGI_FORMAT_R8G8B8A8_UNORM },
+                .DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT,
+                .SampleDesc = { 1, 0 },
+                .NodeMask = 0,
+                .CachedPSO = {},
+                .Flags = D3D12_PIPELINE_STATE_FLAG_NONE,
+            };
+
+            hr = gDevice->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(gRasterizationPipelineState.GetAddressOf()));
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to create pipeline state");
+                return false;
+            }
+        }   // Rasterization
         
-        // Create an empty root signature.
-        HRESULT hr = S_OK;
-        const std::vector<D3D12_ROOT_PARAMETER> rootParameters =
+        // Raytracing
         {
+            std::vector<slang::TargetDesc> targetDescs = 
             {
-                .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
-                .Descriptor = 
+                slang::TargetDesc
                 {
-                    .ShaderRegister = 0,
-                    .RegisterSpace = 0,
+                    .format = SlangCompileTarget::SLANG_DXIL,
+                    .profile = gSlangGlobalSession->findProfile("sm_6_7"),
+                    .flags = 0,
                 },
-                .ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX,
-            },
+                slang::TargetDesc
+                {
+                    .format = SlangCompileTarget::SLANG_DXIL_ASM,
+                    .profile = gSlangGlobalSession->findProfile("sm_6_7"),
+                    .flags = 0,
+                },
+            };
+
+            slang::SessionDesc sessionDesc = 
             {
-                .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
-                .Descriptor = 
-                {
-                    .ShaderRegister = 1,
-                    .RegisterSpace = 0,
-                },
-                .ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL,
-            },
+                .targets = targetDescs.data(),
+                .targetCount = static_cast<uint32_t>(targetDescs.size()),
+                .compilerOptionEntries = compilerOptions.data(),
+                .compilerOptionEntryCount = static_cast<uint32_t>(compilerOptions.size()),
+            };
+
+
+            Slang::ComPtr<slang::ISession> session;
+            gSlangGlobalSession->createSession(sessionDesc, session.writeRef());
+            const std::filesystem::path shaderAbsoluteParentPath = std::filesystem::current_path() / "Assets/Shaders";
+            const std::filesystem::path shaderAbsPath = shaderAbsoluteParentPath / "SimpleRaytracing.slang";
+
+            slang::IModule* module = nullptr;
             {
-                .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
-                .Constants =
+                Slang::ComPtr<slang::IBlob> diagnosticBlob;
+                module = session->loadModule(shaderAbsPath.string().c_str(), diagnosticBlob.writeRef());
+                if (diagnosticBlob)
                 {
-                    .ShaderRegister = 2,
-                    .RegisterSpace = 0,
-                    .Num32BitValues = 4,
-                },
-                .ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL,
+                    OutputDebugStringA(reinterpret_cast<const char*>(diagnosticBlob->getBufferPointer()));
+                    OutputDebugStringA("\n");
+                    DebugBreak();
+                    return false;
+                }
+                
+                if(module == nullptr)
+                {
+                    assert(false && "Failed to load shader module");
+                    return false;
+                }
             }
-        };
-
-        const D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc =
-        {
-            .NumParameters = static_cast<UINT>(rootParameters.size()),
-            .pParameters = rootParameters.data(),
-            .NumStaticSamplers = 0,
-            .pStaticSamplers = nullptr,
-            .Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT
-        };
-
-        D3DPtr<ID3DBlob> signature;
-        D3DPtr<ID3DBlob> error;
-        hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, signature.GetAddressOf(), error.GetAddressOf());
-        if (FAILED(hr))
-        {
-            if (error != nullptr)
+            
+            std::vector<slang::IComponentType*> componentTypes =
             {
-                OutputDebugStringA(reinterpret_cast<const char*>(error->GetBufferPointer()));
-                OutputDebugStringA("\n");
+                module,
+            };
+            Slang::ComPtr<slang::IEntryPoint> rayGenEntryPoint;
+            module->findEntryPointByName("RayGenMain", rayGenEntryPoint.writeRef());
+            componentTypes.push_back(rayGenEntryPoint);
+            Slang::ComPtr<slang::IEntryPoint> closestHitEntryPoint;
+            module->findEntryPointByName("ClosestHitMain", closestHitEntryPoint.writeRef());
+            componentTypes.push_back(closestHitEntryPoint);
+            Slang::ComPtr<slang::IEntryPoint> missEntryPoint;
+            module->findEntryPointByName("MissMain", missEntryPoint.writeRef());
+            componentTypes.push_back(missEntryPoint);
+            
+            Slang::ComPtr<slang::IComponentType> program;
+            {
+                Slang::ComPtr<slang::IBlob> diagnosticBlob;
+                session->createCompositeComponentType(componentTypes.data(), componentTypes.size(), program.writeRef(), diagnosticBlob.writeRef());
+                if (diagnosticBlob)
+                {
+                    OutputDebugStringA(reinterpret_cast<const char*>(diagnosticBlob->getBufferPointer()));
+                    OutputDebugStringA("\n");
+                    DebugBreak();
+                    return false;
+                }
+
+                if(program == nullptr)
+                {
+                    assert(false && "Failed to create composite component type");
+                    return false;
+                }
             }
-            DebugBreak();
-            return false;
-        }
 
-        hr = gDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(gRootSignature.GetAddressOf()));
-        if(FAILED(hr))
-        {
-            assert(false && "Failed to create root signature");
-            return false;
-        }
+            Slang::ComPtr<slang::IComponentType> linkedProgram;
+            {
+            const std::vector<slang::IComponentType*> components =
+            {
+                program.get(),
+            };
+                Slang::ComPtr<slang::IBlob> diagnosticBlob;
+                session->createCompositeComponentType(components.data(), components.size(), linkedProgram.writeRef(), diagnosticBlob.writeRef());
+                if (diagnosticBlob)
+                {
+                    OutputDebugStringA(reinterpret_cast<const char*>(diagnosticBlob->getBufferPointer()));
+                    OutputDebugStringA("\n");
+                    DebugBreak();
+                    return false;
+                }
 
-        constexpr D3D12_INPUT_ELEMENT_DESC INPUT_ELEMENT_DESCS[2] = 
-        {
-            {
-                .SemanticName = "POSITION",
-                .SemanticIndex = 0,
-                .Format = DXGI_FORMAT_R32G32B32_FLOAT,
-                .InputSlot = 0,
-                .AlignedByteOffset = 0,
-                .InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
-                .InstanceDataStepRate = 0,
-            },
-            {
-                .SemanticName = "NORMAL",
-                .SemanticIndex = 0,
-                .Format = DXGI_FORMAT_R32G32B32_FLOAT,
-                .InputSlot = 0,
-                .AlignedByteOffset = 12,
-                .InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
-                .InstanceDataStepRate = 0,
-            },
-        };
+                if(linkedProgram == nullptr)
+                {
+                    assert(false && "Failed to create composite component type");
+                    return false;
+                }
+            }
 
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc = 
-        {
-            .pRootSignature = gRootSignature.Get(),
-            .VS = gVsShader ? D3D12_SHADER_BYTECODE{ gVsShader->getBufferPointer(), gVsShader->getBufferSize() } : D3D12_SHADER_BYTECODE{ nullptr, 0 },
-            .PS = gFsShader ? D3D12_SHADER_BYTECODE{ gFsShader->getBufferPointer(), gFsShader->getBufferSize() } : D3D12_SHADER_BYTECODE{ nullptr, 0 },
-            .BlendState =
+            gRayGenShader = compileShader(program, shaderAbsPath, ShaderType::RAY_GEN, 0);
+            if(gRayGenShader == nullptr)
             {
-                .AlphaToCoverageEnable = FALSE,
-                .IndependentBlendEnable = FALSE,
-                .RenderTarget = 
+                assert(false && "Failed to compile ray generation shader");
+                return false;
+            }
+            gClosestHitShader = compileShader(program, shaderAbsPath, ShaderType::CLOSEST_HIT, 1);
+            if(gClosestHitShader == nullptr)
+            {
+                assert(false && "Failed to compile closest hit shader");
+                return false;
+            }
+            gMissShader = compileShader(program, shaderAbsPath, ShaderType::MISS, 2);
+            if(gMissShader == nullptr)
+            {
+                assert(false && "Failed to compile miss shader");
+                return false;
+            }
+
+            // Global root signature
+            {
+                const D3D12_DESCRIPTOR_RANGE descriptorRange[]
                 {
                     {
-                        .BlendEnable = FALSE,
-                        .RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL,
+                        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+                        .NumDescriptors = 1,
+                        .BaseShaderRegister = 0,
+                        .RegisterSpace = 0,
+                        .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
                     },
-                },             
-            },
-            .SampleMask = std::numeric_limits<uint32>::max(),
-            .RasterizerState = 
-            {
-                .FillMode = D3D12_FILL_MODE_SOLID,
-                .CullMode = D3D12_CULL_MODE_BACK,
-                .FrontCounterClockwise = FALSE,
-                .DepthBias = 0,
-                .DepthBiasClamp = 0.0f,
-                .SlopeScaledDepthBias = 0.0f,
-                .DepthClipEnable = TRUE,
-                .MultisampleEnable = FALSE,
-                .AntialiasedLineEnable = FALSE,
-                .ForcedSampleCount = 0,
-                .ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF
-            },
-            .DepthStencilState =
-            {
-                .DepthEnable = TRUE,
-                .DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL,
-                .DepthFunc = D3D12_COMPARISON_FUNC_LESS,
-            },
-            .InputLayout = 
-            {
-                .pInputElementDescs = INPUT_ELEMENT_DESCS,
-                .NumElements = static_cast<UINT>(CGS_ARRAYSIZE(INPUT_ELEMENT_DESCS)),
-            },
-            .PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
-            .NumRenderTargets = 1,
-            .RTVFormats = { DXGI_FORMAT_R8G8B8A8_UNORM },
-            .DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT,
-            .SampleDesc = { 1, 0 },
-            .NodeMask = 0,
-            .CachedPSO = {},
-            .Flags = D3D12_PIPELINE_STATE_FLAG_NONE,
-        };
+                };
+                const D3D12_ROOT_PARAMETER rootParameters[static_cast<uint32>(GlobalRootSignatureParams::COUNT)] = 
+                { 
+                    {
+                        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+                        .DescriptorTable = 
+                        {
+                            .NumDescriptorRanges = CGS_ARRAYSIZE(descriptorRange),
+                            .pDescriptorRanges = descriptorRange,
+                        },
+                        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+                    }, 
+                    {
+                        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+                        .Descriptor = 
+                        {
+                            .ShaderRegister = 0,
+                            .RegisterSpace = 0,
+                        },
+                        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+                    }
+                };
 
-        hr = gDevice->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(gPipelineState.GetAddressOf()));
-        if(FAILED(hr))
-        {
-            assert(false && "Failed to create pipeline state");
-            return false;
+                const D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc =
+                {
+                    .NumParameters = CGS_ARRAYSIZE(rootParameters),
+                    .pParameters = rootParameters,
+                    .NumStaticSamplers = 0,
+                    .pStaticSamplers = nullptr,
+                    .Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE,
+                };
+
+                D3DPtr<ID3DBlob> signature;
+                D3DPtr<ID3DBlob> error;
+                hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, signature.GetAddressOf(), error.GetAddressOf());
+                if (FAILED(hr))
+                {
+                    if (error != nullptr)
+                    {
+                        OutputDebugStringA(reinterpret_cast<const char*>(error->GetBufferPointer()));
+                        OutputDebugStringA("\n");
+                    }
+                    DebugBreak();
+                    return false;
+                }
+
+                hr = gDevice->CreateRootSignature(1, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(gRaytracingGlobalRootSignature.GetAddressOf()));
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to create root signature");
+                    return false;
+                }
+            } // Global root signature
+
+            // Local root signature
+            {
+                const D3D12_ROOT_PARAMETER rootParameters[static_cast<uint32>(LocalRootSignatureParams::COUNT)] = 
+                { 
+                    {
+                        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
+                        .Constants =
+                        {
+                            .ShaderRegister = 0,
+                            .RegisterSpace = 0,
+                            .Num32BitValues = sizeof(RayGenConstantBuffer) / 4,
+                        },
+                        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+                    }, 
+                };
+
+                const D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc =
+                {
+                    .NumParameters = CGS_ARRAYSIZE(rootParameters),
+                    .pParameters = rootParameters,
+                    .NumStaticSamplers = 0,
+                    .pStaticSamplers = nullptr,
+                    .Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE,
+                };
+
+                D3DPtr<ID3DBlob> signature;
+                D3DPtr<ID3DBlob> error;
+                hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, signature.GetAddressOf(), error.GetAddressOf());
+                if (FAILED(hr))
+                {
+                    if (error != nullptr)
+                    {
+                        OutputDebugStringA(reinterpret_cast<const char*>(error->GetBufferPointer()));
+                        OutputDebugStringA("\n");
+                    }
+                    DebugBreak();
+                    return false;
+                }
+
+                hr = gDevice->CreateRootSignature(1, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(gRaytracingLocalRootSignature.GetAddressOf()));
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to create root signature");
+                    return false;
+                }
+            } // Local root signature
+
+            std::vector<D3D12_EXPORT_DESC> exportDescs =
+            {
+                {
+                    .Name = L"RayGenMain",
+                    .ExportToRename = nullptr,
+                    .Flags = D3D12_EXPORT_FLAG_NONE,
+                },
+                {
+                    .Name = L"ClosestHitMain",
+                    .ExportToRename = nullptr,
+                    .Flags = D3D12_EXPORT_FLAG_NONE,
+                },
+                {
+                    .Name = L"MissMain",
+                    .ExportToRename = nullptr,
+                    .Flags = D3D12_EXPORT_FLAG_NONE,
+                },
+            };
+            const std::vector<D3D12_DXIL_LIBRARY_DESC> libraries = 
+            {
+                {
+                    .DXILLibrary = 
+                    {
+                        .pShaderBytecode = gRayGenShader->getBufferPointer(),
+                        .BytecodeLength = gRayGenShader->getBufferSize(),
+                    },
+                    .NumExports = 1,
+                    .pExports = &exportDescs[0],
+                },
+                {
+                    .DXILLibrary = 
+                    {
+                        .pShaderBytecode = gClosestHitShader->getBufferPointer(),
+                        .BytecodeLength = gClosestHitShader->getBufferSize(),
+                    },
+                    .NumExports = 1,
+                    .pExports = &exportDescs[1],
+                },
+                {
+                    .DXILLibrary = 
+                    {
+                        .pShaderBytecode = gMissShader->getBufferPointer(),
+                        .BytecodeLength = gMissShader->getBufferSize(),
+                    },
+                    .NumExports = 1,
+                    .pExports = &exportDescs[2],
+                },
+            };
+
+            const D3D12_HIT_GROUP_DESC hitGroupDesc =
+            {
+                .HitGroupExport = L"HitGroup",
+                .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+                .ClosestHitShaderImport = L"ClosestHitMain",
+            };
+
+            const D3D12_RAYTRACING_SHADER_CONFIG raytracingShaderConfig =
+            {
+                .MaxPayloadSizeInBytes = 4 * sizeof(float),     // float4 color
+                .MaxAttributeSizeInBytes = 2 * sizeof(float),   // float2 barycentrics
+            };
+
+            D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION localRootSignatureAssociation =
+            {
+                .pSubobjectToAssociate = nullptr,
+                .NumExports = 1,
+                .pExports = &exportDescs[0].Name,
+            };
+
+            const D3D12_RAYTRACING_PIPELINE_CONFIG pipelineConfig =
+            {
+                .MaxTraceRecursionDepth = 1,
+            };
+
+            std::vector<D3D12_STATE_SUBOBJECT> subObjects = 
+            {
+                {
+                    .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY,
+                    .pDesc = &libraries[0],
+                },
+                {
+                    .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY,
+                    .pDesc = &libraries[1],
+                },
+                {
+                    .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY,
+                    .pDesc = &libraries[2],
+                },
+                {
+                    .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP,
+                    .pDesc = &hitGroupDesc,
+                },
+                {
+                    .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG,
+                    .pDesc = &raytracingShaderConfig,
+                },
+                {
+                    .Type = D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE,
+                    .pDesc = gRaytracingLocalRootSignature.GetAddressOf(),
+                },
+                {
+                    .Type = D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION,
+                    .pDesc = &localRootSignatureAssociation,
+                },
+                {
+                    .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE,
+                    .pDesc = gRaytracingGlobalRootSignature.GetAddressOf(),
+                },
+                {
+                    .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG,
+                    .pDesc = &pipelineConfig,
+                },
+            };
+            localRootSignatureAssociation.pSubobjectToAssociate = &subObjects[5];
+
+            const D3D12_STATE_OBJECT_DESC stateObjectDesc =
+            {
+                .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
+                .NumSubobjects = static_cast<uint32>(subObjects.size()),
+                .pSubobjects = subObjects.data(),
+            };
+            hr = gDevice->CreateStateObject(&stateObjectDesc, IID_PPV_ARGS(gRaytracingStateObject.GetAddressOf()));
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to create raytracing pipeline state object");
+                return false;
+            }
         }
 
         return true;
@@ -519,8 +947,12 @@ namespace cgs
         gEmissiveBuffer.reset();
         gCameraBuffer.reset();
 
-        DestroyD3D12Object(gPipelineState);
-        DestroyD3D12Object(gRootSignature);
+        DestroyD3D12Object(gRaytracingStateObject);
+        DestroyD3D12Object(gRaytracingLocalRootSignature);
+        DestroyD3D12Object(gRaytracingGlobalRootSignature);
+
+        DestroyD3D12Object(gRasterizationPipelineState);
+        DestroyD3D12Object(gRasterizationRootSignature);
         if(gVsShader != nullptr)
         {
             gVsShader->Release();
@@ -1212,6 +1644,244 @@ namespace cgs
             assert(false && "Failed to create vertex buffer");
             outGeometries.pop_back();
         }
+        
+#if 0
+        // AS
+        {
+            ID3D12CommandAllocator& graphicsCommandAllocator = *gGraphicsCommandAllocators[0].Get();
+            hr = graphicsCommandAllocator.Reset();
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to reset command allocator");
+                return false;
+            }
+
+            ID3D12GraphicsCommandList4& graphicsCommandList = *gGraphicsCommandLists[0].Get();
+            hr = graphicsCommandList.Reset(&graphicsCommandAllocator, nullptr);
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to reset command list");
+                return false;
+            }
+
+            for(std::unique_ptr<Geometry>& geometry : outGeometries)
+            {
+                if(geometry == nullptr)
+                {
+                    continue;
+                }
+
+                VertexBuffer& vertexBuffer = geometry->GetVertexBuffer();
+                IndexBuffer& indexBuffer = geometry->GetIndexBuffer();
+
+                const D3D12_INDEX_BUFFER_VIEW& ibView = indexBuffer.GetIndexBufferView();
+
+                // Describe the geometry
+                const D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = 
+                {
+                    .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
+                    .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
+                    .Triangles = 
+                    {
+                        .Transform3x4 = 0,
+                        .IndexFormat = DXGI_FORMAT_R16_UINT,
+                        .VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
+                        .IndexCount = static_cast<UINT>(ibView.SizeInBytes / sizeof(uint16)),
+                        .VertexCount = static_cast<UINT>(vertexBuffer.GetVertexBufferView().SizeInBytes / sizeof(VertexPN)),
+                        .IndexBuffer = indexBuffer.GetGPUVirtualAddress(),
+                        .VertexBuffer = 
+                        {
+                            .StartAddress = vertexBuffer.GetGPUVirtualAddress(),
+                            .StrideInBytes = sizeof(VertexPN),
+                        },
+                    },
+                };
+                
+                const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+                D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS topLevelInputs = 
+                {
+                    .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
+                    .Flags = buildFlags,
+                    .NumDescs = 1,
+                    .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+                };
+
+                D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO topLevelPrebuildInfo = {};
+                gDevice->GetRaytracingAccelerationStructurePrebuildInfo(&topLevelInputs, &topLevelPrebuildInfo);
+                if(topLevelPrebuildInfo.ResultDataMaxSizeInBytes <= 0)
+                {
+                    assert(false && "Invalid top-level AS prebuild info");
+                    return false;
+                }
+                
+                D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO bottomLevelPrebuildInfo = {};
+                D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS bottomLevelInputs = topLevelInputs;
+                bottomLevelInputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+                bottomLevelInputs.pGeometryDescs = &geometryDesc;
+                gDevice->GetRaytracingAccelerationStructurePrebuildInfo(&bottomLevelInputs, &bottomLevelPrebuildInfo);
+                if(bottomLevelPrebuildInfo.ResultDataMaxSizeInBytes <= 0)
+                {
+                    assert(false && "Invalid bottom-level AS prebuild info");
+                    return false;
+                }
+
+                D3DPtr<ID3D12Resource> scratchResource;
+                {
+                    D3D12_HEAP_PROPERTIES heapProperties = 
+                    {
+                        .Type = D3D12_HEAP_TYPE_DEFAULT,
+                        .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+                        .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+                        .CreationNodeMask = 1,
+                        .VisibleNodeMask = 1,
+                    };
+
+                    D3D12_RESOURCE_DESC bufferDesc =
+                    {
+                        .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+                        .Alignment = 0,
+                        .Width = Align(std::max(bottomLevelPrebuildInfo.ScratchDataSizeInBytes, topLevelPrebuildInfo.ScratchDataSizeInBytes), static_cast<size_t>(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT)),
+                        .Height = 1,
+                        .DepthOrArraySize = 1,
+                        .MipLevels = 1,
+                        .Format = DXGI_FORMAT_UNKNOWN,
+                        .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+                        .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+                        .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                    };
+                    hr = gDevice->CreateCommittedResource(
+                        &heapProperties,
+                        D3D12_HEAP_FLAG_NONE,
+                        &bufferDesc,
+                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                        nullptr,
+                        IID_PPV_ARGS(scratchResource.GetAddressOf())
+                    );
+                    if(FAILED(hr))
+                    {
+                        assert(false && "Failed to create scratch resource for AS");
+                        return false;
+                    }
+                    scratchResource->SetName(TEXT("ScratchResourceForAS"));
+                    
+                    // Allocate resources for acceleration structures.
+                    // Acceleration structures can only be placed in resources that are created in the default heap (or custom heap equivalent). 
+                    // Default heap is OK since the application doesn’t need CPU read/write access to them. 
+                    // The resources that will contain acceleration structures must be created in the state D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, 
+                    // and must have resource flag D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS. The ALLOW_UNORDERED_ACCESS requirement simply acknowledges both: 
+                    //  - the system will be doing this type of access in its implementation of acceleration structure builds behind the scenes.
+                    //  - from the app point of view, synchronization of writes/reads to acceleration structures is accomplished using UAV barriers.
+                    {
+                        bufferDesc.Width = Align(bottomLevelPrebuildInfo.ResultDataMaxSizeInBytes, static_cast<uint64>(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
+                        hr = gDevice->CreateCommittedResource(
+                            &heapProperties,
+                            D3D12_HEAP_FLAG_NONE,
+                            &bufferDesc,
+                            D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
+                            nullptr,
+                            IID_PPV_ARGS(gBottomLevelAccelerationStructure.GetAddressOf())
+                        );
+                        if(FAILED(hr))
+                        {
+                            assert(false && "Failed to create scratch resource for AS");
+                            return false;
+                        }
+                        scratchResource->SetName(TEXT("BottomLevelAccelerationStructure"));
+
+                        bufferDesc.Width = Align(topLevelPrebuildInfo.ResultDataMaxSizeInBytes, static_cast<uint64>(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
+                        hr = gDevice->CreateCommittedResource(
+                            &heapProperties,
+                            D3D12_HEAP_FLAG_NONE,
+                            &bufferDesc,
+                            D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
+                            nullptr,
+                            IID_PPV_ARGS(gTopLevelAccelerationStructure.GetAddressOf())
+                        );
+                        if(FAILED(hr))
+                        {
+                            assert(false && "Failed to create scratch resource for AS");
+                            return false;
+                        }
+                        scratchResource->SetName(TEXT("TopLevelAccelerationStructure"));
+                    }
+
+                    // Create an instance desc for the bottom-level acceleration structure.
+                    D3DPtr<ID3D12Resource> instanceDescs;
+                    D3D12_RAYTRACING_INSTANCE_DESC instanceDesc = 
+                    {
+                        .InstanceMask = 1,
+                        .AccelerationStructure = gBottomLevelAccelerationStructure->GetGPUVirtualAddress(),
+                    };
+                    instanceDesc.Transform[0][0] = instanceDesc.Transform[1][1] = instanceDesc.Transform[2][2] = 1.0f;
+                    heapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
+                    bufferDesc.Width = Align(sizeof(instanceDesc), static_cast<size_t>(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
+                    bufferDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+                    hr = gDevice->CreateCommittedResource(
+                        &heapProperties,
+                        D3D12_HEAP_FLAG_NONE,
+                        &bufferDesc,
+                        D3D12_RESOURCE_STATE_GENERIC_READ,
+                        nullptr,
+                        IID_PPV_ARGS(instanceDescs.GetAddressOf())
+                    );
+                    if(FAILED(hr))
+                    {
+                        assert(false && "Failed to create scratch resource for AS");
+                        return false;
+                    }
+                    scratchResource->SetName(TEXT("InstanceDescs"));
+                    
+                    void* mappedData = nullptr;
+                    hr = instanceDescs->Map(0, nullptr, &mappedData);
+                    if(FAILED(hr))
+                    {
+                        assert(false && "Failed to map instance descs");
+                        return false;
+                    }
+                    memcpy(mappedData, &instanceDesc, sizeof(instanceDesc));
+                    instanceDescs->Unmap(0, nullptr);
+
+                    // Bottom Level Acceleration Structure desc
+                    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC bottomLevelBuildDesc =
+                    {
+                        .DestAccelerationStructureData = gBottomLevelAccelerationStructure->GetGPUVirtualAddress(),
+                        .Inputs = bottomLevelInputs,
+                        .ScratchAccelerationStructureData = scratchResource->GetGPUVirtualAddress(),
+                    };
+
+                    // Top Level Acceleration Structure desc
+                    topLevelInputs.InstanceDescs = instanceDescs->GetGPUVirtualAddress();
+                    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC topLevelBuildDesc =
+                    {
+                        .DestAccelerationStructureData = gTopLevelAccelerationStructure->GetGPUVirtualAddress(),
+                        .Inputs = topLevelInputs,
+                        .ScratchAccelerationStructureData = scratchResource->GetGPUVirtualAddress(),
+                    };
+
+                    graphicsCommandList.BuildRaytracingAccelerationStructure(&bottomLevelBuildDesc, 0, nullptr);
+                    D3D12_RESOURCE_BARRIER barrier =
+                    {
+                        .Type = D3D12_RESOURCE_BARRIER_TYPE_UAV,
+                        .UAV = 
+                        {
+                            .pResource = gBottomLevelAccelerationStructure.Get(),
+                        },
+                    };
+                    graphicsCommandList.ResourceBarrier(1, &barrier);
+                    graphicsCommandList.BuildRaytracingAccelerationStructure(&topLevelBuildDesc, 0, nullptr);
+                    
+                    // Kick off acceleration structure construction.
+                    graphicsCommandList.Close();
+                    ID3D12CommandList* commandLists[] = { &graphicsCommandList, };
+                    gGraphicsCommandQueue->ExecuteCommandLists(CGS_ARRAYSIZE(commandLists), commandLists);
+                    gGraphicsCommandQueue->Signal(gFence.Get(), 0);
+
+                    // Wait for GPU to finish as the locally created temporary GPU resources will get released once we go out of scope.
+                    waitForFrame(0);
+                }
+            }
+        }
+#endif
 
         return true;
     }
@@ -1281,7 +1951,7 @@ namespace cgs
                 }
                 ID3D12CommandAllocator& graphicsCommandAllocator = *graphicsCommandAllocatorOrNull.Get();
 
-                D3DPtr<ID3D12GraphicsCommandList>& graphicsCommandListOrNull = gGraphicsCommandLists[renderWork.FrameIndex];
+                D3DPtr<ID3D12GraphicsCommandList4>& graphicsCommandListOrNull = gGraphicsCommandLists[renderWork.FrameIndex];
                 if(graphicsCommandListOrNull == nullptr)
                 {
                     assert(false && "Command list is null");
@@ -1301,7 +1971,7 @@ namespace cgs
                     continue;
                 }
 
-                hr = graphicsCommandList.Reset(&graphicsCommandAllocator, gPipelineState.Get());
+                hr = graphicsCommandList.Reset(&graphicsCommandAllocator, gRasterizationPipelineState.Get());
                 if(FAILED(hr))
                 {
                     assert(false && "Failed to reset command list");
@@ -1309,7 +1979,7 @@ namespace cgs
                     continue;
                 }
 
-                graphicsCommandList.SetGraphicsRootSignature(gRootSignature.Get());
+                graphicsCommandList.SetGraphicsRootSignature(gRasterizationRootSignature.Get());
 
                 ID3D12DescriptorHeap* heaps[] = { gCbvSrvUavHeap.Get() };
                 graphicsCommandList.SetDescriptorHeaps(CGS_ARRAYSIZE(heaps), heaps);
@@ -1581,7 +2251,7 @@ namespace cgs
         const D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc =
         {
             .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-            .NumDescriptors = BACK_BUFFERS_COUNT,
+            .NumDescriptors = 2,
             .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
             .NodeMask = 0,
         };
@@ -1730,17 +2400,28 @@ namespace cgs
 
         for (uint32 frameBufferIndex = 0; frameBufferIndex < BACK_BUFFERS_COUNT; ++frameBufferIndex)
         {
-            hr = gDevice->CreateCommandList1(
-                0,
-                D3D12_COMMAND_LIST_TYPE_DIRECT,
-                D3D12_COMMAND_LIST_FLAG_NONE,
-                IID_PPV_ARGS(gGraphicsCommandLists[frameBufferIndex].GetAddressOf())
-            );
-            if (FAILED(hr))
             {
-                assert(false && "Failed to create command list");
-                return false;
+                D3DPtr<ID3D12GraphicsCommandList> commandList;
+                hr = gDevice->CreateCommandList1(
+                    0,
+                    D3D12_COMMAND_LIST_TYPE_DIRECT,
+                    D3D12_COMMAND_LIST_FLAG_NONE,
+                    IID_PPV_ARGS(commandList.GetAddressOf())
+                );
+                if (FAILED(hr))
+                {
+                    assert(false && "Failed to create command list");
+                    return false;
+                }
+
+                hr = commandList->QueryInterface(IID_PPV_ARGS(gGraphicsCommandLists[frameBufferIndex].GetAddressOf()));
+                if (FAILED(hr))
+                {
+                    assert(false && "Failed to get command list interface");
+                    return false;
+                }
             }
+
             const std::wstring commandListName = L"Main Graphics Command List [" + std::to_wstring(frameBufferIndex) + L"]";
             gGraphicsCommandLists[frameBufferIndex]->SetName(commandListName.c_str());
         }

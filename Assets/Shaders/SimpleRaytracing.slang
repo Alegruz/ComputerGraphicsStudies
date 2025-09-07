@@ -1,0 +1,80 @@
+// shaders.slang
+
+struct Viewport
+{
+    float Left;
+    float Top;
+    float Right;
+    float Bottom;
+};
+
+struct RayGenConstantBuffer
+{
+    Viewport CurrentViewport;
+    Viewport CurrentStencil;
+};
+
+uniform RaytracingAccelerationStructure gScene;
+uniform RWTexture2D gRenderTarget;
+uniform RayGenConstantBuffer gRayGenConstantBuffer;
+
+struct RayPayload
+{
+    float4 color;
+};
+
+bool IsInsideViewport(float2 p, Viewport viewport)
+{
+    return (p.x >= viewport.Left && p.x <= viewport.Right)
+        && (p.y >= viewport.Top && p.y <= viewport.Bottom);
+}
+
+[shader("raygeneration")]
+void RayGenMain()
+{
+    float2 lerpValues = DispatchRaysIndex().xy / DispatchRaysDimensions().xy;
+
+    // Orthographic projection since we're raytracing in screen space.
+    float3 rayDir = float3(0, 0, 1);
+    float3 origin = float3(
+        lerp(gRayGenConstantBuffer.CurrentViewport.Left, gRayGenConstantBuffer.CurrentViewport.Right, lerpValues.x),
+        lerp(gRayGenConstantBuffer.CurrentViewport.Top, gRayGenConstantBuffer.CurrentViewport.Bottom, lerpValues.y),
+        0.0f);
+
+    if (IsInsideViewport(origin.xy, gRayGenConstantBuffer.CurrentStencil))
+    {
+        // Trace the ray.
+        // Set the ray's extents.
+        RayDesc ray;
+        ray.Origin = origin;
+        ray.Direction = rayDir;
+        // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
+        // TMin should be kept small to prevent missing geometry at close contact areas.
+        ray.TMin = 0.001;
+        ray.TMax = 10000.0;
+        RayPayload payload = { float4(0, 0, 0, 0) };
+        TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
+
+        // Write the raytraced color to the output texture.
+        gRenderTarget[DispatchRaysIndex().xy] = payload.color;
+    }
+    else
+    {
+        // Render interpolated DispatchRaysIndex outside the stencil window
+        gRenderTarget[DispatchRaysIndex().xy] = float4(lerpValues, 0, 1);
+    }
+}
+
+
+[shader("closesthit")]
+void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+{
+    float3 barycentrics = float3(1 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
+    payload.color = float4(barycentrics, 1);
+}
+
+[shader("miss")]
+void MissMain(inout RayPayload payload)
+{
+    payload.color = float4(0, 0, 0, 1);
+}

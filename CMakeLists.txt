@@ -157,6 +157,15 @@ if(DEFINED GRAPHICS_API_TYPE)
         target_include_directories(ComputerGraphicsStudies PRIVATE ${SLANG_DIR}/include)
         target_link_directories(ComputerGraphicsStudies PRIVATE ${SLANG_DIR}/lib)
         target_link_libraries(ComputerGraphicsStudies PRIVATE slang)
+
+        file(GLOB SLANG_PDB_FILES "${SLANG_DIR}/bin/*.pdb")
+        foreach(PDB_FILE ${SLANG_PDB_FILES})
+            add_custom_command(TARGET ComputerGraphicsStudies POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${PDB_FILE}"
+                "${CMAKE_CURRENT_LIST_DIR}/"
+            )
+        endforeach()
     else()
         message(FATAL_ERROR "Unsupported graphics API type")
     endif()

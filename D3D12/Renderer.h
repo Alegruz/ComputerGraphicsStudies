@@ -612,8 +612,12 @@ namespace cgs
         GetColor() const noexcept { return mColor; }
         [[nodiscard]] CGS_INLINE constexpr const VertexBuffer&
         GetVertexBuffer() const noexcept { return mVertexBuffer; }
+        [[nodiscard]] CGS_INLINE constexpr VertexBuffer&
+        GetVertexBuffer() noexcept { return mVertexBuffer; }
         [[nodiscard]] CGS_INLINE constexpr const IndexBuffer&
         GetIndexBuffer() const noexcept { return mIndexBuffer; }
+        [[nodiscard]] CGS_INLINE constexpr IndexBuffer&
+        GetIndexBuffer() noexcept { return mIndexBuffer; }
         [[nodiscard]] CGS_INLINE constexpr const std::string&
         GetName() const noexcept { return mName; }
 
