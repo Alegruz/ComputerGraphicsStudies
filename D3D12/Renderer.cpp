@@ -1645,7 +1645,6 @@ namespace cgs
             outGeometries.pop_back();
         }
         
-#if 0
         // AS
         {
             ID3D12CommandAllocator& graphicsCommandAllocator = *gGraphicsCommandAllocators[0].Get();
@@ -1753,7 +1752,7 @@ namespace cgs
                         &heapProperties,
                         D3D12_HEAP_FLAG_NONE,
                         &bufferDesc,
-                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                        D3D12_RESOURCE_STATE_COMMON,
                         nullptr,
                         IID_PPV_ARGS(scratchResource.GetAddressOf())
                     );
@@ -1881,7 +1880,6 @@ namespace cgs
                 }
             }
         }
-#endif
 
         return true;
     }
