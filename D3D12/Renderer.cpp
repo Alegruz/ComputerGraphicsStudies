@@ -24,6 +24,16 @@ namespace cgs
         COUNT,
     };
 
+    struct ASBuildInfo final
+    {
+        D3DPtr<ID3D12Resource>                              ScratchResource = D3DPtr<ID3D12Resource>();
+        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS BottomLevelInputs = {};
+        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS TopLevelInputs = {};
+        D3DPtr<ID3D12Resource>                              InstanceDescs = D3DPtr<ID3D12Resource>();
+        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC  BottomLevelBuildDesc = {};
+        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC  TopLevelBuildDesc = {};
+    };
+    
     struct SceneRenderTarget final
     {
         Texture ColorBuffer;
@@ -98,8 +108,8 @@ namespace cgs
     static Slang::ComPtr<slang::IBlob> gMissShader;
     static D3DPtr<ID3D12StateObject> gRaytracingStateObject;
     static D3DPtr<ID3D12Resource> gAccelerationStructure;
-    static D3DPtr<ID3D12Resource> gBottomLevelAccelerationStructure;
-    static D3DPtr<ID3D12Resource> gTopLevelAccelerationStructure;
+    static std::vector<D3DPtr<ID3D12Resource>> gBottomLevelAccelerationStructures;
+    static std::vector<D3DPtr<ID3D12Resource>> gTopLevelAccelerationStructures;
 
     enum class ShaderType : uint8
     {
@@ -947,6 +957,15 @@ namespace cgs
         gEmissiveBuffer.reset();
         gCameraBuffer.reset();
 
+        for(D3DPtr<ID3D12Resource>& bottomLevelAccelerationStructure : gBottomLevelAccelerationStructures)
+        {
+            DestroyD3D12Object(bottomLevelAccelerationStructure);
+        }
+
+        for(D3DPtr<ID3D12Resource>& topLevelAccelerationStructure : gTopLevelAccelerationStructures)
+        {
+            DestroyD3D12Object(topLevelAccelerationStructure);
+        }
         DestroyD3D12Object(gRaytracingStateObject);
         DestroyD3D12Object(gRaytracingLocalRootSignature);
         DestroyD3D12Object(gRaytracingGlobalRootSignature);
@@ -969,6 +988,33 @@ namespace cgs
         else
         {
             assert(false && "gFsShader is null");
+        }
+
+        if(gMissShader != nullptr)
+        {
+            gMissShader->Release();
+        }
+        else
+        {
+            assert(false && "gMissShader is null");
+        }
+
+        if(gClosestHitShader != nullptr)
+        {
+            gClosestHitShader->Release();
+        }
+        else
+        {
+            assert(false && "gClosestHitShader is null");
+        }
+
+        if(gRayGenShader != nullptr)
+        {
+            gRayGenShader->Release();
+        }
+        else
+        {
+            assert(false && "gRayGenShader is null");
         }
 
         DestroyD3D12Object(gFence);
@@ -1663,12 +1709,21 @@ namespace cgs
                 return false;
             }
 
+            std::vector<ASBuildInfo> asBuildInfos;
+            const uint32 geometriesCount = static_cast<uint32>(outGeometries.size());
+            asBuildInfos.reserve(geometriesCount);
+            gBottomLevelAccelerationStructures.resize(geometriesCount);
+            gTopLevelAccelerationStructures.resize(geometriesCount);
             for(std::unique_ptr<Geometry>& geometry : outGeometries)
             {
                 if(geometry == nullptr)
                 {
                     continue;
                 }
+
+                const uint32 index = static_cast<uint32>(asBuildInfos.size());
+                asBuildInfos.push_back(ASBuildInfo{});
+                ASBuildInfo& asBuildInfo = asBuildInfos.back();
 
                 VertexBuffer& vertexBuffer = geometry->GetVertexBuffer();
                 IndexBuffer& indexBuffer = geometry->GetIndexBuffer();
@@ -1697,7 +1752,7 @@ namespace cgs
                 };
                 
                 const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
-                D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS topLevelInputs = 
+                asBuildInfo.TopLevelInputs = 
                 {
                     .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
                     .Flags = buildFlags,
@@ -1706,7 +1761,7 @@ namespace cgs
                 };
 
                 D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO topLevelPrebuildInfo = {};
-                gDevice->GetRaytracingAccelerationStructurePrebuildInfo(&topLevelInputs, &topLevelPrebuildInfo);
+                gDevice->GetRaytracingAccelerationStructurePrebuildInfo(&asBuildInfo.TopLevelInputs, &topLevelPrebuildInfo);
                 if(topLevelPrebuildInfo.ResultDataMaxSizeInBytes <= 0)
                 {
                     assert(false && "Invalid top-level AS prebuild info");
@@ -1714,17 +1769,16 @@ namespace cgs
                 }
                 
                 D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO bottomLevelPrebuildInfo = {};
-                D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS bottomLevelInputs = topLevelInputs;
-                bottomLevelInputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-                bottomLevelInputs.pGeometryDescs = &geometryDesc;
-                gDevice->GetRaytracingAccelerationStructurePrebuildInfo(&bottomLevelInputs, &bottomLevelPrebuildInfo);
+                asBuildInfo.BottomLevelInputs = asBuildInfo.TopLevelInputs;
+                asBuildInfo.BottomLevelInputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+                asBuildInfo.BottomLevelInputs.pGeometryDescs = &geometryDesc;
+                gDevice->GetRaytracingAccelerationStructurePrebuildInfo(&asBuildInfo.BottomLevelInputs, &bottomLevelPrebuildInfo);
                 if(bottomLevelPrebuildInfo.ResultDataMaxSizeInBytes <= 0)
                 {
                     assert(false && "Invalid bottom-level AS prebuild info");
                     return false;
                 }
 
-                D3DPtr<ID3D12Resource> scratchResource;
                 {
                     D3D12_HEAP_PROPERTIES heapProperties = 
                     {
@@ -1754,14 +1808,14 @@ namespace cgs
                         &bufferDesc,
                         D3D12_RESOURCE_STATE_COMMON,
                         nullptr,
-                        IID_PPV_ARGS(scratchResource.GetAddressOf())
+                        IID_PPV_ARGS(asBuildInfo.ScratchResource.GetAddressOf())
                     );
                     if(FAILED(hr))
                     {
                         assert(false && "Failed to create scratch resource for AS");
                         return false;
                     }
-                    scratchResource->SetName(TEXT("ScratchResourceForAS"));
+                    asBuildInfo.ScratchResource->SetName(TEXT("ScratchResourceForAS"));
                     
                     // Allocate resources for acceleration structures.
                     // Acceleration structures can only be placed in resources that are created in the default heap (or custom heap equivalent). 
@@ -1770,6 +1824,8 @@ namespace cgs
                     // and must have resource flag D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS. The ALLOW_UNORDERED_ACCESS requirement simply acknowledges both: 
                     //  - the system will be doing this type of access in its implementation of acceleration structure builds behind the scenes.
                     //  - from the app point of view, synchronization of writes/reads to acceleration structures is accomplished using UAV barriers.
+                    D3DPtr<ID3D12Resource>& bottomLevelAccelerationStructure = gBottomLevelAccelerationStructures[index];
+                    D3DPtr<ID3D12Resource>& topLevelAccelerationStructure = gTopLevelAccelerationStructures[index];
                     {
                         bufferDesc.Width = Align(bottomLevelPrebuildInfo.ResultDataMaxSizeInBytes, static_cast<uint64>(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
                         hr = gDevice->CreateCommittedResource(
@@ -1778,15 +1834,15 @@ namespace cgs
                             &bufferDesc,
                             D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
                             nullptr,
-                            IID_PPV_ARGS(gBottomLevelAccelerationStructure.GetAddressOf())
+                            IID_PPV_ARGS(bottomLevelAccelerationStructure.GetAddressOf())
                         );
                         if(FAILED(hr))
                         {
                             assert(false && "Failed to create scratch resource for AS");
                             return false;
                         }
-                        scratchResource->SetName(TEXT("BottomLevelAccelerationStructure"));
-
+                        bottomLevelAccelerationStructure->SetName(TEXT("BottomLevelAccelerationStructure"));
+                    
                         bufferDesc.Width = Align(topLevelPrebuildInfo.ResultDataMaxSizeInBytes, static_cast<uint64>(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
                         hr = gDevice->CreateCommittedResource(
                             &heapProperties,
@@ -1794,22 +1850,21 @@ namespace cgs
                             &bufferDesc,
                             D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
                             nullptr,
-                            IID_PPV_ARGS(gTopLevelAccelerationStructure.GetAddressOf())
+                            IID_PPV_ARGS(topLevelAccelerationStructure.GetAddressOf())
                         );
                         if(FAILED(hr))
                         {
                             assert(false && "Failed to create scratch resource for AS");
                             return false;
                         }
-                        scratchResource->SetName(TEXT("TopLevelAccelerationStructure"));
+                        topLevelAccelerationStructure->SetName(TEXT("TopLevelAccelerationStructure"));
                     }
 
                     // Create an instance desc for the bottom-level acceleration structure.
-                    D3DPtr<ID3D12Resource> instanceDescs;
                     D3D12_RAYTRACING_INSTANCE_DESC instanceDesc = 
                     {
                         .InstanceMask = 1,
-                        .AccelerationStructure = gBottomLevelAccelerationStructure->GetGPUVirtualAddress(),
+                        .AccelerationStructure = bottomLevelAccelerationStructure->GetGPUVirtualAddress(),
                     };
                     instanceDesc.Transform[0][0] = instanceDesc.Transform[1][1] = instanceDesc.Transform[2][2] = 1.0f;
                     heapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
@@ -1821,64 +1876,64 @@ namespace cgs
                         &bufferDesc,
                         D3D12_RESOURCE_STATE_GENERIC_READ,
                         nullptr,
-                        IID_PPV_ARGS(instanceDescs.GetAddressOf())
+                        IID_PPV_ARGS(asBuildInfo.InstanceDescs.GetAddressOf())
                     );
                     if(FAILED(hr))
                     {
                         assert(false && "Failed to create scratch resource for AS");
                         return false;
                     }
-                    scratchResource->SetName(TEXT("InstanceDescs"));
+                    asBuildInfo.ScratchResource->SetName(TEXT("InstanceDescs"));
                     
                     void* mappedData = nullptr;
-                    hr = instanceDescs->Map(0, nullptr, &mappedData);
+                    hr = asBuildInfo.InstanceDescs->Map(0, nullptr, &mappedData);
                     if(FAILED(hr))
                     {
                         assert(false && "Failed to map instance descs");
                         return false;
                     }
                     memcpy(mappedData, &instanceDesc, sizeof(instanceDesc));
-                    instanceDescs->Unmap(0, nullptr);
+                    asBuildInfo.InstanceDescs->Unmap(0, nullptr);
 
                     // Bottom Level Acceleration Structure desc
-                    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC bottomLevelBuildDesc =
+                    asBuildInfo.BottomLevelBuildDesc = 
                     {
-                        .DestAccelerationStructureData = gBottomLevelAccelerationStructure->GetGPUVirtualAddress(),
-                        .Inputs = bottomLevelInputs,
-                        .ScratchAccelerationStructureData = scratchResource->GetGPUVirtualAddress(),
+                        .DestAccelerationStructureData = bottomLevelAccelerationStructure->GetGPUVirtualAddress(),
+                        .Inputs = asBuildInfo.BottomLevelInputs,
+                        .ScratchAccelerationStructureData = asBuildInfo.ScratchResource->GetGPUVirtualAddress(),
                     };
 
                     // Top Level Acceleration Structure desc
-                    topLevelInputs.InstanceDescs = instanceDescs->GetGPUVirtualAddress();
-                    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC topLevelBuildDesc =
+                    asBuildInfo.TopLevelInputs.InstanceDescs = asBuildInfo.InstanceDescs->GetGPUVirtualAddress();
+                    asBuildInfo.TopLevelBuildDesc = 
                     {
-                        .DestAccelerationStructureData = gTopLevelAccelerationStructure->GetGPUVirtualAddress(),
-                        .Inputs = topLevelInputs,
-                        .ScratchAccelerationStructureData = scratchResource->GetGPUVirtualAddress(),
+                        .DestAccelerationStructureData = topLevelAccelerationStructure->GetGPUVirtualAddress(),
+                        .Inputs = asBuildInfo.TopLevelInputs,
+                        .ScratchAccelerationStructureData = asBuildInfo.ScratchResource->GetGPUVirtualAddress(),
                     };
 
-                    graphicsCommandList.BuildRaytracingAccelerationStructure(&bottomLevelBuildDesc, 0, nullptr);
+                    graphicsCommandList.BuildRaytracingAccelerationStructure(&asBuildInfo.BottomLevelBuildDesc, 0, nullptr);
                     D3D12_RESOURCE_BARRIER barrier =
                     {
                         .Type = D3D12_RESOURCE_BARRIER_TYPE_UAV,
                         .UAV = 
                         {
-                            .pResource = gBottomLevelAccelerationStructure.Get(),
+                            .pResource = bottomLevelAccelerationStructure.Get(),
                         },
                     };
                     graphicsCommandList.ResourceBarrier(1, &barrier);
-                    graphicsCommandList.BuildRaytracingAccelerationStructure(&topLevelBuildDesc, 0, nullptr);
-                    
-                    // Kick off acceleration structure construction.
-                    graphicsCommandList.Close();
-                    ID3D12CommandList* commandLists[] = { &graphicsCommandList, };
-                    gGraphicsCommandQueue->ExecuteCommandLists(CGS_ARRAYSIZE(commandLists), commandLists);
-                    gGraphicsCommandQueue->Signal(gFence.Get(), 0);
-
-                    // Wait for GPU to finish as the locally created temporary GPU resources will get released once we go out of scope.
-                    waitForFrame(0);
+                    graphicsCommandList.BuildRaytracingAccelerationStructure(&asBuildInfo.TopLevelBuildDesc, 0, nullptr);
                 }
             }
+                    
+            // Kick off acceleration structure construction.
+            graphicsCommandList.Close();
+            ID3D12CommandList* commandLists[] = { &graphicsCommandList, };
+            gGraphicsCommandQueue->ExecuteCommandLists(CGS_ARRAYSIZE(commandLists), commandLists);
+            gGraphicsCommandQueue->Signal(gFence.Get(), 0);
+
+            // Wait for GPU to finish as the locally created temporary GPU resources will get released once we go out of scope.
+            waitForFrame(0);
         }
 
         return true;
