@@ -9,7 +9,7 @@ namespace cgs
     class D3DPtr final
     {
     public:
-        CGS_INLINE explicit constexpr 
+        CGS_INLINE constexpr 
         D3DPtr() noexcept
             : mPtr(nullptr)
         {
@@ -211,8 +211,8 @@ namespace cgs
         struct CreateInfo final
         {
             D3DPtr<ID3D12Resource> Data;
-            D3D12_CPU_DESCRIPTOR_HANDLE View;
-            D3D12_RESOURCE_STATES State;
+            D3D12_CPU_DESCRIPTOR_HANDLE View = {};
+            D3D12_RESOURCE_STATES State = {};
             std::string Name;
         };
 
@@ -351,6 +351,7 @@ namespace cgs
         {
             RenderResource::CreateInfo ParentCreateInfo;
             bool IsBackBuffer = false;
+            D3D12_UNORDERED_ACCESS_VIEW_DESC UavView;
         };
 
     public:
@@ -358,6 +359,7 @@ namespace cgs
         Texture() noexcept
             : RenderResource()
             , mIsBackBuffer(false)
+            , mUavView{}
         {
         }
 
@@ -365,6 +367,7 @@ namespace cgs
         Texture(CreateInfo&& createInfo) noexcept
             : RenderResource(std::move(createInfo.ParentCreateInfo))
             , mIsBackBuffer(createInfo.IsBackBuffer)
+            , mUavView(createInfo.UavView)
         {
             const D3D12_RESOURCE_DESC desc = mData->GetDesc();
             mWidth = static_cast<uint32>(desc.Width);
@@ -407,6 +410,8 @@ namespace cgs
         GetWidth() const noexcept { return mWidth; }
         CGS_INLINE constexpr uint32
         GetHeight() const noexcept { return mHeight; }
+        CGS_INLINE constexpr const D3D12_UNORDERED_ACCESS_VIEW_DESC&
+        GetUavView() const noexcept { return mUavView; }
 
     protected:
         CGS_INLINE void
@@ -416,6 +421,7 @@ namespace cgs
         bool mIsBackBuffer;
         uint32 mWidth;
         uint32 mHeight;
+        D3D12_UNORDERED_ACCESS_VIEW_DESC mUavView;
     };
 
     class IndexBuffer final : public RenderResource

@@ -97,7 +97,7 @@ namespace cgs
     static std::unique_ptr<ConstantBuffer> gEmissiveBuffer;
 
     // Raytracing
-    static D3DPtr<ID3D12Resource> gRaytracingOutput;
+    static std::unique_ptr<Texture> gRaytracingOutput;
     static D3D12_GPU_DESCRIPTOR_HANDLE gRaytracingOutputResourceUAVGpuDescriptor;
     static uint32 gRaytracingOutputResourceUAVDescriptorHeapIndex = std::numeric_limits<uint32>::max();
     static RayGenConstantBuffer gRayGenConstantBuffer;
@@ -959,6 +959,7 @@ namespace cgs
         geometries.clear();
         gEmissiveBuffer.reset();
         gCameraBuffer.reset();
+        gRaytracingOutput.reset();
 
         for(D3DPtr<ID3D12Resource>& bottomLevelAccelerationStructure : gBottomLevelAccelerationStructures)
         {
@@ -2654,6 +2655,54 @@ namespace cgs
             mappedData += shaderRecordSize;
         }
     
+        // Create the output resource. The dimensions and format should match the swap-chain.
+        Texture::CreateInfo raytracingOutputCreateInfo = {};
+        D3D12_HEAP_PROPERTIES heapProperties = 
+        {
+            .Type = D3D12_HEAP_TYPE_DEFAULT,
+            .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+            .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+            .CreationNodeMask = 1,
+            .VisibleNodeMask = 1,
+        };
+
+        bufferDesc =
+        D3D12_RESOURCE_DESC
+        {
+            .Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+            .Alignment = 0,
+            .Width = cgs::gWidth,
+            .Height = cgs::gHeight,
+            .DepthOrArraySize = 1,
+            .MipLevels = 1,
+            .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+            .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+            .Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN,
+            .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+        };
+        
+        hr = gDevice->CreateCommittedResource(
+            &heapProperties, 
+            D3D12_HEAP_FLAG_NONE, 
+            &bufferDesc, 
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS, 
+            nullptr, 
+            IID_PPV_ARGS(raytracingOutputCreateInfo.ParentCreateInfo.Data.GetAddressOf()));
+        if(FAILED(hr))
+        {
+            assert(false && "Failed to create raytracing output resource");
+            return false;
+        }
+        raytracingOutputCreateInfo.ParentCreateInfo.Data->SetName(TEXT("RaytracingOutput"));
+
+        // m_raytracingOutputResourceUAVDescriptorHeapIndex = AllocateDescriptor(&uavDescriptorHandle, m_raytracingOutputResourceUAVDescriptorHeapIndex);
+        raytracingOutputCreateInfo.ParentCreateInfo.View = gCbvSrvUavHeap->GetCPUDescriptorHandleForHeapStart();
+        
+        raytracingOutputCreateInfo.UavView.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+        gDevice->CreateUnorderedAccessView(raytracingOutputCreateInfo.ParentCreateInfo.Data.Get(), nullptr, &raytracingOutputCreateInfo.UavView, raytracingOutputCreateInfo.ParentCreateInfo.View);
+        gRaytracingOutput = std::make_unique<Texture>(std::move(raytracingOutputCreateInfo));
+        gRaytracingOutputResourceUAVGpuDescriptor = gCbvSrvUavHeap->GetGPUDescriptorHandleForHeapStart();
+
         gGlobalRenderContext.RenderDeviceType = eRenderDeviceType::D3D12;
         return true;
     }
