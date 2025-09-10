@@ -110,6 +110,9 @@ namespace cgs
     static D3DPtr<ID3D12Resource> gAccelerationStructure;
     static std::vector<D3DPtr<ID3D12Resource>> gBottomLevelAccelerationStructures;
     static std::vector<D3DPtr<ID3D12Resource>> gTopLevelAccelerationStructures;
+    static D3DPtr<ID3D12Resource> gRayGenShaderTable;
+    static D3DPtr<ID3D12Resource> gMissShaderTable;
+    static D3DPtr<ID3D12Resource> gHitGroupShaderTable;
 
     enum class ShaderType : uint8
     {
@@ -969,6 +972,10 @@ namespace cgs
         DestroyD3D12Object(gRaytracingStateObject);
         DestroyD3D12Object(gRaytracingLocalRootSignature);
         DestroyD3D12Object(gRaytracingGlobalRootSignature);
+
+        DestroyD3D12Object(gRayGenShaderTable);
+        DestroyD3D12Object(gMissShaderTable);
+        DestroyD3D12Object(gHitGroupShaderTable);
 
         DestroyD3D12Object(gRasterizationPipelineState);
         DestroyD3D12Object(gRasterizationRootSignature);
@@ -2499,6 +2506,152 @@ namespace cgs
         {
             assert(false && "Failed to create shaders");
             return false;
+        }
+
+        D3DPtr<ID3D12StateObjectProperties> stateObjectProperties;
+        hr = gRaytracingStateObject->QueryInterface(IID_PPV_ARGS(stateObjectProperties.GetAddressOf()));
+        if (FAILED(hr))
+        {
+            assert(false && "Failed to get raytracing state object properties");
+            return false;
+        }
+
+        void* rayGenShaderIdentifier = stateObjectProperties->GetShaderIdentifier(TEXT("RayGenMain"));
+        void* missShaderIdentifier = stateObjectProperties->GetShaderIdentifier(TEXT("MissMain"));
+        void* hitGroupShaderIdentifier = stateObjectProperties->GetShaderIdentifier(TEXT("HitGroup"));
+        const uint32 shaderIdentifierSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
+            
+        const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
+        {
+            .Type = D3D12_HEAP_TYPE_UPLOAD,
+            .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+            .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+            .CreationNodeMask = 1,
+            .VisibleNodeMask = 1,
+        };
+
+        D3D12_RESOURCE_DESC bufferDesc =
+        {
+            .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+            .Alignment = 0,
+            .Width = 0,
+            .Height = 1,
+            .DepthOrArraySize = 1,
+            .MipLevels = 1,
+            .Format = DXGI_FORMAT_UNKNOWN,
+            .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+            .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+            .Flags = D3D12_RESOURCE_FLAG_NONE,
+        };
+        // Ray gen shader table
+        {
+            struct RootArguments final
+            {
+                RayGenConstantBuffer ConstantBuffer;
+            };
+
+            RootArguments rootArguments =
+            {
+                .ConstantBuffer = gRayGenConstantBuffer,
+            };
+
+            const uint32 shaderRecordsCount = 1;
+            const uint32 shaderRecordSize = static_cast<uint32>(Align(shaderIdentifierSize + sizeof(rootArguments), static_cast<size_t>(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT)));
+            bufferDesc.Width = shaderRecordsCount * shaderRecordSize;
+            
+            hr = gDevice->CreateCommittedResource(
+                &bufferHeapProperties,
+                D3D12_HEAP_FLAG_NONE,
+                &bufferDesc,
+                D3D12_RESOURCE_STATE_GENERIC_READ,
+                nullptr,
+                IID_PPV_ARGS(gRayGenShaderTable.GetAddressOf()));
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to create ray gen shader table");
+                return false;
+            }
+            gRayGenShaderTable->SetName(TEXT("RayGenShaderTable"));
+
+            uint8_t* mappedData = nullptr;
+            // We don't unmap this until the app closes. Keeping buffer mapped for the lifetime of the resource is okay.
+            D3D12_RANGE range = { .Begin = 0, .End = 0 };
+            hr = gRayGenShaderTable->Map(0, &range, reinterpret_cast<void**>(&mappedData));
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to map ray gen shader table");
+                return false;
+            }
+            
+            memcpy(mappedData, rayGenShaderIdentifier, shaderIdentifierSize);
+            memcpy(mappedData + shaderIdentifierSize, &rootArguments, sizeof(rootArguments));
+            mappedData += shaderRecordSize;
+        }
+
+        // Miss shader table
+        {
+            const uint32 shaderRecordsCount = 1;
+            const uint32 shaderRecordSize = Align(shaderIdentifierSize, static_cast<uint32>(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT));
+            bufferDesc.Width = shaderRecordsCount * shaderRecordSize;
+            
+            hr = gDevice->CreateCommittedResource(
+                &bufferHeapProperties,
+                D3D12_HEAP_FLAG_NONE,
+                &bufferDesc,
+                D3D12_RESOURCE_STATE_GENERIC_READ,
+                nullptr,
+                IID_PPV_ARGS(gMissShaderTable.GetAddressOf()));
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to create miss shader table");
+                return false;
+            }
+
+            uint8_t* mappedData = nullptr;
+            // We don't unmap this until the app closes. Keeping buffer mapped for the lifetime of the resource is okay.
+            D3D12_RANGE range = { .Begin = 0, .End = 0 };
+            hr = gMissShaderTable->Map(0, &range, reinterpret_cast<void**>(&mappedData));
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to map miss shader table");
+                return false;
+            }
+
+            memcpy(mappedData, missShaderIdentifier, shaderIdentifierSize);
+            mappedData += shaderRecordSize;
+        }
+
+        // Hit group shader table
+        {
+            const uint32 shaderRecordsCount = 1;
+            const uint32 shaderRecordSize = Align(shaderIdentifierSize, static_cast<uint32>(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT));
+            bufferDesc.Width = shaderRecordsCount * shaderRecordSize;
+            
+            hr = gDevice->CreateCommittedResource(
+                &bufferHeapProperties,
+                D3D12_HEAP_FLAG_NONE,
+                &bufferDesc,
+                D3D12_RESOURCE_STATE_GENERIC_READ,
+                nullptr,
+                IID_PPV_ARGS(gHitGroupShaderTable.GetAddressOf()));
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to create hit group shader table");
+                return false;
+            }
+
+            uint8_t* mappedData = nullptr;
+            // We don't unmap this until the app closes. Keeping buffer mapped for the lifetime of the resource is okay.
+            D3D12_RANGE range = { .Begin = 0, .End = 0 };
+            hr = gHitGroupShaderTable->Map(0, &range, reinterpret_cast<void**>(&mappedData));
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to map hit group shader table");
+                return false;
+            }
+
+            memcpy(mappedData, hitGroupShaderIdentifier, shaderIdentifierSize);
+            mappedData += shaderRecordSize;
         }
     
         gGlobalRenderContext.RenderDeviceType = eRenderDeviceType::D3D12;
