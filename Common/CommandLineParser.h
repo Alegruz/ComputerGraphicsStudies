@@ -10,6 +10,7 @@ namespace cgs
         INPUT_RESOURCE,
         WIDTH,
         HEIGHT,
+        RENDER_METHOD,
         COUNT,
     };
 

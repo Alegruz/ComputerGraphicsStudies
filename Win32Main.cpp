@@ -427,7 +427,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
         return 4;
     }
 
-    cgs::gRenderThread.RenderMethod = cgs::eRenderMethod::RASTERIZATION;
+    const std::string& renderMethodString = commandLineParser.GetArgument(cgs::eOptionType::RENDER_METHOD);
+
+    cgs::gRenderThread.RenderMethod = cgs::ConvertStringToEnumValue<cgs::eRenderMethod>(renderMethodString);
     cgs::ThreadCreateInfo createInfo =
     {
         .Name = "RenderThread",

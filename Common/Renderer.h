@@ -191,6 +191,21 @@ namespace cgs
         return eRenderDeviceType::CPU;
     }
 
+    template<>
+    CGS_INLINE constexpr eRenderMethod ConvertStringToEnumValue<eRenderMethod>(const std::string& str) noexcept
+    {
+        if (str == "Rasterization" || str == "rasterization" || str == "RASTERIZATION" || str == "raster")
+        {
+            return eRenderMethod::RASTERIZATION;
+        }
+        else if (str == "Raytracing" || str == "raytracing" || str == "RAYTRACING" || str == "ray")
+        {
+            return eRenderMethod::RAYTRACING;
+        }
+        
+        return eRenderMethod::RASTERIZATION;
+    }
+
     [[nodiscard]] Camera&
     InitializeCornellBoxCamera() noexcept;
 

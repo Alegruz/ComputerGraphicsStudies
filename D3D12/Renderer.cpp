@@ -140,6 +140,12 @@ namespace cgs
     createVertexBuffer(VertexBuffer& outVertexBuffer, const std::vector<VertexPN>& vertices, const std::string& name);
 
     void
+    rasterize(ID3D12GraphicsCommandList& graphicsCommandList, SceneRenderTarget& sceneRenderTarget, RenderWork& renderWork) noexcept;
+    
+    void
+    raytracing(ID3D12GraphicsCommandList4& graphicsCommandList, SceneRenderTarget& sceneRenderTarget, RenderWork& renderWork) noexcept;
+
+    void
     waitForFrame(const uint32 frameIndex) noexcept;
 
     void 
@@ -2019,7 +2025,7 @@ namespace cgs
                     renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
                     continue;
                 }
-                ID3D12GraphicsCommandList& graphicsCommandList = *graphicsCommandListOrNull.Get();
+                ID3D12GraphicsCommandList4& graphicsCommandList = *graphicsCommandListOrNull.Get();
 
                 SceneRenderTarget& sceneRenderTarget = gSceneRenderTargets[renderWork.FrameIndex];
 
@@ -2040,84 +2046,19 @@ namespace cgs
                     continue;
                 }
 
-                graphicsCommandList.SetGraphicsRootSignature(gRasterizationRootSignature.Get());
-
-                ID3D12DescriptorHeap* heaps[] = { gCbvSrvUavHeap.Get() };
-                graphicsCommandList.SetDescriptorHeaps(CGS_ARRAYSIZE(heaps), heaps);
-
-                graphicsCommandList.SetGraphicsRootConstantBufferView(0, gCameraBuffer->GetGPUVirtualAddress());
-                graphicsCommandList.SetGraphicsRootConstantBufferView(1, gEmissiveBuffer->GetGPUVirtualAddress());
-                const D3D12_VIEWPORT viewport =
+                switch (renderThreadInfo.RenderMethod)
                 {
-                    .TopLeftX = 0.0f,
-                    .TopLeftY = 0.0f,
-                    .Width = static_cast<float>(sceneRenderTarget.ColorBuffer.GetWidth()),
-                    .Height = static_cast<float>(sceneRenderTarget.ColorBuffer.GetHeight()),
-                    .MinDepth = 0.0f,
-                    .MaxDepth = 1.0f,
+                case eRenderMethod::RASTERIZATION:
+                    rasterize(graphicsCommandList, sceneRenderTarget, renderWork);
+                    break;
+                case eRenderMethod::RAYTRACING:
+                    raytracing(graphicsCommandList, sceneRenderTarget, renderWork);
+                    break;
+                default:
+                    assert(false && "Unknown render method");
+                    renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
+                    continue;
                 };
-                graphicsCommandList.RSSetViewports(1, &viewport);
-                const D3D12_RECT scissorRect = 
-                { 
-                    .left = 0, 
-                    .top = 0, 
-                    .right = static_cast<LONG>(sceneRenderTarget.ColorBuffer.GetWidth()), 
-                    .bottom = static_cast<LONG>(sceneRenderTarget.ColorBuffer.GetHeight()) 
-                };
-                graphicsCommandList.RSSetScissorRects(1, &scissorRect);
-
-                D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[] = { sceneRenderTarget.ColorBuffer.GetView(), };
-                graphicsCommandList.OMSetRenderTargets(CGS_ARRAYSIZE(rtvHandles), rtvHandles, FALSE, &sceneRenderTarget.DepthBuffer.GetView());
-
-                sceneRenderTarget.ColorBuffer.Transition(graphicsCommandList, D3D12_RESOURCE_STATE_RENDER_TARGET);
-
-                constexpr float BLACK_COLOR[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-                graphicsCommandList.ClearRenderTargetView(
-                    sceneRenderTarget.ColorBuffer.GetView(),
-                    BLACK_COLOR,
-                    0,
-                    nullptr
-                );
-                graphicsCommandList.ClearDepthStencilView(
-                    sceneRenderTarget.DepthBuffer.GetView(),
-                    D3D12_CLEAR_FLAG_DEPTH,
-                    1.0f,
-                    0,
-                    0,
-                    nullptr
-                );
-
-                graphicsCommandList.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-                for(const std::unique_ptr<Geometry>& geometry : renderWork.Geometries)
-                {
-                    if(geometry == nullptr)
-                    {
-                        assert(false && "Geometry is null");
-                        continue;
-                    }
-
-                    const float4& pushConstantColor = geometry->GetColor();
-                    graphicsCommandList.SetGraphicsRoot32BitConstants(2, 4, &pushConstantColor, 0);
-
-                    const VertexBuffer& vertexBuffer = geometry->GetVertexBuffer();
-                    const IndexBuffer& indexBuffer = geometry->GetIndexBuffer();
-
-                    const D3D12_VERTEX_BUFFER_VIEW& vbView = vertexBuffer.GetVertexBufferView();
-                    graphicsCommandList.IASetVertexBuffers(0, 1, &vbView);
-
-                    const D3D12_INDEX_BUFFER_VIEW& ibView = indexBuffer.GetIndexBufferView();
-                    graphicsCommandList.IASetIndexBuffer(&ibView);
-
-                    // TODO(alegruz): Set per-object constants (like world matrix)
-
-                    graphicsCommandList.DrawIndexedInstanced(
-                        static_cast<UINT>(ibView.SizeInBytes / sizeof(uint16)), // IndexCountPerInstance
-                        1,                                                      // InstanceCount
-                        0,                                                      // StartIndexLocation
-                        0,                                                      // BaseVertexLocation
-                        0                                                       // StartInstanceLocation
-                    );
-                }
 
                 sceneRenderTarget.ColorBuffer.Transition(graphicsCommandList, D3D12_RESOURCE_STATE_PRESENT);
 
@@ -2681,11 +2622,12 @@ namespace cgs
             .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
         };
         
+        raytracingOutputCreateInfo.ParentCreateInfo.State = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
         hr = gDevice->CreateCommittedResource(
             &heapProperties, 
             D3D12_HEAP_FLAG_NONE, 
             &bufferDesc, 
-            D3D12_RESOURCE_STATE_UNORDERED_ACCESS, 
+            raytracingOutputCreateInfo.ParentCreateInfo.State, 
             nullptr, 
             IID_PPV_ARGS(raytracingOutputCreateInfo.ParentCreateInfo.Data.GetAddressOf()));
         if(FAILED(hr))
@@ -2705,6 +2647,144 @@ namespace cgs
 
         gGlobalRenderContext.RenderDeviceType = eRenderDeviceType::D3D12;
         return true;
+    }
+
+    void
+    rasterize(ID3D12GraphicsCommandList& graphicsCommandList, SceneRenderTarget& sceneRenderTarget, RenderWork& renderWork) noexcept
+    {
+        graphicsCommandList.SetGraphicsRootSignature(gRasterizationRootSignature.Get());
+
+        ID3D12DescriptorHeap* heaps[] = { gCbvSrvUavHeap.Get() };
+        graphicsCommandList.SetDescriptorHeaps(CGS_ARRAYSIZE(heaps), heaps);
+
+        graphicsCommandList.SetGraphicsRootConstantBufferView(0, gCameraBuffer->GetGPUVirtualAddress());
+        graphicsCommandList.SetGraphicsRootConstantBufferView(1, gEmissiveBuffer->GetGPUVirtualAddress());
+        const D3D12_VIEWPORT viewport =
+        {
+            .TopLeftX = 0.0f,
+            .TopLeftY = 0.0f,
+            .Width = static_cast<float>(sceneRenderTarget.ColorBuffer.GetWidth()),
+            .Height = static_cast<float>(sceneRenderTarget.ColorBuffer.GetHeight()),
+            .MinDepth = 0.0f,
+            .MaxDepth = 1.0f,
+        };
+        graphicsCommandList.RSSetViewports(1, &viewport);
+        const D3D12_RECT scissorRect = 
+        { 
+            .left = 0, 
+            .top = 0, 
+            .right = static_cast<LONG>(sceneRenderTarget.ColorBuffer.GetWidth()), 
+            .bottom = static_cast<LONG>(sceneRenderTarget.ColorBuffer.GetHeight()) 
+        };
+        graphicsCommandList.RSSetScissorRects(1, &scissorRect);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[] = { sceneRenderTarget.ColorBuffer.GetView(), };
+        graphicsCommandList.OMSetRenderTargets(CGS_ARRAYSIZE(rtvHandles), rtvHandles, FALSE, &sceneRenderTarget.DepthBuffer.GetView());
+
+        sceneRenderTarget.ColorBuffer.Transition(graphicsCommandList, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        constexpr float BLACK_COLOR[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+        graphicsCommandList.ClearRenderTargetView(
+            sceneRenderTarget.ColorBuffer.GetView(),
+            BLACK_COLOR,
+            0,
+            nullptr
+        );
+        graphicsCommandList.ClearDepthStencilView(
+            sceneRenderTarget.DepthBuffer.GetView(),
+            D3D12_CLEAR_FLAG_DEPTH,
+            1.0f,
+            0,
+            0,
+            nullptr
+        );
+
+        graphicsCommandList.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        for(const std::unique_ptr<Geometry>& geometry : renderWork.Geometries)
+        {
+            if(geometry == nullptr)
+            {
+                assert(false && "Geometry is null");
+                continue;
+            }
+
+            const float4& pushConstantColor = geometry->GetColor();
+            graphicsCommandList.SetGraphicsRoot32BitConstants(2, 4, &pushConstantColor, 0);
+
+            const VertexBuffer& vertexBuffer = geometry->GetVertexBuffer();
+            const IndexBuffer& indexBuffer = geometry->GetIndexBuffer();
+
+            const D3D12_VERTEX_BUFFER_VIEW& vbView = vertexBuffer.GetVertexBufferView();
+            graphicsCommandList.IASetVertexBuffers(0, 1, &vbView);
+
+            const D3D12_INDEX_BUFFER_VIEW& ibView = indexBuffer.GetIndexBufferView();
+            graphicsCommandList.IASetIndexBuffer(&ibView);
+
+            // TODO(alegruz): Set per-object constants (like world matrix)
+
+            graphicsCommandList.DrawIndexedInstanced(
+                static_cast<UINT>(ibView.SizeInBytes / sizeof(uint16)), // IndexCountPerInstance
+                1,                                                      // InstanceCount
+                0,                                                      // StartIndexLocation
+                0,                                                      // BaseVertexLocation
+                0                                                       // StartInstanceLocation
+            );
+        }
+    }
+    
+    void
+    raytracing(ID3D12GraphicsCommandList4& graphicsCommandList, SceneRenderTarget& sceneRenderTarget, RenderWork& renderWork) noexcept
+    {
+        graphicsCommandList.SetComputeRootSignature(gRaytracingGlobalRootSignature.Get());
+
+        // Bind the heaps, acceleration structure and dispatch rays.
+        graphicsCommandList.SetDescriptorHeaps(1, gCbvSrvUavHeap.GetAddressOf());
+        graphicsCommandList.SetComputeRootDescriptorTable(0, gRaytracingOutputResourceUAVGpuDescriptor);
+        const D3D12_DISPATCH_RAYS_DESC dispatchDesc = 
+        {
+            .RayGenerationShaderRecord =
+            {
+                .StartAddress = gRayGenShaderTable->GetGPUVirtualAddress(),
+                .SizeInBytes = gRayGenShaderTable->GetDesc().Width,
+            },
+            .MissShaderTable = 
+            {
+                .StartAddress = gMissShaderTable->GetGPUVirtualAddress(),
+                .SizeInBytes = gMissShaderTable->GetDesc().Width,
+                .StrideInBytes = gMissShaderTable->GetDesc().Width,
+            },
+            .HitGroupTable = 
+            {
+                .StartAddress = gHitGroupShaderTable->GetGPUVirtualAddress(),
+                .SizeInBytes = gHitGroupShaderTable->GetDesc().Width,
+                .StrideInBytes = gHitGroupShaderTable->GetDesc().Width,
+            },
+            .Width = sceneRenderTarget.ColorBuffer.GetWidth(),
+            .Height = sceneRenderTarget.ColorBuffer.GetHeight(),
+            .Depth = 1,
+        };
+        graphicsCommandList.SetPipelineState1(gRaytracingStateObject.Get());
+
+        const uint32 geometriesCount = static_cast<uint32>(renderWork.Geometries.size());
+        for(uint32 i = 0; i < geometriesCount; ++i)
+        {
+            const std::unique_ptr<Geometry>& geometry = renderWork.Geometries[i];
+            if(geometry == nullptr)
+            {
+                assert(false && "Geometry is null");
+                continue;
+            }
+
+            graphicsCommandList.SetComputeRootShaderResourceView(1, gTopLevelAccelerationStructures[i]->GetGPUVirtualAddress());
+            graphicsCommandList.DispatchRays(&dispatchDesc);
+        }
+
+        sceneRenderTarget.ColorBuffer.Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+        gRaytracingOutput->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
+
+        graphicsCommandList.CopyResource(sceneRenderTarget.ColorBuffer.GetResource().Get(), gRaytracingOutput->GetResource().Get());
+
+        gRaytracingOutput->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     }
 
     void waitForFrame(const uint32 frameIndex) noexcept

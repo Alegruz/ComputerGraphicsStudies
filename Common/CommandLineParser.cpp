@@ -13,6 +13,7 @@ namespace cgs
         { TEXT("--input-resource"), {.LongOption = TEXT("--input-resource"), .ShortOption = TEXT("-i"), .Type = eOptionType::INPUT_RESOURCE, .Description = TEXT("Path to the input model file.") } },
         { TEXT("--width"), {.LongOption = TEXT("--width"), .ShortOption = TEXT("-W"), .Type = eOptionType::WIDTH, .Description = TEXT("Specify the width.") } },
         { TEXT("--height"), {.LongOption = TEXT("--height"), .ShortOption = TEXT("-H"), .Type = eOptionType::HEIGHT, .Description = TEXT("Specify the height.") } },
+        { TEXT("--render-method"), {.LongOption = TEXT("--render-method"), .ShortOption = TEXT("-r"), .Type = eOptionType::RENDER_METHOD, .PossibleValues = { TEXT("RASTERIZATION"), TEXT("RAYTRACING"), TEXT("rasterization"), TEXT("raytracing") }, .Description = TEXT("Specify the rendering method.") } },
     };
 
     CommandLineParser::CommandLineParser(const CommandLineParser::CharType* commandLine) noexcept
@@ -145,6 +146,31 @@ namespace cgs
 
                     const StringType optionArgument = mArguments[argumentIndex + 1];
                     mOptionValues[static_cast<uint32>(eOptionType::HEIGHT)] = ToString(optionArgument);
+                    ++argumentIndex;
+                }
+                break;
+                case cgs::eOptionType::RENDER_METHOD:
+                {
+                    if (argumentIndex + 1 >= numArguments)
+                    {
+                        isOptionFound = false;
+                        break;
+                    }
+
+                    const StringType optionArgument = mArguments[argumentIndex + 1];
+                    const auto& possibleValues = optionInfo.PossibleValues;
+                    const bool isValidValue = std::any_of(possibleValues.begin(), possibleValues.end(), 
+                        [&optionArgument](const StringType& possibleValue) noexcept
+                        {
+                            return possibleValue == optionArgument;
+                        });
+                    if (isValidValue == false)
+                    {
+                        isOptionFound = false;
+                        break;
+                    }
+
+                    mOptionValues[static_cast<uint32>(eOptionType::RENDER_METHOD)] = ToString(optionArgument);
                     ++argumentIndex;
                 }
                 break;
