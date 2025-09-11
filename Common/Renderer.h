@@ -140,7 +140,7 @@ namespace cgs
     };
 
     [[nodiscard]] bool
-    CreateCornellBoxScene(std::vector<std::unique_ptr<Geometry>>& outGeometries) noexcept;
+    CreateCornellBoxScene(const eRenderMethod renderMethod, std::vector<std::unique_ptr<Geometry>>& outGeometries) noexcept;
 
     CornellBoxVertexShaderOutput
     CornellBoxVertexShader(const VertexPN& input) noexcept;

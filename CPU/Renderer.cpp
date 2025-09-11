@@ -46,7 +46,7 @@ namespace cgs
     }
 
     bool
-    CreateCornellBoxScene(std::vector<std::unique_ptr<Geometry>>& outGeometries) noexcept
+    CreateCornellBoxScene(const eRenderMethod, std::vector<std::unique_ptr<Geometry>>& outGeometries) noexcept
     {
         [[maybe_unused]] Camera& mainCamera = InitializeCornellBoxCamera();
 

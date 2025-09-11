@@ -527,16 +527,18 @@ main(int argc, char** argv)
         return 3;
     }
 
+    const std::string& renderMethodString = commandLineParser.GetArgument(cgs::eOptionType::RENDER_METHOD);
+    cgs::gRenderThread.RenderMethod = cgs::ConvertStringToEnumValue<cgs::eRenderMethod>(renderMethodString);
+
     [[maybe_unused]] float deltaTimeInMs = 0.0f;
     std::vector<std::unique_ptr<cgs::Geometry>> cornellBox;
-    const bool result = cgs::CreateCornellBoxScene(cornellBox);
+    const bool result = cgs::CreateCornellBoxScene(cgs::gRenderThread.RenderMethod, cornellBox);
     if(result == false)
     {
         assert(false && "Failed to create cornell box scene");
         return 4;
     }
 
-    cgs::gRenderThread.RenderMethod = cgs::eRenderMethod::RASTERIZATION;
     cgs::ThreadCreateInfo createInfo =
     {
         .Name = "RenderThread",

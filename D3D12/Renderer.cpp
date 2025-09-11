@@ -97,8 +97,8 @@ namespace cgs
     static std::unique_ptr<ConstantBuffer> gEmissiveBuffer;
 
     // Raytracing
-    static std::unique_ptr<Texture> gRaytracingOutput;
-    static D3D12_GPU_DESCRIPTOR_HANDLE gRaytracingOutputResourceUAVGpuDescriptor;
+    static std::vector<std::unique_ptr<Texture>> gRaytracingOutput(BACK_BUFFERS_COUNT);
+    static std::vector<D3D12_GPU_DESCRIPTOR_HANDLE> gRaytracingOutputResourceUAVGpuDescriptor(BACK_BUFFERS_COUNT);
     static uint32 gRaytracingOutputResourceUAVDescriptorHeapIndex = std::numeric_limits<uint32>::max();
     static RayGenConstantBuffer gRayGenConstantBuffer;
     static D3DPtr<ID3D12RootSignature> gRaytracingGlobalRootSignature;
@@ -965,7 +965,7 @@ namespace cgs
         geometries.clear();
         gEmissiveBuffer.reset();
         gCameraBuffer.reset();
-        gRaytracingOutput.reset();
+        gRaytracingOutput.clear();
 
         for(D3DPtr<ID3D12Resource>& bottomLevelAccelerationStructure : gBottomLevelAccelerationStructures)
         {
@@ -1230,12 +1230,13 @@ namespace cgs
     }
 
     bool
-    CreateCornellBoxScene(std::vector<std::unique_ptr<Geometry>>& outGeometries) noexcept
+    CreateCornellBoxScene(const eRenderMethod renderMethod, std::vector<std::unique_ptr<Geometry>>& outGeometries) noexcept
     {
         Camera& mainCamera = InitializeCornellBoxCamera();
         
         HRESULT hr = S_OK;
 
+        if(renderMethod == eRenderMethod::RASTERIZATION)
         {
             const D3D12_RESOURCE_DESC cameraBufferDesc =
             {
@@ -1409,6 +1410,7 @@ namespace cgs
             outGeometries.pop_back();
         }
 
+        if(renderMethod == eRenderMethod::RASTERIZATION)
         {
             const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
             {
@@ -2253,7 +2255,7 @@ namespace cgs
         const D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc =
         {
             .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-            .NumDescriptors = 2,
+            .NumDescriptors = 3,
             .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
             .NodeMask = 0,
         };
@@ -2597,53 +2599,59 @@ namespace cgs
         }
     
         // Create the output resource. The dimensions and format should match the swap-chain.
-        Texture::CreateInfo raytracingOutputCreateInfo = {};
-        D3D12_HEAP_PROPERTIES heapProperties = 
+        for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
         {
-            .Type = D3D12_HEAP_TYPE_DEFAULT,
-            .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
-            .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
-            .CreationNodeMask = 1,
-            .VisibleNodeMask = 1,
-        };
+            Texture::CreateInfo raytracingOutputCreateInfo = {};
+            D3D12_HEAP_PROPERTIES heapProperties = 
+            {
+                .Type = D3D12_HEAP_TYPE_DEFAULT,
+                .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+                .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+                .CreationNodeMask = 1,
+                .VisibleNodeMask = 1,
+            };
 
-        bufferDesc =
-        D3D12_RESOURCE_DESC
-        {
-            .Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-            .Alignment = 0,
-            .Width = cgs::gWidth,
-            .Height = cgs::gHeight,
-            .DepthOrArraySize = 1,
-            .MipLevels = 1,
-            .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
-            .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
-            .Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN,
-            .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
-        };
-        
-        raytracingOutputCreateInfo.ParentCreateInfo.State = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-        hr = gDevice->CreateCommittedResource(
-            &heapProperties, 
-            D3D12_HEAP_FLAG_NONE, 
-            &bufferDesc, 
-            raytracingOutputCreateInfo.ParentCreateInfo.State, 
-            nullptr, 
-            IID_PPV_ARGS(raytracingOutputCreateInfo.ParentCreateInfo.Data.GetAddressOf()));
-        if(FAILED(hr))
-        {
-            assert(false && "Failed to create raytracing output resource");
-            return false;
+            bufferDesc =
+            D3D12_RESOURCE_DESC
+            {
+                .Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+                .Alignment = 0,
+                .Width = cgs::gWidth,
+                .Height = cgs::gHeight,
+                .DepthOrArraySize = 1,
+                .MipLevels = 1,
+                .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+                .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+                .Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN,
+                .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            };
+            
+            raytracingOutputCreateInfo.ParentCreateInfo.State = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            hr = gDevice->CreateCommittedResource(
+                &heapProperties, 
+                D3D12_HEAP_FLAG_NONE, 
+                &bufferDesc, 
+                raytracingOutputCreateInfo.ParentCreateInfo.State, 
+                nullptr, 
+                IID_PPV_ARGS(raytracingOutputCreateInfo.ParentCreateInfo.Data.GetAddressOf()));
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to create raytracing output resource");
+                return false;
+            }
+            const std::wstring resourceName = L"RaytracingOutputResource[" + std::to_wstring(i) + L"]";
+            raytracingOutputCreateInfo.ParentCreateInfo.Data->SetName(resourceName.c_str());
+
+            const uint32 descriptorSize = gDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            raytracingOutputCreateInfo.ParentCreateInfo.View = gCbvSrvUavHeap->GetCPUDescriptorHandleForHeapStart();
+            raytracingOutputCreateInfo.ParentCreateInfo.View.ptr += descriptorSize * i;
+            
+            raytracingOutputCreateInfo.UavView.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+            gDevice->CreateUnorderedAccessView(raytracingOutputCreateInfo.ParentCreateInfo.Data.Get(), nullptr, &raytracingOutputCreateInfo.UavView, raytracingOutputCreateInfo.ParentCreateInfo.View);
+            gRaytracingOutput[i] = std::make_unique<Texture>(std::move(raytracingOutputCreateInfo));
+            gRaytracingOutputResourceUAVGpuDescriptor[i] = gCbvSrvUavHeap->GetGPUDescriptorHandleForHeapStart();
+            gRaytracingOutputResourceUAVGpuDescriptor[i].ptr += descriptorSize * i;
         }
-        raytracingOutputCreateInfo.ParentCreateInfo.Data->SetName(TEXT("RaytracingOutput"));
-
-        // m_raytracingOutputResourceUAVDescriptorHeapIndex = AllocateDescriptor(&uavDescriptorHandle, m_raytracingOutputResourceUAVDescriptorHeapIndex);
-        raytracingOutputCreateInfo.ParentCreateInfo.View = gCbvSrvUavHeap->GetCPUDescriptorHandleForHeapStart();
-        
-        raytracingOutputCreateInfo.UavView.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-        gDevice->CreateUnorderedAccessView(raytracingOutputCreateInfo.ParentCreateInfo.Data.Get(), nullptr, &raytracingOutputCreateInfo.UavView, raytracingOutputCreateInfo.ParentCreateInfo.View);
-        gRaytracingOutput = std::make_unique<Texture>(std::move(raytracingOutputCreateInfo));
-        gRaytracingOutputResourceUAVGpuDescriptor = gCbvSrvUavHeap->GetGPUDescriptorHandleForHeapStart();
 
         gGlobalRenderContext.RenderDeviceType = eRenderDeviceType::D3D12;
         return true;
@@ -2739,7 +2747,7 @@ namespace cgs
 
         // Bind the heaps, acceleration structure and dispatch rays.
         graphicsCommandList.SetDescriptorHeaps(1, gCbvSrvUavHeap.GetAddressOf());
-        graphicsCommandList.SetComputeRootDescriptorTable(0, gRaytracingOutputResourceUAVGpuDescriptor);
+        graphicsCommandList.SetComputeRootDescriptorTable(0, gRaytracingOutputResourceUAVGpuDescriptor[renderWork.FrameIndex]);
         const D3D12_DISPATCH_RAYS_DESC dispatchDesc = 
         {
             .RayGenerationShaderRecord =
@@ -2780,11 +2788,11 @@ namespace cgs
         }
 
         sceneRenderTarget.ColorBuffer.Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
-        gRaytracingOutput->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        gRaytracingOutput[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
 
-        graphicsCommandList.CopyResource(sceneRenderTarget.ColorBuffer.GetResource().Get(), gRaytracingOutput->GetResource().Get());
+        graphicsCommandList.CopyResource(sceneRenderTarget.ColorBuffer.GetResource().Get(), gRaytracingOutput[renderWork.FrameIndex]->GetResource().Get());
 
-        gRaytracingOutput->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingOutput[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     }
 
     void waitForFrame(const uint32 frameIndex) noexcept
