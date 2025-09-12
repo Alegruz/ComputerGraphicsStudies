@@ -60,6 +60,14 @@ namespace cgs
         Viewport CurrentStencil;
     };
 
+    struct SceneConstantBuffer
+    {
+        float4x4 ProjectionToWorldTransformMatrix;
+        float4 CameraPosition;
+        float4 EmissiveGeometryPositions[4];
+        float4 EmissiveColor;
+    };
+
     // DXGI
 #if defined(CGS_DEBUG)
     static D3DPtr<IDXGIDebug> gDxgiDebug;
@@ -113,6 +121,7 @@ namespace cgs
     static D3DPtr<ID3D12Resource> gRayGenShaderTable;
     static D3DPtr<ID3D12Resource> gMissShaderTable;
     static D3DPtr<ID3D12Resource> gHitGroupShaderTable;
+    static SceneConstantBuffer gSceneConstantBuffer;
 
     enum class ShaderType : uint8
     {
@@ -1304,6 +1313,10 @@ namespace cgs
 
             gCameraBuffer = std::make_unique<ConstantBuffer>(std::move(cameraBufferCreateInfo));
         }
+        else
+        {
+            gSceneConstantBuffer.CameraPosition = mainCamera.GetPosition();
+        }
 
         const float border = 0.1f;
         const uint32 width = gSceneRenderTargets[0].ColorBuffer.GetWidth();
@@ -1382,6 +1395,10 @@ namespace cgs
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -343.0f, 548.8f, 227.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -213.0f, 548.8f, 227.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -213.0f, 548.8f, 332.0f };
+            gSceneConstantBuffer.EmissiveGeometryPositions[0] = float4(v0, 1.0f);
+            gSceneConstantBuffer.EmissiveGeometryPositions[1] = float4(v1, 1.0f);
+            gSceneConstantBuffer.EmissiveGeometryPositions[2] = float4(v2, 1.0f);
+            gSceneConstantBuffer.EmissiveGeometryPositions[3] = float4(v3, 1.0f);
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             emissiveBuffer.Position = v0;
@@ -1476,6 +1493,14 @@ namespace cgs
             emissiveBufferCreateInfo.Data->Unmap(0, nullptr);
 
             gEmissiveBuffer = std::make_unique<ConstantBuffer>(std::move(emissiveBufferCreateInfo));
+        }
+        else
+        {
+            gSceneConstantBuffer.EmissiveColor = float4(emissiveBuffer.Color, 1.0f);
+
+            const Camera::Buffer& cameraBuffer = mainCamera.GetBuffer();
+            const float4x4 worldToProjectionMatrix = cameraBuffer.ProjectionMatrix * cameraBuffer.ViewMatrix;
+            GetInverse(worldToProjectionMatrix, gSceneConstantBuffer.ProjectionToWorldTransformMatrix);
         }
 
         // Ceiling

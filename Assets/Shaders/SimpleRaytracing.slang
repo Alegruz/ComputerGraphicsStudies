@@ -8,6 +8,14 @@ struct Viewport
     float Bottom;
 };
 
+struct SceneConstantBuffer
+{
+    float4x4 ProjectionToWorldTransformMatrix;
+    float4 CameraPosition;
+    float4 EmissiveGeometryPositions[4];
+    float4 EmissiveColor;
+};
+
 struct RayGenConstantBuffer
 {
     Viewport CurrentViewport;
