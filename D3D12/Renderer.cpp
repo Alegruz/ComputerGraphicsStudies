@@ -121,7 +121,7 @@ namespace cgs
     static D3DPtr<ID3D12Resource> gRayGenShaderTable;
     static D3DPtr<ID3D12Resource> gMissShaderTable;
     static D3DPtr<ID3D12Resource> gHitGroupShaderTable;
-    static SceneConstantBuffer gSceneConstantBuffer;
+    static std::vector<SceneConstantBuffer> gSceneConstantBuffers(BACK_BUFFERS_COUNT);
 
     enum class ShaderType : uint8
     {
@@ -1315,7 +1315,10 @@ namespace cgs
         }
         else
         {
-            gSceneConstantBuffer.CameraPosition = mainCamera.GetPosition();
+            for (SceneConstantBuffer& sceneConstantBuffer : gSceneConstantBuffers)
+            {
+                sceneConstantBuffer.CameraPosition = mainCamera.GetPosition();
+            }
         }
 
         const float border = 0.1f;
@@ -1395,10 +1398,13 @@ namespace cgs
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -343.0f, 548.8f, 227.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -213.0f, 548.8f, 227.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -213.0f, 548.8f, 332.0f };
-            gSceneConstantBuffer.EmissiveGeometryPositions[0] = float4(v0, 1.0f);
-            gSceneConstantBuffer.EmissiveGeometryPositions[1] = float4(v1, 1.0f);
-            gSceneConstantBuffer.EmissiveGeometryPositions[2] = float4(v2, 1.0f);
-            gSceneConstantBuffer.EmissiveGeometryPositions[3] = float4(v3, 1.0f);
+            for (SceneConstantBuffer& sceneConstantBuffer : gSceneConstantBuffers)
+            {
+                sceneConstantBuffer.EmissiveGeometryPositions[0] = float4(v0, 1.0f);
+                sceneConstantBuffer.EmissiveGeometryPositions[1] = float4(v1, 1.0f);
+                sceneConstantBuffer.EmissiveGeometryPositions[2] = float4(v2, 1.0f);
+                sceneConstantBuffer.EmissiveGeometryPositions[3] = float4(v3, 1.0f);
+            }
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             emissiveBuffer.Position = v0;
@@ -1496,11 +1502,16 @@ namespace cgs
         }
         else
         {
-            gSceneConstantBuffer.EmissiveColor = float4(emissiveBuffer.Color, 1.0f);
-
             const Camera::Buffer& cameraBuffer = mainCamera.GetBuffer();
             const float4x4 worldToProjectionMatrix = cameraBuffer.ProjectionMatrix * cameraBuffer.ViewMatrix;
-            GetInverse(worldToProjectionMatrix, gSceneConstantBuffer.ProjectionToWorldTransformMatrix);
+            float4x4 inverseMatrix;
+            GetInverse(worldToProjectionMatrix, inverseMatrix);
+
+            for (SceneConstantBuffer& sceneConstantBuffer : gSceneConstantBuffers)
+            {
+                sceneConstantBuffer.EmissiveColor = float4(emissiveBuffer.Color, 1.0f);
+                sceneConstantBuffer.ProjectionToWorldTransformMatrix = inverseMatrix;
+            }
         }
 
         // Ceiling

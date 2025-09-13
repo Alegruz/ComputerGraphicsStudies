@@ -357,14 +357,70 @@ namespace cgs
     // Row-major
     struct float4x4 final
     {
-        float4 Data[4] = { { 0.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f } };
+        float4 Data[4];
 
-        void
+        CGS_INLINE constexpr
+        float4x4() noexcept
+            : Data{ { 0.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f } }
+        {
+        }
+
+        CGS_INLINE constexpr
+        float4x4(const float4& col0, const float4& col1, const float4& col2, const float4& col3) noexcept
+            : Data{ col0, col1, col2, col3 }
+        {
+        }
+
+        CGS_INLINE constexpr
+        float4x4(const float4x4& other) noexcept
+            : Data{ other.Data[0],
+                    other.Data[1],
+                    other.Data[2],
+                    other.Data[3] }
+        {
+        }
+
+        CGS_INLINE constexpr
+        float4x4(float4x4&& other) noexcept
+            : Data{ std::move(other.Data[0]),
+                    std::move(other.Data[1]),
+                    std::move(other.Data[2]),
+                    std::move(other.Data[3]) }
+        {
+        }
+
+        CGS_INLINE constexpr void
         Translate(const float3& translation) noexcept
         {
             Data[0].W += translation.X;
             Data[1].W += translation.Y;
             Data[2].W += translation.Z;
+        }
+
+        CGS_INLINE constexpr float4x4&
+        operator=(const float4x4& other) noexcept
+        {
+            if(this != &other)
+            {
+                Data[0] = other.Data[0];
+                Data[1] = other.Data[1];
+                Data[2] = other.Data[2];
+                Data[3] = other.Data[3];
+            }
+            return *this;
+        }
+
+        CGS_INLINE constexpr float4x4&
+        operator=(float4x4&& other) noexcept
+        {
+            if(this != &other)
+            {
+                Data[0] = std::move(other.Data[0]);
+                Data[1] = std::move(other.Data[1]);
+                Data[2] = std::move(other.Data[2]);
+                Data[3] = std::move(other.Data[3]);
+            }
+            return *this;
         }
     };
 

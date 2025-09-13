@@ -16,26 +16,20 @@ namespace cgs
 
         mBuffer.ViewMatrix = float4x4
         {
-            .Data =
-            {
-                float4( xAxis.X, xAxis.Y, xAxis.Z, -Dot(xAxis, mPosition) ),
-                float4( yAxis.X, yAxis.Y, yAxis.Z, -Dot(yAxis, mPosition) ),
-                float4( zAxis.X, zAxis.Y, zAxis.Z, -Dot(zAxis, mPosition) ),
-                float4( 0.0f, 0.0f, 0.0f, 1.0f ),
-            },
+            float4( xAxis.X, xAxis.Y, xAxis.Z, -Dot(xAxis, mPosition) ),
+            float4( yAxis.X, yAxis.Y, yAxis.Z, -Dot(yAxis, mPosition) ),
+            float4( zAxis.X, zAxis.Y, zAxis.Z, -Dot(zAxis, mPosition) ),
+            float4( 0.0f, 0.0f, 0.0f, 1.0f ),
         };
 
         const float f = 1.0f / std::tan(createInfo.FieldOfViewYAxis / 2.0f);
 
         mBuffer.ProjectionMatrix = float4x4
         {
-            .Data =
-            {
-                float4(f / createInfo.AspectRatio, 0.0f, 0.0f, 0.0f),
-                float4(0.0f, f, 0.0f, 0.0f),
-                float4(0.0f, 0.0f, createInfo.FarPlane / (createInfo.FarPlane - createInfo.NearPlane), (-createInfo.FarPlane * createInfo.NearPlane) / (createInfo.FarPlane - createInfo.NearPlane)),
-                float4(0.0f, 0.0f, 1.0f, 0.0f),
-            },
+            float4(f / createInfo.AspectRatio, 0.0f, 0.0f, 0.0f),
+            float4(0.0f, f, 0.0f, 0.0f),
+            float4(0.0f, 0.0f, createInfo.FarPlane / (createInfo.FarPlane - createInfo.NearPlane), (-createInfo.FarPlane * createInfo.NearPlane) / (createInfo.FarPlane - createInfo.NearPlane)),
+            float4(0.0f, 0.0f, 1.0f, 0.0f),
         };
     }
     
