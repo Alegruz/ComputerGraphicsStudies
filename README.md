@@ -52,3 +52,6 @@ Target platforms (sorted by priority):
 * **[2025.09.07]**: added acceleration structures draft
 * **[2025.09.08]**: fixed some d3d12 debug layer warnings
 * **[2025.09.09]**: implemented acceleration structure management and build process in renderer
+* **[2025.09.10]**: added shader tables and uav output texture
+* **[2025.09.11]**: added simple ray tracing shader and dispatch call
+* **[2025.09.12]**: added SceneConstantBuffer for camera and emmisive geometry
