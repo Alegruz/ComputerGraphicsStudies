@@ -55,3 +55,5 @@ Target platforms (sorted by priority):
 * **[2025.09.10]**: added shader tables and uav output texture
 * **[2025.09.11]**: added simple ray tracing shader and dispatch call
 * **[2025.09.12]**: added SceneConstantBuffer for camera and emmisive geometry
+* **[2025.09.13]**: fixed some D3D12 warnings
+* **[2025.09.14]**: added descriptor heap class for managing descriptor heaps; refactored related resource allocation logic. First raytracing scene rendering.
