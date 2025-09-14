@@ -20,63 +20,197 @@ uniform ByteAddressBuffer gIndices;
 uniform StructuredBuffer<VertexPN> gVertices;
 uniform StructuredBuffer<float3> gColors;
 
+uniform ConstantBuffer<SceneConstantBuffer> gSceneConstantBuffer;
+
+// Load three 16 bit indices from a byte addressed buffer.
+uint3 
+Load3x16BitIndices(uint offsetBytes)
+{
+    uint3 indices;
+
+    // ByteAdressBuffer loads must be aligned at a 4 byte boundary.
+    // Since we need to read three 16 bit indices: { 0, 1, 2 } 
+    // aligned at a 4 byte boundary as: { 0 1 } { 2 0 } { 1 2 } { 0 1 } ...
+    // we will load 8 bytes (~ 4 indices { a b | c d }) to handle two possible index triplet layouts,
+    // based on first index's offsetBytes being aligned at the 4 byte boundary or not:
+    //  Aligned:     { 0 1 | 2 - }
+    //  Not aligned: { - 0 | 1 2 }
+    const uint dwordAlignedOffset = offsetBytes & ~3;    
+    const uint2 four16BitIndices = gIndices.Load2(dwordAlignedOffset);
+ 
+    // Aligned: { 0 1 | 2 - } => retrieve first three 16bit indices
+    if (dwordAlignedOffset == offsetBytes)
+    {
+        indices.x = four16BitIndices.x & 0xffff;
+        indices.y = (four16BitIndices.x >> 16) & 0xffff;
+        indices.z = four16BitIndices.y & 0xffff;
+    }
+    else // Not aligned: { - 0 | 1 2 } => retrieve last three 16bit indices
+    {
+        indices.x = (four16BitIndices.x >> 16) & 0xffff;
+        indices.y = four16BitIndices.y & 0xffff;
+        indices.z = (four16BitIndices.y >> 16) & 0xffff;
+    }
+
+    return indices;
+}
+
 struct RayPayload
 {
     float4 color;
 };
 
-bool IsInsideViewport(float2 p, Viewport viewport)
+// Retrieve hit world position.
+float3 
+HitWorldPosition()
 {
-    return (p.x >= viewport.Left && p.x <= viewport.Right)
-        && (p.y >= viewport.Top && p.y <= viewport.Bottom);
+    return WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
+}
+
+// Retrieve attribute at a hit position interpolated from vertex attributes using the hit's barycentrics.
+float3 
+HitAttribute(float3 vertexAttribute[3], BuiltInTriangleIntersectionAttributes attr)
+{
+    return vertexAttribute[0] +
+        attr.barycentrics.x * (vertexAttribute[1] - vertexAttribute[0]) +
+        attr.barycentrics.y * (vertexAttribute[2] - vertexAttribute[0]);
+}
+
+// Generate a ray in world space for a camera pixel corresponding to an index from the dispatched 2D grid.
+inline void 
+GenerateCameraRay(uint2 index, out float3 origin, out float3 direction)
+{
+    float2 xy = index + 0.5f; // center in the middle of the pixel.
+    float2 screenPos = xy / DispatchRaysDimensions().xy * 2.0 - 1.0;
+
+    // Invert Y for DirectX-style coordinates.
+    screenPos.y = -screenPos.y;
+
+    // Unproject the pixel coordinate into a ray.
+    float4 world = mul(float4(screenPos, 0, 1), gSceneConstantBuffer.ProjectionToWorldTransformMatrix);
+
+    world.xyz /= world.w;
+    origin = gSceneConstantBuffer.CameraPosition.xyz;
+    direction = normalize(world.xyz - origin);
+}
+
+float 
+HashToUnitFloat(uint seed)
+{
+    seed ^= seed >> 17;
+    seed *= 0xed5ad4bb;
+    seed ^= seed >> 11;
+    seed *= 0xac4c1b51;
+    seed ^= seed >> 15;
+    seed *= 0x31848bab;
+    seed ^= seed >> 14;
+    return (seed & 0x00FFFFFF) / 16777216.0; // [0,1)
+}
+
+float3 
+SampleParallelogram(const float3 p0, const float3 e1, const float3 e2, const float2 u)
+{
+    return p0 + u.x * e1 + u.y * e2;
+}
+
+float 
+CanonicalSample(const uint2 pixel, const uint frameIndex, const uint dimension)
+{
+    uint seed = pixel.x * 73856093u   // big prime
+              ^ pixel.y * 19349663u   // another big prime
+              ^ frameIndex * 83492791u
+              ^ dimension * 2654435761u; // 2^32 / golden ratio
+    return HashToUnitFloat(seed);
+}
+
+// Diffuse lighting calculation.
+float4 CalculateDiffuseLighting(float3 hitPosition, float3 normal)
+{
+    // Given emissive geometry corners p0, p1, p3 (parallelogram assumption)
+    const float3 p0 = gSceneConstantBuffer.EmissiveGeometryPositions[0].xyz;
+    const float3 p1 = gSceneConstantBuffer.EmissiveGeometryPositions[1].xyz;
+    const float3 p3 = gSceneConstantBuffer.EmissiveGeometryPositions[3].xyz;
+
+    const float3 e1 = p1 - p0;
+    const float3 e2 = p3 - p0;
+
+    // Generate two randoms
+    float2 u;
+    u.x = CanonicalSample(DispatchRaysIndex().xy, 0, 0);
+    u.y = CanonicalSample(DispatchRaysIndex().xy, 0, 1);
+
+    // Sampled point
+    const float3 sampledPos = SampleParallelogram(p0, e1, e2, u);
+
+    const float3 pixelToLight = normalize(sampledPos - hitPosition);
+
+    // Diffuse contribution.
+    float fNDotL = max(0.0f, dot(pixelToLight, normal));
+
+    return float4(gColors[PrimitiveIndex()], 1.0f) * gSceneConstantBuffer.EmissiveColor * fNDotL;
 }
 
 [shader("raygeneration")]
 void RayGenMain()
 {
-    float2 lerpValues = DispatchRaysIndex().xy / DispatchRaysDimensions().xy;
+    float3 rayDir;
+    float3 origin;
+    
+    // Generate a ray for a camera pixel corresponding to an index from the dispatched 2D grid.
+    GenerateCameraRay(DispatchRaysIndex().xy, origin, rayDir);
 
-    // Orthographic projection since we're raytracing in screen space.
-    float3 rayDir = float3(0, 0, 1);
-    float3 origin = float3(
-        lerp(gRayGenConstantBuffer.CurrentViewport.Left, gRayGenConstantBuffer.CurrentViewport.Right, lerpValues.x),
-        lerp(gRayGenConstantBuffer.CurrentViewport.Top, gRayGenConstantBuffer.CurrentViewport.Bottom, lerpValues.y),
-        0.0f);
+    // Trace the ray.
+    // Set the ray's extents.
+    RayDesc ray;
+    ray.Origin = origin;
+    ray.Direction = rayDir;
+    // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
+    // TMin should be kept small to prevent missing geometry at close contact areas.
+    ray.TMin = 0.001;
+    ray.TMax = 10000.0;
+    RayPayload payload = { float4(0, 0, 0, 0) };
+    TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
 
-    if (IsInsideViewport(origin.xy, gRayGenConstantBuffer.CurrentStencil))
-    {
-        // Trace the ray.
-        // Set the ray's extents.
-        RayDesc ray;
-        ray.Origin = origin;
-        ray.Direction = rayDir;
-        // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
-        // TMin should be kept small to prevent missing geometry at close contact areas.
-        ray.TMin = 0.001;
-        ray.TMax = 10000.0;
-        RayPayload payload = { float4(0, 0, 0, 0) };
-        TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
-
-        // Write the raytraced color to the output texture.
-        gRenderTarget[DispatchRaysIndex().xy] = payload.color;
-    }
-    else
-    {
-        // Render interpolated DispatchRaysIndex outside the stencil window
-        gRenderTarget[DispatchRaysIndex().xy] = float4(lerpValues, 0, 1);
-    }
+    // Write the raytraced color to the output texture.
+    gRenderTarget[DispatchRaysIndex().xy] = payload.color;
 }
 
 
 [shader("closesthit")]
 void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    float3 barycentrics = float3(1 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
-    payload.color = float4(barycentrics, 1);
+    float3 hitPosition = HitWorldPosition();
+
+    // Get the base index of the triangle's first 16 bit index.
+    uint indexSizeInBytes = 2;
+    uint indicesPerTriangle = 3;
+    uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
+    uint baseIndex = PrimitiveIndex() * triangleIndexStride;
+
+    // Load up 3 16 bit indices for the triangle.
+    const uint3 indices = Load3x16BitIndices(baseIndex);
+
+    // Retrieve corresponding vertex normals for the triangle vertices.
+    float3 vertexNormals[3] = { 
+        gVertices[indices[0]].Normal, 
+        gVertices[indices[1]].Normal, 
+        gVertices[indices[2]].Normal 
+    };
+
+    // Compute the triangle's normal.
+    // This is redundant and done for illustration purposes 
+    // as all the per-vertex normals are the same and match triangle's normal in this sample. 
+    float3 triangleNormal = HitAttribute(vertexNormals, attr);
+
+    float4 diffuseColor = CalculateDiffuseLighting(hitPosition, triangleNormal);
+    float4 color = diffuseColor;
+
+    payload.color = color;
 }
 
 [shader("miss")]
 void MissMain(inout RayPayload payload)
 {
-    payload.color = float4(0, 0, 0, 1);
+    float4 background = float4(0.0f, 0.0f, 0.0f, 1.0f);
+    payload.color = background;
 }
