@@ -10,10 +10,7 @@ cbuffer EmissiveInfo
     float3 EmissiveGeometryColor;
 };
 
-cbuffer PushConstants
-{
-    float4 Color;
-};
+uniform StructuredBuffer<float3> gColors;
 
 struct VSInput
 {
@@ -54,11 +51,11 @@ VSOutput VSMain(VSInput vsInput)
 // Fragment Shader
 
 [shader("fragment")]
-FSOutput FSMain(VSOutput vsOutput)
+FSOutput FSMain(VSOutput vsOutput, uint primitiveId : SV_PrimitiveID)
 {
     FSOutput output;
-    output.Color = Color;
-    
+    output.Color = float4(gColors[primitiveId], 1.0f);
+
     const float3 emissiveDirection = normalize(EmissiveGeometryPosition - vsOutput.WsPosition);
     constexpr float intensityOfIncomingLight = 1.0f;
     const float3 lambertian = dot(emissiveDirection, vsOutput.Normal) * EmissiveGeometryColor * intensityOfIncomingLight;

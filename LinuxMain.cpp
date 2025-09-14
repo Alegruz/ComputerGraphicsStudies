@@ -506,12 +506,16 @@ main(int argc, char** argv)
     wl_surface_commit(gSurface);
     wl_display_roundtrip(gDisplay);
 
+    const std::string& renderMethodString = commandLineParser.GetArgument(cgs::eOptionType::RENDER_METHOD);
+    cgs::gRenderThread.RenderMethod = cgs::ConvertStringToEnumValue<cgs::eRenderMethod>(renderMethodString);
+
     bool hasInitializedRenderer = false;
 #if defined(CGS_GRAPHICS_API_CPU)
     const cgs::RendererCreateInfo renderCreateInfo =
     {
         .Width = cgs::gWidth,
         .Height = cgs::gHeight,
+        .RenderMethod = cgs::gRenderThread.RenderMethod,
     };
 
     hasInitializedRenderer = cgs::InitializeRenderer(renderCreateInfo);
@@ -526,9 +530,6 @@ main(int argc, char** argv)
         std::fprintf(stderr, "Failed to initialize renderer\n");
         return 3;
     }
-
-    const std::string& renderMethodString = commandLineParser.GetArgument(cgs::eOptionType::RENDER_METHOD);
-    cgs::gRenderThread.RenderMethod = cgs::ConvertStringToEnumValue<cgs::eRenderMethod>(renderMethodString);
 
     [[maybe_unused]] float deltaTimeInMs = 0.0f;
     std::vector<std::unique_ptr<cgs::Geometry>> cornellBox;

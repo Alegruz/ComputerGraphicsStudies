@@ -396,11 +396,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
 
     HACCEL accelerators = CreateAccelerators();
 
+    const std::string& renderMethodString = commandLineParser.GetArgument(cgs::eOptionType::RENDER_METHOD);
+    cgs::gRenderThread.RenderMethod = cgs::ConvertStringToEnumValue<cgs::eRenderMethod>(renderMethodString);
+
     bool hasInitializedRenderer = false;
     const cgs::RendererCreateInfo renderCreateInfo =
     {
         .Width = cgs::gWidth,
         .Height = cgs::gHeight,
+        .RenderMethod = cgs::gRenderThread.RenderMethod,
 #if defined(CGS_GRAPHICS_API_CPU)
 #elif defined(CGS_GRAPHICS_API_D3D12)
         .Window = gWindow,
@@ -417,9 +421,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
         OutputDebugString(L"Exiting application.\n");
         return -1;
     }
-
-    const std::string& renderMethodString = commandLineParser.GetArgument(cgs::eOptionType::RENDER_METHOD);
-    cgs::gRenderThread.RenderMethod = cgs::ConvertStringToEnumValue<cgs::eRenderMethod>(renderMethodString);
 
     [[maybe_unused]] float deltaTimeInMs = 0.0f;
     std::vector<std::unique_ptr<cgs::Geometry>> cornellBox;

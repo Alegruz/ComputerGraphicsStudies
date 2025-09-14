@@ -211,7 +211,9 @@ namespace cgs
         struct CreateInfo final
         {
             D3DPtr<ID3D12Resource> Data;
+            D3D12_SHADER_RESOURCE_VIEW_DESC SrvView = {};
             D3D12_CPU_DESCRIPTOR_HANDLE View = {};
+            D3D12_GPU_DESCRIPTOR_HANDLE GpuDescriptor = { .ptr = 0 };
             D3D12_RESOURCE_STATES State = {};
             std::string Name;
         };
@@ -220,7 +222,9 @@ namespace cgs
         CGS_INLINE constexpr 
         RenderResource() noexcept
             : mData()
+            , mSrvView()
             , mView()
+            , mGpuDescriptor()
             , mState(D3D12_RESOURCE_STATE_COMMON)
             , mName()
         {
@@ -229,7 +233,9 @@ namespace cgs
         CGS_INLINE CGS_CONSTEXPR_WITH_ASSERT 
         RenderResource(CreateInfo&& createInfo) noexcept
             : mData(std::move(createInfo.Data))
+            , mSrvView(createInfo.SrvView)
             , mView(createInfo.View)
+            , mGpuDescriptor(createInfo.GpuDescriptor)
             , mState(createInfo.State)
             , mName(std::move(createInfo.Name))
         {
@@ -244,7 +250,9 @@ namespace cgs
         CGS_INLINE CGS_CONSTEXPR_WITH_ASSERT
         RenderResource(RenderResource&& other) noexcept
             : mData(std::move(other.mData))
+            , mSrvView(std::move(other.mSrvView))
             , mView(other.mView)
+            , mGpuDescriptor(other.mGpuDescriptor)
             , mState(other.mState)
             , mName(std::move(other.mName))
         {
@@ -269,7 +277,9 @@ namespace cgs
             if (this != &other)
             {
                 mData = std::move(other.mData);
+                mSrvView = other.mSrvView;
                 mView = other.mView;
+                mGpuDescriptor = other.mGpuDescriptor;
                 mState = other.mState;
                 mName = std::move(other.mName);
                 const bool result = SetName(mName);
@@ -285,7 +295,9 @@ namespace cgs
         Initialize(CreateInfo&& createInfo) noexcept
         {
             mData = std::move(createInfo.Data);
+            mSrvView = std::move(createInfo.SrvView);
             mView = createInfo.View;
+            mGpuDescriptor = createInfo.GpuDescriptor;
             mState = createInfo.State;
             mName = std::move(createInfo.Name);
 
@@ -296,7 +308,7 @@ namespace cgs
             }
         }
 
-        CGS_INLINE const D3DPtr<ID3D12Resource>&
+        CGS_INLINE constexpr const D3DPtr<ID3D12Resource>&
         GetResource() const noexcept
         {
             return mData;
@@ -308,10 +320,22 @@ namespace cgs
             return mData->GetGPUVirtualAddress();
         }
 
-        CGS_INLINE const D3D12_CPU_DESCRIPTOR_HANDLE&
+        CGS_INLINE constexpr const D3D12_CPU_DESCRIPTOR_HANDLE&
         GetView() const noexcept
         {
             return mView;
+        }
+
+        CGS_INLINE constexpr const D3D12_SHADER_RESOURCE_VIEW_DESC&
+        GetSrvView() const noexcept
+        {
+            return mSrvView;
+        }
+
+        CGS_INLINE constexpr const D3D12_GPU_DESCRIPTOR_HANDLE&
+        GetGpuDescriptor() const noexcept
+        {
+            return mGpuDescriptor;
         }
 
         void 
@@ -339,7 +363,9 @@ namespace cgs
 
     protected:
         D3DPtr<ID3D12Resource> mData;
+        D3D12_SHADER_RESOURCE_VIEW_DESC mSrvView;
         D3D12_CPU_DESCRIPTOR_HANDLE mView;
+        D3D12_GPU_DESCRIPTOR_HANDLE mGpuDescriptor;
         D3D12_RESOURCE_STATES mState;
         std::string mName;
     };
@@ -593,29 +619,21 @@ namespace cgs
     {
     public:
         CGS_INLINE constexpr 
-        Geometry() noexcept: mIsEmissive(false), mName() {}
+        Geometry() noexcept: mName() {}
         CGS_INLINE constexpr
-        Geometry(const std::string& name) noexcept: mIsEmissive(false), mName(name) {}
+        Geometry(const std::string& name) noexcept: mName(name) {}
         CGS_INLINE
         ~Geometry() noexcept = default;
 
-        CGS_INLINE constexpr void
-        SetIsEmissive(const bool isEmissive) noexcept { mIsEmissive = isEmissive; }
-        CGS_INLINE constexpr void
-        SetColor(const float4& color) noexcept { mColor = color; }
-        CGS_INLINE constexpr void
-        SetColor(const Rgba8& color) noexcept { mColor = float4{ static_cast<float>(color.R) / 255.0f, static_cast<float>(color.G) / 255.0f, static_cast<float>(color.B) / 255.0f, static_cast<float>(color.A) / 255.0f }; }
         CGS_INLINE constexpr void
         SetVertexBuffer(VertexBuffer&& vertexBuffer) noexcept { mVertexBuffer = std::move(vertexBuffer); }
         CGS_INLINE constexpr void
         SetIndexBuffer(IndexBuffer&& indexBuffer) noexcept { mIndexBuffer = std::move(indexBuffer); }
         CGS_INLINE constexpr void
+        SetColorBuffer(RenderResource&& colorBuffer) noexcept { mColorBuffer = std::move(colorBuffer); }
+        CGS_INLINE constexpr void
         SetName(const std::string& name) noexcept { mName = name; }
 
-        [[nodiscard]] CGS_INLINE constexpr bool
-        IsEmissive() const noexcept { return mIsEmissive; }
-        [[nodiscard]] CGS_INLINE constexpr const float4&
-        GetColor() const noexcept { return mColor; }
         [[nodiscard]] CGS_INLINE constexpr const VertexBuffer&
         GetVertexBuffer() const noexcept { return mVertexBuffer; }
         [[nodiscard]] CGS_INLINE constexpr VertexBuffer&
@@ -624,14 +642,17 @@ namespace cgs
         GetIndexBuffer() const noexcept { return mIndexBuffer; }
         [[nodiscard]] CGS_INLINE constexpr IndexBuffer&
         GetIndexBuffer() noexcept { return mIndexBuffer; }
+        [[nodiscard]] CGS_INLINE constexpr const RenderResource&
+        GetColorBuffer() const noexcept { return mColorBuffer; }
+        [[nodiscard]] CGS_INLINE constexpr RenderResource&
+        GetColorBuffer() noexcept { return mColorBuffer; }
         [[nodiscard]] CGS_INLINE constexpr const std::string&
         GetName() const noexcept { return mName; }
 
     private:
-        bool mIsEmissive;
-        float4 mColor;
         VertexBuffer mVertexBuffer;
         IndexBuffer mIndexBuffer;
+        RenderResource mColorBuffer;
         std::string mName;
     };
 
@@ -639,6 +660,7 @@ namespace cgs
     {
         uint32 Width;
         uint32 Height;
+        eRenderMethod RenderMethod;
         HWND Window;
     };
 

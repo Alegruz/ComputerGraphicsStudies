@@ -1,13 +1,5 @@
 // shaders.slang
 
-struct Viewport
-{
-    float Left;
-    float Top;
-    float Right;
-    float Bottom;
-};
-
 struct SceneConstantBuffer
 {
     float4x4 ProjectionToWorldTransformMatrix;
@@ -16,15 +8,17 @@ struct SceneConstantBuffer
     float4 EmissiveColor;
 };
 
-struct RayGenConstantBuffer
+struct VertexPN
 {
-    Viewport CurrentViewport;
-    Viewport CurrentStencil;
+    float3 Position;
+    float3 Normal;
 };
 
 uniform RaytracingAccelerationStructure gScene;
 uniform RWTexture2D gRenderTarget;
-uniform RayGenConstantBuffer gRayGenConstantBuffer;
+uniform ByteAddressBuffer gIndices;
+uniform StructuredBuffer<VertexPN> gVertices;
+uniform StructuredBuffer<float3> gColors;
 
 struct RayPayload
 {

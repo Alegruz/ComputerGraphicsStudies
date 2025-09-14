@@ -346,6 +346,7 @@ namespace cgs
     {
         uint32 Width;
         uint32 Height;
+        eRenderMethod RenderMethod;
     };
 
     struct CpuRenderWork final

@@ -11,19 +11,6 @@ namespace cgs
 
     using TDXGIGetDebugInterface = HRESULT (*)(REFIID, void**);
 
-    enum class GlobalRootSignatureParams : uint8
-    {
-        OUTPUT_VIEW_SLOT = 0,
-        ACCELERATION_STRUCTURE_SLOT,
-        COUNT,
-    };
-
-    enum class LocalRootSignatureParams : uint8
-    {
-        VIEWPORT_CONSTANT_SLOT = 0,
-        COUNT,
-    };
-
     struct ASBuildInfo final
     {
         D3DPtr<ID3D12Resource>                              ScratchResource = D3DPtr<ID3D12Resource>();
@@ -40,24 +27,10 @@ namespace cgs
         Texture DepthBuffer;
     };
 
-    struct Viewport final
-    {
-        float Left;
-        float Top;
-        float Right;
-        float Bottom;
-    };
-
     struct GpuRenderWork final
     {
         SceneRenderTarget& InoutRenderTarget;
         RenderWork& Work;
-    };
-
-    struct RayGenConstantBuffer final
-    {
-        Viewport CurrentViewport;
-        Viewport CurrentStencil;
     };
 
     struct SceneConstantBuffer
@@ -88,7 +61,8 @@ namespace cgs
     static D3DPtr<ID3D12CommandQueue> gGraphicsCommandQueue;
     static D3DPtr<ID3D12DescriptorHeap> gRtvHeap;
     static D3DPtr<ID3D12DescriptorHeap> gDsvHeap;
-    static D3DPtr<ID3D12DescriptorHeap> gCbvSrvUavHeap;
+    static constexpr uint32 GLOBAL_CBV_SRV_UAV_HEAP_INDEX = BACK_BUFFERS_COUNT;
+    static std::vector<D3DPtr<ID3D12DescriptorHeap>> gCbvSrvUavHeaps(BACK_BUFFERS_COUNT + 1);
     static uint32 gRtvIncrementSize = 0;
     static uint32 gDsvIncrementSize = 0;
     static std::vector<SceneRenderTarget> gSceneRenderTargets(BACK_BUFFERS_COUNT);
@@ -101,14 +75,13 @@ namespace cgs
     static Slang::ComPtr<slang::IBlob> gFsShader;
     static D3DPtr<ID3D12RootSignature> gRasterizationRootSignature;
     static D3DPtr<ID3D12PipelineState> gRasterizationPipelineState;
-    static std::unique_ptr<ConstantBuffer> gCameraBuffer;
-    static std::unique_ptr<ConstantBuffer> gEmissiveBuffer;
+    static std::vector<std::unique_ptr<ConstantBuffer>> gCameraBuffers(BACK_BUFFERS_COUNT);
+    static std::vector<std::unique_ptr<ConstantBuffer>> gEmissiveBuffers(BACK_BUFFERS_COUNT);
 
     // Raytracing
     static std::vector<std::unique_ptr<Texture>> gRaytracingOutput(BACK_BUFFERS_COUNT);
     static std::vector<D3D12_GPU_DESCRIPTOR_HANDLE> gRaytracingOutputResourceUAVGpuDescriptor(BACK_BUFFERS_COUNT);
     static uint32 gRaytracingOutputResourceUAVDescriptorHeapIndex = std::numeric_limits<uint32>::max();
-    static RayGenConstantBuffer gRayGenConstantBuffer;
     static D3DPtr<ID3D12RootSignature> gRaytracingGlobalRootSignature;
     static D3DPtr<ID3D12RootSignature> gRaytracingLocalRootSignature;
     static Slang::ComPtr<slang::IBlob> gRayGenShader;
@@ -122,6 +95,21 @@ namespace cgs
     static D3DPtr<ID3D12Resource> gMissShaderTable;
     static D3DPtr<ID3D12Resource> gHitGroupShaderTable;
     static std::vector<SceneConstantBuffer> gSceneConstantBuffers(BACK_BUFFERS_COUNT);
+    static uint32 gDescriptorSize = 0;
+    enum class eCbvSrvUavRaytracingDescriptorType : uint8
+    {
+        OUTPUT_TEXTURE = 0,
+        INDICES,
+        VERTICES,
+        COLORS,
+        COUNT,
+    };
+
+    enum class eCbvSrvUavRasterizationDescriptorType : uint8
+    {
+        COLORS,
+        COUNT,
+    };
 
     enum class ShaderType : uint8
     {
@@ -143,7 +131,7 @@ namespace cgs
     createIndexBuffer(IndexBuffer& outIndexBuffer, const std::vector<uint16>& indices, const std::string& name);
 
     [[nodiscard]] static bool
-    createShaders() noexcept;
+    createShaders(const eRenderMethod renderMethod) noexcept;
     
     [[nodiscard]] static bool
     createVertexBuffer(VertexBuffer& outVertexBuffer, const std::vector<VertexPN>& vertices, const std::string& name);
@@ -283,7 +271,7 @@ namespace cgs
     }
 
     bool
-    createShaders() noexcept
+    createShaders(const eRenderMethod renderMethod) noexcept
     {
         HRESULT hr = S_OK;
         SlangGlobalSessionDesc slangGlobalSessionDesc = {};
@@ -354,6 +342,9 @@ namespace cgs
 		};
 
         // Rasterization
+        switch(renderMethod)
+        {
+        case eRenderMethod::RASTERIZATION:
         {
             std::vector<slang::TargetDesc> targetDescs = 
             {
@@ -469,15 +460,14 @@ namespace cgs
                     .ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL,
                 },
                 {
-                    .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
-                    .Constants =
+                    .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+                    .Descriptor = 
                     {
-                        .ShaderRegister = 2,
+                        .ShaderRegister = 0,
                         .RegisterSpace = 0,
-                        .Num32BitValues = 4,
                     },
                     .ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL,
-                }
+                },
             };
 
             const D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc =
@@ -591,9 +581,9 @@ namespace cgs
                 assert(false && "Failed to create pipeline state");
                 return false;
             }
-        }   // Rasterization
-        
-        // Raytracing
+        }
+        break;
+        case eRenderMethod::RAYTRACING:
         {
             std::vector<slang::TargetDesc> targetDescs = 
             {
@@ -721,8 +711,9 @@ namespace cgs
 
             // Global root signature
             {
-                const D3D12_DESCRIPTOR_RANGE descriptorRange[]
+                static constexpr D3D12_DESCRIPTOR_RANGE DESCRIPTOR_RANGE[]
                 {
+                    // Output Texture
                     {
                         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
                         .NumDescriptors = 1,
@@ -730,18 +721,28 @@ namespace cgs
                         .RegisterSpace = 0,
                         .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
                     },
+                    // Geometry Information
+                    {
+                        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+                        .NumDescriptors = 3,
+                        .BaseShaderRegister = 1,    // t0: AS, t1: index buffer, t2: vertex buffer, t3: color buffer
+                        .RegisterSpace = 0,
+                        .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
+                    },
                 };
-                const D3D12_ROOT_PARAMETER rootParameters[static_cast<uint32>(GlobalRootSignatureParams::COUNT)] = 
-                { 
+                static constexpr D3D12_ROOT_PARAMETER ROOT_PARAMETERS[] = 
+                {
+                    // Output texture
                     {
                         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
                         .DescriptorTable = 
                         {
-                            .NumDescriptorRanges = CGS_ARRAYSIZE(descriptorRange),
-                            .pDescriptorRanges = descriptorRange,
+                            .NumDescriptorRanges = 1,
+                            .pDescriptorRanges = &DESCRIPTOR_RANGE[0],
                         },
                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
                     }, 
+                    // Acceleration structure
                     {
                         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
                         .Descriptor = 
@@ -750,13 +751,33 @@ namespace cgs
                             .RegisterSpace = 0,
                         },
                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
-                    }
+                    },
+                    // Scene constant buffer
+                    {
+                        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+                        .Descriptor = 
+                        {
+                            .ShaderRegister = 0,
+                            .RegisterSpace = 0,
+                        },
+                        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+                    },
+                    // Geometry information
+                    {
+                        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+                        .DescriptorTable = 
+                        {
+                            .NumDescriptorRanges = 1,
+                            .pDescriptorRanges = &DESCRIPTOR_RANGE[1],
+                        },
+                        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+                    },
                 };
 
-                const D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc =
+                static constexpr D3D12_ROOT_SIGNATURE_DESC ROOT_SIGNATURE_DESC =
                 {
-                    .NumParameters = CGS_ARRAYSIZE(rootParameters),
-                    .pParameters = rootParameters,
+                    .NumParameters = CGS_ARRAYSIZE(ROOT_PARAMETERS),
+                    .pParameters = ROOT_PARAMETERS,
                     .NumStaticSamplers = 0,
                     .pStaticSamplers = nullptr,
                     .Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE,
@@ -764,7 +785,7 @@ namespace cgs
 
                 D3DPtr<ID3DBlob> signature;
                 D3DPtr<ID3DBlob> error;
-                hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, signature.GetAddressOf(), error.GetAddressOf());
+                hr = D3D12SerializeRootSignature(&ROOT_SIGNATURE_DESC, D3D_ROOT_SIGNATURE_VERSION_1, signature.GetAddressOf(), error.GetAddressOf());
                 if (FAILED(hr))
                 {
                     if (error != nullptr)
@@ -786,24 +807,10 @@ namespace cgs
 
             // Local root signature
             {
-                const D3D12_ROOT_PARAMETER rootParameters[static_cast<uint32>(LocalRootSignatureParams::COUNT)] = 
-                { 
-                    {
-                        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
-                        .Constants =
-                        {
-                            .ShaderRegister = 0,
-                            .RegisterSpace = 0,
-                            .Num32BitValues = sizeof(RayGenConstantBuffer) / 4,
-                        },
-                        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
-                    }, 
-                };
-
-                const D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc =
+                static constexpr D3D12_ROOT_SIGNATURE_DESC ROOT_SIGNATURE_DESC =
                 {
-                    .NumParameters = CGS_ARRAYSIZE(rootParameters),
-                    .pParameters = rootParameters,
+                    .NumParameters = 0,
+                    .pParameters = nullptr,
                     .NumStaticSamplers = 0,
                     .pStaticSamplers = nullptr,
                     .Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE,
@@ -811,7 +818,7 @@ namespace cgs
 
                 D3DPtr<ID3DBlob> signature;
                 D3DPtr<ID3DBlob> error;
-                hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, signature.GetAddressOf(), error.GetAddressOf());
+                hr = D3D12SerializeRootSignature(&ROOT_SIGNATURE_DESC, D3D_ROOT_SIGNATURE_VERSION_1, signature.GetAddressOf(), error.GetAddressOf());
                 if (FAILED(hr))
                 {
                     if (error != nullptr)
@@ -831,6 +838,7 @@ namespace cgs
                 }
             } // Local root signature
 
+            // DXIL
             std::vector<D3D12_EXPORT_DESC> exportDescs =
             {
                 {
@@ -880,6 +888,7 @@ namespace cgs
                 },
             };
 
+            // Triangle hit group
             const D3D12_HIT_GROUP_DESC hitGroupDesc =
             {
                 .HitGroupExport = L"HitGroup",
@@ -887,12 +896,14 @@ namespace cgs
                 .ClosestHitShaderImport = L"ClosestHitMain",
             };
 
+            // Shader config
             const D3D12_RAYTRACING_SHADER_CONFIG raytracingShaderConfig =
             {
                 .MaxPayloadSizeInBytes = 4 * sizeof(float),     // float4 color
                 .MaxAttributeSizeInBytes = 2 * sizeof(float),   // float2 barycentrics
             };
 
+            // Local config
             D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION localRootSignatureAssociation =
             {
                 .pSubobjectToAssociate = nullptr,
@@ -959,6 +970,11 @@ namespace cgs
                 return false;
             }
         }
+        break;
+        default:
+            assert(false && "Invalid render method!!");
+            break;
+        }
 
         return true;
     }
@@ -972,8 +988,11 @@ namespace cgs
         }
 
         geometries.clear();
-        gEmissiveBuffer.reset();
-        gCameraBuffer.reset();
+        for (uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
+        {
+            gEmissiveBuffers[i].reset();
+            gCameraBuffers[i].reset();
+        }
         gRaytracingOutput.clear();
 
         for(D3DPtr<ID3D12Resource>& bottomLevelAccelerationStructure : gBottomLevelAccelerationStructures)
@@ -1044,7 +1063,10 @@ namespace cgs
         
         gSceneRenderTargets.clear();
 
-        DestroyD3D12Object(gCbvSrvUavHeap);
+        for(D3DPtr<ID3D12DescriptorHeap>& cbvSrvUavHeap : gCbvSrvUavHeaps)
+        {
+            DestroyD3D12Object(cbvSrvUavHeap);
+        }
         DestroyD3D12Object(gDsvHeap);
         DestroyD3D12Object(gRtvHeap);
 
@@ -1166,6 +1188,26 @@ namespace cgs
         vertexBufferCreateInfo.View.StrideInBytes = sizeof(VertexPN);
         vertexBufferCreateInfo.View.SizeInBytes = vertexBufferCreateInfo.View.StrideInBytes * static_cast<uint32>(vertices.size());
 
+        const D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc =
+        {
+            .Format = DXGI_FORMAT_UNKNOWN,
+            .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+            .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+            .Buffer = 
+            {
+                .NumElements = static_cast<uint32>(vertices.size()),
+                .StructureByteStride = sizeof(VertexPN),
+                .Flags = D3D12_BUFFER_SRV_FLAG_NONE,
+            },
+        };
+        // eCbvSrvUavRaytracingDescriptorType
+        vertexBufferCreateInfo.ParentCreateInfo.View = gCbvSrvUavHeaps[GLOBAL_CBV_SRV_UAV_HEAP_INDEX]->GetCPUDescriptorHandleForHeapStart();
+        vertexBufferCreateInfo.ParentCreateInfo.View.ptr += gDescriptorSize * static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::VERTICES);
+        gDevice->CreateShaderResourceView(vertexBufferCreateInfo.ParentCreateInfo.Data.Get(), &srvDesc, vertexBufferCreateInfo.ParentCreateInfo.View);
+        
+        vertexBufferCreateInfo.ParentCreateInfo.GpuDescriptor = gCbvSrvUavHeaps[GLOBAL_CBV_SRV_UAV_HEAP_INDEX]->GetGPUDescriptorHandleForHeapStart();
+        vertexBufferCreateInfo.ParentCreateInfo.GpuDescriptor.ptr += gDescriptorSize * static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::VERTICES);
+
         outVertexBuffer.Initialize(std::move(vertexBufferCreateInfo));
         return true;
     }
@@ -1234,6 +1276,27 @@ namespace cgs
         indexBufferCreateInfo.View.BufferLocation = indexBufferCreateInfo.ParentCreateInfo.Data->GetGPUVirtualAddress();
         indexBufferCreateInfo.View.SizeInBytes = static_cast<uint32>(sizeof(uint16) * indices.size());
         indexBufferCreateInfo.View.Format = DXGI_FORMAT_R16_UINT;
+
+        const D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc =
+        {
+            .Format = DXGI_FORMAT_R32_TYPELESS,
+            .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+            .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+            .Buffer = 
+            {
+                .NumElements = static_cast<uint32>(indices.size() / 4),
+                .StructureByteStride = 0,
+                .Flags = D3D12_BUFFER_SRV_FLAG_RAW,
+            },
+        };
+        // eCbvSrvUavRaytracingDescriptorType
+        indexBufferCreateInfo.ParentCreateInfo.View = gCbvSrvUavHeaps[GLOBAL_CBV_SRV_UAV_HEAP_INDEX]->GetCPUDescriptorHandleForHeapStart();
+        indexBufferCreateInfo.ParentCreateInfo.View.ptr += gDescriptorSize * static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::INDICES);
+        gDevice->CreateShaderResourceView(indexBufferCreateInfo.ParentCreateInfo.Data.Get(), &srvDesc, indexBufferCreateInfo.ParentCreateInfo.View);
+        
+        indexBufferCreateInfo.ParentCreateInfo.GpuDescriptor = gCbvSrvUavHeaps[GLOBAL_CBV_SRV_UAV_HEAP_INDEX]->GetGPUDescriptorHandleForHeapStart();
+        indexBufferCreateInfo.ParentCreateInfo.GpuDescriptor.ptr += gDescriptorSize * static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::INDICES);
+
         outIndexBuffer.Initialize(std::move(indexBufferCreateInfo));
         return true;
     }
@@ -1270,48 +1333,51 @@ namespace cgs
                 .VisibleNodeMask = 1,
             };
             
-            ConstantBuffer::CreateInfo cameraBufferCreateInfo;
-            cameraBufferCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
-            hr = gDevice->CreateCommittedResource(
-                &bufferHeapProperties,
-                D3D12_HEAP_FLAG_NONE,
-                &cameraBufferDesc,
-                cameraBufferCreateInfo.State,
-                nullptr,
-                IID_PPV_ARGS(cameraBufferCreateInfo.Data.GetAddressOf())
-            );
-            if(FAILED(hr))
+            for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
             {
-                assert(false && "Failed to create vertex buffer");
-                return false;
+                ConstantBuffer::CreateInfo cameraBufferCreateInfo;
+                cameraBufferCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
+                hr = gDevice->CreateCommittedResource(
+                    &bufferHeapProperties,
+                    D3D12_HEAP_FLAG_NONE,
+                    &cameraBufferDesc,
+                    cameraBufferCreateInfo.State,
+                    nullptr,
+                    IID_PPV_ARGS(cameraBufferCreateInfo.Data.GetAddressOf())
+                );
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to create vertex buffer");
+                    return false;
+                }
+                
+                const D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = 
+                {
+                    .BufferLocation = cameraBufferCreateInfo.Data->GetGPUVirtualAddress(),
+                    .SizeInBytes = static_cast<uint32>(cameraBufferDesc.Width),
+                };
+                cameraBufferCreateInfo.View = gCbvSrvUavHeaps[i]->GetCPUDescriptorHandleForHeapStart();
+                gDevice->CreateConstantBufferView(&cbvDesc, cameraBufferCreateInfo.View);
+
+                D3D12_RANGE range = { .Begin = 0, .End = 0 };
+                byte* cameraDataBegin = nullptr;
+                hr = cameraBufferCreateInfo.Data->Map(
+                    0,
+                    &range,
+                    reinterpret_cast<void**>(&cameraDataBegin)
+                );
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to map camera buffer");
+                    return false;
+                }
+
+                const Camera::Buffer& cameraBuffer = mainCamera.GetBuffer();
+                std::memcpy(cameraDataBegin, &cameraBuffer, sizeof(Camera::Buffer));
+                cameraBufferCreateInfo.Data->Unmap(0, nullptr);
+
+                gCameraBuffers[i] = std::make_unique<ConstantBuffer>(std::move(cameraBufferCreateInfo));
             }
-            
-            const D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = 
-            {
-                .BufferLocation = cameraBufferCreateInfo.Data->GetGPUVirtualAddress(),
-                .SizeInBytes = static_cast<uint32>(cameraBufferDesc.Width),
-            };
-            cameraBufferCreateInfo.View = gCbvSrvUavHeap->GetCPUDescriptorHandleForHeapStart();
-            gDevice->CreateConstantBufferView(&cbvDesc, cameraBufferCreateInfo.View);
-
-            D3D12_RANGE range = { .Begin = 0, .End = 0 };
-            byte* cameraDataBegin = nullptr;
-            hr = cameraBufferCreateInfo.Data->Map(
-                0,
-                &range,
-                reinterpret_cast<void**>(&cameraDataBegin)
-            );
-            if(FAILED(hr))
-            {
-                assert(false && "Failed to map camera buffer");
-                return false;
-            }
-
-            const Camera::Buffer& cameraBuffer = mainCamera.GetBuffer();
-            std::memcpy(cameraDataBegin, &cameraBuffer, sizeof(Camera::Buffer));
-            cameraBufferCreateInfo.Data->Unmap(0, nullptr);
-
-            gCameraBuffer = std::make_unique<ConstantBuffer>(std::move(cameraBufferCreateInfo));
         }
         else
         {
@@ -1320,64 +1386,60 @@ namespace cgs
                 sceneConstantBuffer.CameraPosition = mainCamera.GetPosition();
             }
         }
-
-        const float border = 0.1f;
-        const uint32 width = gSceneRenderTargets[0].ColorBuffer.GetWidth();
-        const uint32 height = gSceneRenderTargets[0].ColorBuffer.GetHeight();
-        const float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
-        if(width <= height)
-        {
-            gRayGenConstantBuffer.CurrentStencil =
-            {
-                .Left = -1.0f + border,
-                .Top = -1.0f + border * aspectRatio,
-                .Right = 1.0f - border,
-                .Bottom = 1.0f - border * aspectRatio,
-            };
-        }
-        else
-        {
-            gRayGenConstantBuffer.CurrentStencil =
-            {
-                .Left = -1.0f + border,
-                .Top = -1.0f + border / aspectRatio,
-                .Right = 1.0f - border,
-                .Bottom = 1.0f - border / aspectRatio,
-            };
-        }
         
         outGeometries.clear();
-        outGeometries.reserve(8);
+        outGeometries.reserve(1);
+        outGeometries.push_back(std::make_unique<Geometry>(std::string("Cornell Box")));
+        Geometry& cornellBox = *outGeometries.back();
 
         std::vector<VertexPN> vertices;
+        static constexpr uint32 QUAD_VERTICES_COUNT = 4;
+        static constexpr uint32 FLOOR_VERTICES_COUNT = QUAD_VERTICES_COUNT;
+        static constexpr uint32 LIGHT_VERTICES_COUNT = QUAD_VERTICES_COUNT;
+        static constexpr uint32 CEILING_VERTICES_COUNT = QUAD_VERTICES_COUNT;
+        static constexpr uint32 BACK_WALL_VERTICES_COUNT = QUAD_VERTICES_COUNT;
+        static constexpr uint32 RIGHT_WALL_VERTICES_COUNT = QUAD_VERTICES_COUNT;
+        static constexpr uint32 LEFT_WALL_VERTICES_COUNT = QUAD_VERTICES_COUNT;
+        static constexpr uint32 CUBE_VERTICES_COUNT = QUAD_VERTICES_COUNT * 5;
+        static constexpr uint32 SHORT_BLOCK_VERTICES_COUNT = CUBE_VERTICES_COUNT;
+        static constexpr uint32 TALL_BLOCK_VERTICES_COUNT = CUBE_VERTICES_COUNT;
+        vertices.reserve(FLOOR_VERTICES_COUNT + LIGHT_VERTICES_COUNT + CEILING_VERTICES_COUNT + BACK_WALL_VERTICES_COUNT + RIGHT_WALL_VERTICES_COUNT + LEFT_WALL_VERTICES_COUNT + SHORT_BLOCK_VERTICES_COUNT + TALL_BLOCK_VERTICES_COUNT);
         std::vector<uint16> indices;
+        static constexpr uint32 QUAD_INDICES_COUNT = 6;
+        static constexpr uint32 FLOOR_INDICES_COUNT = QUAD_INDICES_COUNT;
+        static constexpr uint32 LIGHT_INDICES_COUNT = QUAD_INDICES_COUNT;
+        static constexpr uint32 CEILING_INDICES_COUNT = QUAD_INDICES_COUNT;
+        static constexpr uint32 BACK_WALL_INDICES_COUNT = QUAD_INDICES_COUNT;
+        static constexpr uint32 RIGHT_WALL_INDICES_COUNT = QUAD_INDICES_COUNT;
+        static constexpr uint32 LEFT_WALL_INDICES_COUNT = QUAD_INDICES_COUNT;
+        static constexpr uint32 CUBE_INDICES_COUNT = QUAD_INDICES_COUNT * 5;
+        static constexpr uint32 SHORT_BLOCK_INDICES_COUNT = CUBE_INDICES_COUNT;
+        static constexpr uint32 TALL_BLOCK_INDICES_COUNT = CUBE_INDICES_COUNT;
+        indices.reserve(FLOOR_INDICES_COUNT + LIGHT_INDICES_COUNT + CEILING_INDICES_COUNT + BACK_WALL_INDICES_COUNT + RIGHT_WALL_INDICES_COUNT + LEFT_WALL_INDICES_COUNT + SHORT_BLOCK_INDICES_COUNT + TALL_BLOCK_INDICES_COUNT);
+
+        std::vector<float3> colors;
+        static constexpr uint32 QUAD_TRIANGLES_COUNT = 2;
+        static constexpr uint32 FLOOR_TRIANGLES_COUNT = QUAD_TRIANGLES_COUNT;
+        static constexpr uint32 LIGHT_TRIANGLES_COUNT = QUAD_TRIANGLES_COUNT;
+        static constexpr uint32 CEILING_TRIANGLES_COUNT = QUAD_TRIANGLES_COUNT;
+        static constexpr uint32 BACK_WALL_TRIANGLES_COUNT = QUAD_TRIANGLES_COUNT;
+        static constexpr uint32 RIGHT_WALL_TRIANGLES_COUNT = QUAD_TRIANGLES_COUNT;
+        static constexpr uint32 LEFT_WALL_TRIANGLES_COUNT = QUAD_TRIANGLES_COUNT;
+        static constexpr uint32 CUBE_TRIANGLES_COUNT = QUAD_TRIANGLES_COUNT * 5;
+        static constexpr uint32 SHORT_BLOCK_TRIANGLES_COUNT = CUBE_TRIANGLES_COUNT;
+        static constexpr uint32 TALL_BLOCK_TRIANGLES_COUNT = CUBE_TRIANGLES_COUNT;
+        colors.reserve(FLOOR_TRIANGLES_COUNT + LIGHT_TRIANGLES_COUNT + CEILING_TRIANGLES_COUNT + BACK_WALL_TRIANGLES_COUNT + RIGHT_WALL_TRIANGLES_COUNT + LEFT_WALL_TRIANGLES_COUNT + SHORT_BLOCK_TRIANGLES_COUNT + TALL_BLOCK_TRIANGLES_COUNT);
         bool result = false;
 
         // Floor
-        outGeometries.push_back(std::make_unique<Geometry>(std::string("Floor")));
-        Geometry& floor = *outGeometries.back();
         {
             constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 0.0f, 0.0f, 0.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -552.8f, 0.0f, 0.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -549.6f, 0.0f, 559.2f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 0.0f, 559.2f };
-            indices.reserve(6);
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
-
-            VertexBuffer vertexBuffer;
-            result = createVertexBuffer(vertexBuffer, vertices, "FloorVertexBuffer");
-            floor.SetVertexBuffer(std::move(vertexBuffer));
-                
-            IndexBuffer indexBuffer;
-            result = createIndexBuffer(indexBuffer, indices, "FloorIndexBuffer");
-            floor.SetIndexBuffer(std::move(indexBuffer));
-            floor.SetColor(WHITE);
-        }
-
-        if (result == false)
-        {
-            assert(false && "Failed to create vertex buffer");
-            outGeometries.pop_back();
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
         }
         
         // Light
@@ -1388,12 +1450,7 @@ namespace cgs
         };
         EmissiveBuffer emissiveBuffer;
 
-        outGeometries.push_back(std::make_unique<Geometry>(std::string("Light")));
-        Geometry& light = *outGeometries.back();
         {
-            vertices.clear();
-            indices.clear();
-
             constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -343.0f, 548.8f, 332.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -343.0f, 548.8f, 227.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -213.0f, 548.8f, 227.0f };
@@ -1413,24 +1470,9 @@ namespace cgs
             emissiveBuffer.Position += v3;
             emissiveBuffer.Position /= 4.0f;
             emissiveBuffer.Position.W = 1.0f;
-
-            VertexBuffer vertexBuffer;
-            result = createVertexBuffer(vertexBuffer, vertices, "LightVertexBuffer");
-            light.SetVertexBuffer(std::move(vertexBuffer));
-
-            IndexBuffer indexBuffer;
-            result = createIndexBuffer(indexBuffer, indices, "LightIndexBuffer");
-            light.SetIndexBuffer(std::move(indexBuffer));
-
-            light.SetColor(WHITE);
             emissiveBuffer.Color = float3{1.0f, 1.0f, 1.0f};
-            light.SetIsEmissive(true);
-        }
-
-        if (result == false)
-        {
-            assert(false && "Failed to create vertex buffer");
-            outGeometries.pop_back();
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
         }
 
         if(renderMethod == eRenderMethod::RASTERIZATION)
@@ -1458,47 +1500,50 @@ namespace cgs
                 .Flags = D3D12_RESOURCE_FLAG_NONE,
             };
             
-            ConstantBuffer::CreateInfo emissiveBufferCreateInfo;
-            emissiveBufferCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
-            hr = gDevice->CreateCommittedResource(
-                &bufferHeapProperties,
-                D3D12_HEAP_FLAG_NONE,
-                &emissiveBufferDesc,
-                emissiveBufferCreateInfo.State,
-                nullptr,
-                IID_PPV_ARGS(emissiveBufferCreateInfo.Data.GetAddressOf())
-            );
-            if(FAILED(hr))
+            for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
             {
-                assert(false && "Failed to create vertex buffer");
-                return false;
+                ConstantBuffer::CreateInfo emissiveBufferCreateInfo;
+                emissiveBufferCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
+                hr = gDevice->CreateCommittedResource(
+                    &bufferHeapProperties,
+                    D3D12_HEAP_FLAG_NONE,
+                    &emissiveBufferDesc,
+                    emissiveBufferCreateInfo.State,
+                    nullptr,
+                    IID_PPV_ARGS(emissiveBufferCreateInfo.Data.GetAddressOf())
+                );
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to create vertex buffer");
+                    return false;
+                }
+                
+                const D3D12_CONSTANT_BUFFER_VIEW_DESC emissiveCbvDesc = 
+                {
+                    .BufferLocation = emissiveBufferCreateInfo.Data->GetGPUVirtualAddress(),
+                    .SizeInBytes = static_cast<uint32>(emissiveBufferDesc.Width),
+                };
+                emissiveBufferCreateInfo.View = gCbvSrvUavHeaps[i]->GetCPUDescriptorHandleForHeapStart();
+                gDevice->CreateConstantBufferView(&emissiveCbvDesc, emissiveBufferCreateInfo.View);
+
+                D3D12_RANGE range = { .Begin = 0, .End = 0 };
+                byte* emissiveDataBegin = nullptr;
+                hr = emissiveBufferCreateInfo.Data->Map(
+                    0,
+                    &range,
+                    reinterpret_cast<void**>(&emissiveDataBegin)
+                );
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to map emissive buffer");
+                    return false;
+                }
+
+                std::memcpy(emissiveDataBegin, &emissiveBuffer, sizeof(EmissiveBuffer));
+                emissiveBufferCreateInfo.Data->Unmap(0, nullptr);
+
+                gEmissiveBuffers[i] = std::make_unique<ConstantBuffer>(std::move(emissiveBufferCreateInfo));
             }
-            
-            const D3D12_CONSTANT_BUFFER_VIEW_DESC emissiveCbvDesc = 
-            {
-                .BufferLocation = emissiveBufferCreateInfo.Data->GetGPUVirtualAddress(),
-                .SizeInBytes = static_cast<uint32>(emissiveBufferDesc.Width),
-            };
-            emissiveBufferCreateInfo.View = gCbvSrvUavHeap->GetCPUDescriptorHandleForHeapStart();
-            gDevice->CreateConstantBufferView(&emissiveCbvDesc, emissiveBufferCreateInfo.View);
-
-            D3D12_RANGE range = { .Begin = 0, .End = 0 };
-            byte* emissiveDataBegin = nullptr;
-            hr = emissiveBufferCreateInfo.Data->Map(
-                0,
-                &range,
-                reinterpret_cast<void**>(&emissiveDataBegin)
-            );
-            if(FAILED(hr))
-            {
-                assert(false && "Failed to map emissive buffer");
-                return false;
-            }
-
-            std::memcpy(emissiveDataBegin, &emissiveBuffer, sizeof(EmissiveBuffer));
-            emissiveBufferCreateInfo.Data->Unmap(0, nullptr);
-
-            gEmissiveBuffer = std::make_unique<ConstantBuffer>(std::move(emissiveBufferCreateInfo));
         }
         else
         {
@@ -1515,226 +1560,222 @@ namespace cgs
         }
 
         // Ceiling
-        outGeometries.push_back(std::make_unique<Geometry>(std::string("Ceiling")));
-        Geometry& ceiling = *outGeometries.back();
         {
-            vertices.clear();
-            indices.clear();
-
             constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -556.0f, 548.8f, 559.2f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -556.0f, 548.8f, 0.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 0.0f, 548.8f, 0.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 548.8f, 559.2f };
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
-
-            VertexBuffer vertexBuffer;
-            result = createVertexBuffer(vertexBuffer, vertices, "CeilingVertexBuffer");
-            ceiling.SetVertexBuffer(std::move(vertexBuffer));
-
-            IndexBuffer indexBuffer;
-            result = createIndexBuffer(indexBuffer, indices, "CeilingIndexBuffer");
-            ceiling.SetIndexBuffer(std::move(indexBuffer));
-
-            ceiling.SetColor(WHITE);
-        }
-
-        if (result == false)
-        {
-            assert(false && "Failed to create vertex buffer");
-            outGeometries.pop_back();
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
         }
         
         // Back wall
-        outGeometries.push_back(std::make_unique<Geometry>(std::string("Back Wall")));
-        Geometry& backWall = *outGeometries.back();
         {
-            vertices.clear();
-            indices.clear();
-
             constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 0.0f, 0.0f, 559.2f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -549.6f, 0.0f, 559.2f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -556.0f, 548.8f, 559.2f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 548.8f, 559.2f };
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
-
-            VertexBuffer vertexBuffer;
-            result = createVertexBuffer(vertexBuffer, vertices, "BackWallVertexBuffer");
-            backWall.SetVertexBuffer(std::move(vertexBuffer));
-
-            IndexBuffer indexBuffer;
-            result = createIndexBuffer(indexBuffer, indices, "BackWallIndexBuffer");
-            backWall.SetIndexBuffer(std::move(indexBuffer));
-
-            backWall.SetColor(WHITE);
-        }
-
-        if (result == false)
-        {
-            assert(false && "Failed to create vertex buffer");
-            outGeometries.pop_back();
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
         }
 
         // Right wall
-        outGeometries.push_back(std::make_unique<Geometry>(std::string("Right Wall")));
-        Geometry& rightWall = *outGeometries.back();
         {
-            vertices.clear();
-            indices.clear();
-
             constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { 0.0f, 0.0f, 0.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { 0.0f, 0.0f, 559.2f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { 0.0f, 548.8f, 559.2f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { 0.0f, 548.8f, 0.0f };
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
-
-            VertexBuffer vertexBuffer;
-            result = createVertexBuffer(vertexBuffer, vertices, "RightWallVertexBuffer");
-            rightWall.SetVertexBuffer(std::move(vertexBuffer));
-
-            IndexBuffer indexBuffer;
-            result = createIndexBuffer(indexBuffer, indices, "RightWallIndexBuffer");
-            rightWall.SetIndexBuffer(std::move(indexBuffer));
-
-            rightWall.SetColor(GREEN);
+            colors.push_back(float3{0.0f, 1.0f, 0.0f});
+            colors.push_back(float3{0.0f, 1.0f, 0.0f});
         }
-
-        if (result == false)
-        {
-            assert(false && "Failed to create vertex buffer");
-            outGeometries.pop_back();
-        }
-
+        
         // Left wall
-        outGeometries.push_back(std::make_unique<Geometry>(std::string("Left Wall")));
-        Geometry& leftWall = *outGeometries.back();
         {
-            vertices.clear();
-            indices.clear();
-
             constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -549.6f, 0.0f, 559.2f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -552.8f, 0.0f, 0.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -556.0f, 548.8f, 0.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -556.0f, 548.8f, 559.2f };
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
-
-            VertexBuffer vertexBuffer;
-            result = createVertexBuffer(vertexBuffer, vertices, "LeftWallVertexBuffer");
-            leftWall.SetVertexBuffer(std::move(vertexBuffer));
-
-            IndexBuffer indexBuffer;
-            result = createIndexBuffer(indexBuffer, indices, "LeftWallIndexBuffer");
-            leftWall.SetIndexBuffer(std::move(indexBuffer));
-
-            leftWall.SetColor(RED);
-        }
-
-        if (result == false)
-        {
-            assert(false && "Failed to create vertex buffer");
-            outGeometries.pop_back();
+            colors.push_back(float3{1.0f, 0.0f, 0.0f});
+            colors.push_back(float3{1.0f, 0.0f, 0.0f});
         }
 
         // Short block
-        outGeometries.push_back(std::make_unique<Geometry>(std::string("Short Block")));
-        Geometry& shortBlock = *outGeometries.back();
         {
-            vertices.clear();
-            indices.clear();
-            indices.reserve(6 * 5);
-
             constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -82.0f, 165.0f, 225.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -130.0f, 165.0f, 65.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -290.0f, 165.0f, 114.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -240.0f, 165.0f, 272.0f };
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v4 = { -290.0f, 165.0f, 114.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v5 = { -290.0f, 0.0f, 114.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v6 = { -240.0f, 0.0f, 272.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v7 = { -240.0f, 165.0f, 272.0f };
             addQuadVertices(vertices, indices, v4, v5, v6, v7);
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v8 = { -130.0f, 165.0f, 65.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v9 = { -130.0f, 0.0f, 65.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v10 = { -290.0f, 0.0f, 114.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v11 = { -290.0f, 165.0f, 114.0f };
             addQuadVertices(vertices, indices, v8, v9, v10, v11);
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v12 = { -82.0f, 165.0f, 225.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v13 = { -82.0f, 0.0f, 225.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v14 = { -130.0f, 0.0f, 65.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v15 = { -130.0f, 165.0f, 65.0f };
             addQuadVertices(vertices, indices, v12, v13, v14, v15);
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v16 = { -240.0f, 165.0f, 272.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v17 = { -240.0f, 0.0f, 272.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v18 = { -82.0f, 0.0f, 225.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v19 = { -82.0f, 165.0f, 225.0f };
             addQuadVertices(vertices, indices, v16, v17, v18, v19);
-
-            VertexBuffer vertexBuffer;
-            result = createVertexBuffer(vertexBuffer, vertices, "ShortBlockVertexBuffer");
-            shortBlock.SetVertexBuffer(std::move(vertexBuffer));
-
-            IndexBuffer indexBuffer;
-            result = createIndexBuffer(indexBuffer, indices, "ShortBlockIndexBuffer");
-            shortBlock.SetIndexBuffer(std::move(indexBuffer));
-
-            shortBlock.SetColor(WHITE);
-        }
-
-        if (result == false)
-        {
-            assert(false && "Failed to create vertex buffer");
-            outGeometries.pop_back();
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
         }
 
         // Tall block
-        outGeometries.push_back(std::make_unique<Geometry>(std::string("Tall Block")));
-        Geometry& tallBlock = *outGeometries.back();
         {
-            vertices.clear();
-            indices.clear();
-
             constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -265.0f, 330.0f, 296.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -423.0f, 330.0f, 247.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -472.0f, 330.0f, 406.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -314.0f, 330.0f, 456.0f };
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v4 = { -423.0f, 330.0f, 247.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v5 = { -423.0f, 0.0f, 247.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v6 = { -472.0f, 0.0f, 406.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v7 = { -472.0f, 330.0f, 406.0f };
             addQuadVertices(vertices, indices, v4, v5, v6, v7);
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v8 = { -472.0f, 330.0f, 406.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v9 = { -472.0f, 0.0f, 406.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v10 = { -314.0f, 0.0f, 456.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v11 = { -314.0f, 330.0f, 456.0f };
             addQuadVertices(vertices, indices, v8, v9, v10, v11);
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v12 = { -314.0f, 330.0f, 456.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v13 = { -314.0f, 0.0f, 456.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v14 = { -265.0f, 0.0f, 296.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v15 = { -265.0f, 330.0f, 296.0f };
             addQuadVertices(vertices, indices, v12, v13, v14, v15);
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v16 = { -265.0f, 330.0f, 296.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v17 = { -265.0f, 0.0f, 296.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v18 = { -423.0f, 0.0f, 247.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v19 = { -423.0f, 330.0f, 247.0f };
             addQuadVertices(vertices, indices, v16, v17, v18, v19);
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+        }
 
+        {
             VertexBuffer vertexBuffer;
-            result = createVertexBuffer(vertexBuffer, vertices, "TallBlockVertexBuffer");
-            tallBlock.SetVertexBuffer(std::move(vertexBuffer));
+            result = createVertexBuffer(vertexBuffer, vertices, "CornellBoxVertexBuffer");
+            cornellBox.SetVertexBuffer(std::move(vertexBuffer));
 
             IndexBuffer indexBuffer;
-            result = createIndexBuffer(indexBuffer, indices, "TallBlockIndexBuffer");
-            tallBlock.SetIndexBuffer(std::move(indexBuffer));
+            result = createIndexBuffer(indexBuffer, indices, "CornellBoxIndexBuffer");
+            cornellBox.SetIndexBuffer(std::move(indexBuffer));
+            
+            const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
+            {
+                .Type = D3D12_HEAP_TYPE_UPLOAD,
+                .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+                .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+                .CreationNodeMask = 1,
+                .VisibleNodeMask = 1,
+            };
 
-            tallBlock.SetColor(WHITE);
+            D3D12_RESOURCE_DESC bufferDesc =
+            {
+                .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+                .Alignment = 0,
+                .Width = static_cast<uint32>(sizeof(float3) * colors.size()),
+                .Height = 1,
+                .DepthOrArraySize = 1,
+                .MipLevels = 1,
+                .Format = DXGI_FORMAT_UNKNOWN,
+                .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+                .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+                .Flags = D3D12_RESOURCE_FLAG_NONE,
+            };
+
+            RenderResource::CreateInfo colorsBufferCreateInfo;
+            colorsBufferCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
+            colorsBufferCreateInfo.Name = "CornellBoxColorsBuffer";
+            hr = gDevice->CreateCommittedResource(
+                &bufferHeapProperties,
+                D3D12_HEAP_FLAG_NONE,
+                &bufferDesc,
+                colorsBufferCreateInfo.State,
+                nullptr,
+                IID_PPV_ARGS(colorsBufferCreateInfo.Data.GetAddressOf())
+            );
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to create color buffer");
+                return false;
+            }
+            
+            D3D12_RANGE range = { .Begin = 0, .End = 0 };
+            byte* colorDataBegin = nullptr;
+            hr = colorsBufferCreateInfo.Data->Map(
+                0,
+                &range,
+                reinterpret_cast<void**>(&colorDataBegin)
+            );
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to map color buffer");
+                return false;
+            }
+
+            std::memcpy(colorDataBegin, colors.data(), sizeof(float3) * colors.size());
+            colorsBufferCreateInfo.Data->Unmap(0, nullptr);
+
+            const D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc =
+            {
+                .Format = DXGI_FORMAT_UNKNOWN,
+                .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+                .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+                .Buffer = 
+                {
+                    .NumElements = static_cast<uint32>(colors.size()),
+                    .StructureByteStride = sizeof(float3),
+                    .Flags = D3D12_BUFFER_SRV_FLAG_NONE,
+                },
+            };
+            
+            const uint32 descriptorIndex = renderMethod == eRenderMethod::RASTERIZATION ? static_cast<uint32>(eCbvSrvUavRasterizationDescriptorType::COLORS) : static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::COLORS);
+            colorsBufferCreateInfo.View = gCbvSrvUavHeaps[GLOBAL_CBV_SRV_UAV_HEAP_INDEX]->GetCPUDescriptorHandleForHeapStart();
+            colorsBufferCreateInfo.View.ptr += gDescriptorSize * descriptorIndex;
+            gDevice->CreateShaderResourceView(colorsBufferCreateInfo.Data.Get(), &srvDesc, colorsBufferCreateInfo.View);
+
+            colorsBufferCreateInfo.GpuDescriptor = gCbvSrvUavHeaps[GLOBAL_CBV_SRV_UAV_HEAP_INDEX]->GetGPUDescriptorHandleForHeapStart();
+            colorsBufferCreateInfo.GpuDescriptor.ptr += gDescriptorSize * descriptorIndex;
+
+            cornellBox.SetColorBuffer(RenderResource(std::move(colorsBufferCreateInfo)));
         }
 
         if (result == false)
@@ -2288,20 +2329,32 @@ namespace cgs
         gDsvHeap->SetName(TEXT("Main DSV Descriptor Heap"));
 
 
-        const D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc =
+        D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc =
         {
             .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-            .NumDescriptors = 3,
+            .NumDescriptors = 4,
+            // Rasterization:
+                // Camera buffer
+                // Emissive buffer
+            // Raytracing:
+                // UAV output
+                // Indices
+                // Vertices
+                // Colors
             .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
             .NodeMask = 0,
         };
-        hr = gDevice->CreateDescriptorHeap(&cbvHeapDesc, IID_PPV_ARGS(gCbvSrvUavHeap.GetAddressOf()));
-        if (FAILED(hr))
+        for(uint32 i = 0; i < BACK_BUFFERS_COUNT + 1; ++i)
         {
-            assert(false && "Failed to create CBV descriptor heap");
-            return false;
+            hr = gDevice->CreateDescriptorHeap(&cbvHeapDesc, IID_PPV_ARGS(gCbvSrvUavHeaps[i].GetAddressOf()));
+            if (FAILED(hr))
+            {
+                assert(false && "Failed to create CBV descriptor heap");
+                return false;
+            }
+            const std::wstring debugName = L"Main CBV Descriptor Heap[" + std::to_wstring(i) + L"]";
+            gCbvSrvUavHeaps[i]->SetName(debugName.c_str());
         }
-        gCbvSrvUavHeap->SetName(TEXT("Main CBV Descriptor Heap"));
 
         DXGI_SWAP_CHAIN_DESC1 swapChainDesc = 
         {
@@ -2426,6 +2479,8 @@ namespace cgs
             gSceneRenderTargets[frameIndex].DepthBuffer.Initialize(std::move(depthBufferInfo));
         }
 
+        gDescriptorSize = gDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
         for(uint32 frameBufferIndex = 0; frameBufferIndex < BACK_BUFFERS_COUNT; ++frameBufferIndex)
         {
             hr = gDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(gGraphicsCommandAllocators[frameBufferIndex].GetAddressOf()));
@@ -2481,212 +2536,201 @@ namespace cgs
             return false;
         }
 
-        const bool result = createShaders();
+        const bool result = createShaders(createInfo.RenderMethod);
         if(result == false)
         {
             assert(false && "Failed to create shaders");
             return false;
         }
 
-        D3DPtr<ID3D12StateObjectProperties> stateObjectProperties;
-        hr = gRaytracingStateObject->QueryInterface(IID_PPV_ARGS(stateObjectProperties.GetAddressOf()));
-        if (FAILED(hr))
+        if(createInfo.RenderMethod == eRenderMethod::RAYTRACING)
         {
-            assert(false && "Failed to get raytracing state object properties");
-            return false;
-        }
-
-        void* rayGenShaderIdentifier = stateObjectProperties->GetShaderIdentifier(TEXT("RayGenMain"));
-        void* missShaderIdentifier = stateObjectProperties->GetShaderIdentifier(TEXT("MissMain"));
-        void* hitGroupShaderIdentifier = stateObjectProperties->GetShaderIdentifier(TEXT("HitGroup"));
-        const uint32 shaderIdentifierSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-            
-        const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
-        {
-            .Type = D3D12_HEAP_TYPE_UPLOAD,
-            .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
-            .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
-            .CreationNodeMask = 1,
-            .VisibleNodeMask = 1,
-        };
-
-        D3D12_RESOURCE_DESC bufferDesc =
-        {
-            .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
-            .Alignment = 0,
-            .Width = 0,
-            .Height = 1,
-            .DepthOrArraySize = 1,
-            .MipLevels = 1,
-            .Format = DXGI_FORMAT_UNKNOWN,
-            .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
-            .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
-            .Flags = D3D12_RESOURCE_FLAG_NONE,
-        };
-        // Ray gen shader table
-        {
-            struct RootArguments final
+            D3DPtr<ID3D12StateObjectProperties> stateObjectProperties;
+            hr = gRaytracingStateObject->QueryInterface(IID_PPV_ARGS(stateObjectProperties.GetAddressOf()));
+            if (FAILED(hr))
             {
-                RayGenConstantBuffer ConstantBuffer;
-            };
-
-            RootArguments rootArguments =
-            {
-                .ConstantBuffer = gRayGenConstantBuffer,
-            };
-
-            const uint32 shaderRecordsCount = 1;
-            const uint32 shaderRecordSize = static_cast<uint32>(Align(shaderIdentifierSize + sizeof(rootArguments), static_cast<size_t>(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT)));
-            bufferDesc.Width = shaderRecordsCount * shaderRecordSize;
-            
-            hr = gDevice->CreateCommittedResource(
-                &bufferHeapProperties,
-                D3D12_HEAP_FLAG_NONE,
-                &bufferDesc,
-                D3D12_RESOURCE_STATE_GENERIC_READ,
-                nullptr,
-                IID_PPV_ARGS(gRayGenShaderTable.GetAddressOf()));
-            if(FAILED(hr))
-            {
-                assert(false && "Failed to create ray gen shader table");
-                return false;
-            }
-            gRayGenShaderTable->SetName(TEXT("RayGenShaderTable"));
-
-            uint8_t* mappedData = nullptr;
-            // We don't unmap this until the app closes. Keeping buffer mapped for the lifetime of the resource is okay.
-            D3D12_RANGE range = { .Begin = 0, .End = 0 };
-            hr = gRayGenShaderTable->Map(0, &range, reinterpret_cast<void**>(&mappedData));
-            if(FAILED(hr))
-            {
-                assert(false && "Failed to map ray gen shader table");
-                return false;
-            }
-            
-            memcpy(mappedData, rayGenShaderIdentifier, shaderIdentifierSize);
-            memcpy(mappedData + shaderIdentifierSize, &rootArguments, sizeof(rootArguments));
-            mappedData += shaderRecordSize;
-        }
-
-        // Miss shader table
-        {
-            const uint32 shaderRecordsCount = 1;
-            const uint32 shaderRecordSize = Align(shaderIdentifierSize, static_cast<uint32>(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT));
-            bufferDesc.Width = shaderRecordsCount * shaderRecordSize;
-            
-            hr = gDevice->CreateCommittedResource(
-                &bufferHeapProperties,
-                D3D12_HEAP_FLAG_NONE,
-                &bufferDesc,
-                D3D12_RESOURCE_STATE_GENERIC_READ,
-                nullptr,
-                IID_PPV_ARGS(gMissShaderTable.GetAddressOf()));
-            if(FAILED(hr))
-            {
-                assert(false && "Failed to create miss shader table");
+                assert(false && "Failed to get raytracing state object properties");
                 return false;
             }
 
-            uint8_t* mappedData = nullptr;
-            // We don't unmap this until the app closes. Keeping buffer mapped for the lifetime of the resource is okay.
-            D3D12_RANGE range = { .Begin = 0, .End = 0 };
-            hr = gMissShaderTable->Map(0, &range, reinterpret_cast<void**>(&mappedData));
-            if(FAILED(hr))
+            void* rayGenShaderIdentifier = stateObjectProperties->GetShaderIdentifier(TEXT("RayGenMain"));
+            void* missShaderIdentifier = stateObjectProperties->GetShaderIdentifier(TEXT("MissMain"));
+            void* hitGroupShaderIdentifier = stateObjectProperties->GetShaderIdentifier(TEXT("HitGroup"));
+            const uint32 shaderIdentifierSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
+                
+            const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
             {
-                assert(false && "Failed to map miss shader table");
-                return false;
-            }
-
-            memcpy(mappedData, missShaderIdentifier, shaderIdentifierSize);
-            mappedData += shaderRecordSize;
-        }
-
-        // Hit group shader table
-        {
-            const uint32 shaderRecordsCount = 1;
-            const uint32 shaderRecordSize = Align(shaderIdentifierSize, static_cast<uint32>(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT));
-            bufferDesc.Width = shaderRecordsCount * shaderRecordSize;
-            
-            hr = gDevice->CreateCommittedResource(
-                &bufferHeapProperties,
-                D3D12_HEAP_FLAG_NONE,
-                &bufferDesc,
-                D3D12_RESOURCE_STATE_GENERIC_READ,
-                nullptr,
-                IID_PPV_ARGS(gHitGroupShaderTable.GetAddressOf()));
-            if(FAILED(hr))
-            {
-                assert(false && "Failed to create hit group shader table");
-                return false;
-            }
-
-            uint8_t* mappedData = nullptr;
-            // We don't unmap this until the app closes. Keeping buffer mapped for the lifetime of the resource is okay.
-            D3D12_RANGE range = { .Begin = 0, .End = 0 };
-            hr = gHitGroupShaderTable->Map(0, &range, reinterpret_cast<void**>(&mappedData));
-            if(FAILED(hr))
-            {
-                assert(false && "Failed to map hit group shader table");
-                return false;
-            }
-
-            memcpy(mappedData, hitGroupShaderIdentifier, shaderIdentifierSize);
-            mappedData += shaderRecordSize;
-        }
-    
-        // Create the output resource. The dimensions and format should match the swap-chain.
-        for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
-        {
-            Texture::CreateInfo raytracingOutputCreateInfo = {};
-            D3D12_HEAP_PROPERTIES heapProperties = 
-            {
-                .Type = D3D12_HEAP_TYPE_DEFAULT,
+                .Type = D3D12_HEAP_TYPE_UPLOAD,
                 .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
                 .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
                 .CreationNodeMask = 1,
                 .VisibleNodeMask = 1,
             };
 
-            bufferDesc =
-            D3D12_RESOURCE_DESC
+            D3D12_RESOURCE_DESC bufferDesc =
             {
-                .Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+                .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
                 .Alignment = 0,
-                .Width = cgs::gWidth,
-                .Height = cgs::gHeight,
+                .Width = 0,
+                .Height = 1,
                 .DepthOrArraySize = 1,
                 .MipLevels = 1,
-                .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+                .Format = DXGI_FORMAT_UNKNOWN,
                 .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
-                .Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN,
-                .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+                .Flags = D3D12_RESOURCE_FLAG_NONE,
             };
-            
-            raytracingOutputCreateInfo.ParentCreateInfo.State = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-            hr = gDevice->CreateCommittedResource(
-                &heapProperties, 
-                D3D12_HEAP_FLAG_NONE, 
-                &bufferDesc, 
-                raytracingOutputCreateInfo.ParentCreateInfo.State, 
-                nullptr, 
-                IID_PPV_ARGS(raytracingOutputCreateInfo.ParentCreateInfo.Data.GetAddressOf()));
-            if(FAILED(hr))
+            // Ray gen shader table
             {
-                assert(false && "Failed to create raytracing output resource");
-                return false;
-            }
-            const std::wstring resourceName = L"RaytracingOutputResource[" + std::to_wstring(i) + L"]";
-            raytracingOutputCreateInfo.ParentCreateInfo.Data->SetName(resourceName.c_str());
+                const uint32 shaderRecordsCount = 1;
+                const uint32 shaderRecordSize = Align(shaderIdentifierSize, static_cast<uint32>(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT));
+                bufferDesc.Width = shaderRecordsCount * shaderRecordSize;
+                
+                hr = gDevice->CreateCommittedResource(
+                    &bufferHeapProperties,
+                    D3D12_HEAP_FLAG_NONE,
+                    &bufferDesc,
+                    D3D12_RESOURCE_STATE_GENERIC_READ,
+                    nullptr,
+                    IID_PPV_ARGS(gRayGenShaderTable.GetAddressOf()));
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to create ray gen shader table");
+                    return false;
+                }
+                gRayGenShaderTable->SetName(TEXT("RayGenShaderTable"));
 
-            const uint32 descriptorSize = gDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-            raytracingOutputCreateInfo.ParentCreateInfo.View = gCbvSrvUavHeap->GetCPUDescriptorHandleForHeapStart();
-            raytracingOutputCreateInfo.ParentCreateInfo.View.ptr += descriptorSize * i;
-            
-            raytracingOutputCreateInfo.UavView.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-            gDevice->CreateUnorderedAccessView(raytracingOutputCreateInfo.ParentCreateInfo.Data.Get(), nullptr, &raytracingOutputCreateInfo.UavView, raytracingOutputCreateInfo.ParentCreateInfo.View);
-            gRaytracingOutput[i] = std::make_unique<Texture>(std::move(raytracingOutputCreateInfo));
-            gRaytracingOutputResourceUAVGpuDescriptor[i] = gCbvSrvUavHeap->GetGPUDescriptorHandleForHeapStart();
-            gRaytracingOutputResourceUAVGpuDescriptor[i].ptr += descriptorSize * i;
+                uint8_t* mappedData = nullptr;
+                // We don't unmap this until the app closes. Keeping buffer mapped for the lifetime of the resource is okay.
+                D3D12_RANGE range = { .Begin = 0, .End = 0 };
+                hr = gRayGenShaderTable->Map(0, &range, reinterpret_cast<void**>(&mappedData));
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to map ray gen shader table");
+                    return false;
+                }
+                
+                memcpy(mappedData, rayGenShaderIdentifier, shaderIdentifierSize);
+                mappedData += shaderRecordSize;
+            }
+
+            // Miss shader table
+            {
+                const uint32 shaderRecordsCount = 1;
+                const uint32 shaderRecordSize = Align(shaderIdentifierSize, static_cast<uint32>(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT));
+                bufferDesc.Width = shaderRecordsCount * shaderRecordSize;
+                
+                hr = gDevice->CreateCommittedResource(
+                    &bufferHeapProperties,
+                    D3D12_HEAP_FLAG_NONE,
+                    &bufferDesc,
+                    D3D12_RESOURCE_STATE_GENERIC_READ,
+                    nullptr,
+                    IID_PPV_ARGS(gMissShaderTable.GetAddressOf()));
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to create miss shader table");
+                    return false;
+                }
+
+                uint8_t* mappedData = nullptr;
+                // We don't unmap this until the app closes. Keeping buffer mapped for the lifetime of the resource is okay.
+                D3D12_RANGE range = { .Begin = 0, .End = 0 };
+                hr = gMissShaderTable->Map(0, &range, reinterpret_cast<void**>(&mappedData));
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to map miss shader table");
+                    return false;
+                }
+
+                memcpy(mappedData, missShaderIdentifier, shaderIdentifierSize);
+                mappedData += shaderRecordSize;
+            }
+
+            // Hit group shader table
+            {
+                const uint32 shaderRecordsCount = 1;
+                const uint32 shaderRecordSize = Align(shaderIdentifierSize, static_cast<uint32>(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT));
+                bufferDesc.Width = shaderRecordsCount * shaderRecordSize;
+                
+                hr = gDevice->CreateCommittedResource(
+                    &bufferHeapProperties,
+                    D3D12_HEAP_FLAG_NONE,
+                    &bufferDesc,
+                    D3D12_RESOURCE_STATE_GENERIC_READ,
+                    nullptr,
+                    IID_PPV_ARGS(gHitGroupShaderTable.GetAddressOf()));
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to create hit group shader table");
+                    return false;
+                }
+
+                uint8_t* mappedData = nullptr;
+                // We don't unmap this until the app closes. Keeping buffer mapped for the lifetime of the resource is okay.
+                D3D12_RANGE range = { .Begin = 0, .End = 0 };
+                hr = gHitGroupShaderTable->Map(0, &range, reinterpret_cast<void**>(&mappedData));
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to map hit group shader table");
+                    return false;
+                }
+
+                memcpy(mappedData, hitGroupShaderIdentifier, shaderIdentifierSize);
+                mappedData += shaderRecordSize;
+            }
+        
+            // Create the output resource. The dimensions and format should match the swap-chain.
+            for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
+            {
+                Texture::CreateInfo raytracingOutputCreateInfo = {};
+                D3D12_HEAP_PROPERTIES heapProperties = 
+                {
+                    .Type = D3D12_HEAP_TYPE_DEFAULT,
+                    .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+                    .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+                    .CreationNodeMask = 1,
+                    .VisibleNodeMask = 1,
+                };
+
+                bufferDesc =
+                D3D12_RESOURCE_DESC
+                {
+                    .Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+                    .Alignment = 0,
+                    .Width = cgs::gWidth,
+                    .Height = cgs::gHeight,
+                    .DepthOrArraySize = 1,
+                    .MipLevels = 1,
+                    .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+                    .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+                    .Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN,
+                    .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                };
+                
+                raytracingOutputCreateInfo.ParentCreateInfo.State = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+                hr = gDevice->CreateCommittedResource(
+                    &heapProperties, 
+                    D3D12_HEAP_FLAG_NONE, 
+                    &bufferDesc, 
+                    raytracingOutputCreateInfo.ParentCreateInfo.State, 
+                    nullptr, 
+                    IID_PPV_ARGS(raytracingOutputCreateInfo.ParentCreateInfo.Data.GetAddressOf()));
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to create raytracing output resource");
+                    return false;
+                }
+                const std::wstring resourceName = L"RaytracingOutputResource[" + std::to_wstring(i) + L"]";
+                raytracingOutputCreateInfo.ParentCreateInfo.Data->SetName(resourceName.c_str());
+
+                raytracingOutputCreateInfo.ParentCreateInfo.View = gCbvSrvUavHeaps[i]->GetCPUDescriptorHandleForHeapStart();
+                
+                raytracingOutputCreateInfo.UavView.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+                gDevice->CreateUnorderedAccessView(raytracingOutputCreateInfo.ParentCreateInfo.Data.Get(), nullptr, &raytracingOutputCreateInfo.UavView, raytracingOutputCreateInfo.ParentCreateInfo.View);
+                gRaytracingOutput[i] = std::make_unique<Texture>(std::move(raytracingOutputCreateInfo));
+                gRaytracingOutputResourceUAVGpuDescriptor[i] = gCbvSrvUavHeaps[i]->GetGPUDescriptorHandleForHeapStart();
+            }
         }
 
         gGlobalRenderContext.RenderDeviceType = eRenderDeviceType::D3D12;
@@ -2698,11 +2742,11 @@ namespace cgs
     {
         graphicsCommandList.SetGraphicsRootSignature(gRasterizationRootSignature.Get());
 
-        ID3D12DescriptorHeap* heaps[] = { gCbvSrvUavHeap.Get() };
+        ID3D12DescriptorHeap* heaps[] = { gCbvSrvUavHeaps[renderWork.FrameIndex].Get() };
         graphicsCommandList.SetDescriptorHeaps(CGS_ARRAYSIZE(heaps), heaps);
 
-        graphicsCommandList.SetGraphicsRootConstantBufferView(0, gCameraBuffer->GetGPUVirtualAddress());
-        graphicsCommandList.SetGraphicsRootConstantBufferView(1, gEmissiveBuffer->GetGPUVirtualAddress());
+        graphicsCommandList.SetGraphicsRootConstantBufferView(0, gCameraBuffers[renderWork.FrameIndex]->GetGPUVirtualAddress());
+        graphicsCommandList.SetGraphicsRootConstantBufferView(1, gEmissiveBuffers[renderWork.FrameIndex]->GetGPUVirtualAddress());
         const D3D12_VIEWPORT viewport =
         {
             .TopLeftX = 0.0f,
@@ -2751,9 +2795,9 @@ namespace cgs
                 assert(false && "Geometry is null");
                 continue;
             }
-
-            const float4& pushConstantColor = geometry->GetColor();
-            graphicsCommandList.SetGraphicsRoot32BitConstants(2, 4, &pushConstantColor, 0);
+            
+            RenderResource& colorBuffer = geometry->GetColorBuffer();
+            graphicsCommandList.SetGraphicsRootShaderResourceView(2, colorBuffer.GetGPUVirtualAddress());
 
             const VertexBuffer& vertexBuffer = geometry->GetVertexBuffer();
             const IndexBuffer& indexBuffer = geometry->GetIndexBuffer();
@@ -2782,7 +2826,7 @@ namespace cgs
         graphicsCommandList.SetComputeRootSignature(gRaytracingGlobalRootSignature.Get());
 
         // Bind the heaps, acceleration structure and dispatch rays.
-        graphicsCommandList.SetDescriptorHeaps(1, gCbvSrvUavHeap.GetAddressOf());
+        graphicsCommandList.SetDescriptorHeaps(1, gCbvSrvUavHeaps[renderWork.FrameIndex].GetAddressOf());
         graphicsCommandList.SetComputeRootDescriptorTable(0, gRaytracingOutputResourceUAVGpuDescriptor[renderWork.FrameIndex]);
         const D3D12_DISPATCH_RAYS_DESC dispatchDesc = 
         {
