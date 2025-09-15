@@ -22,6 +22,11 @@ uniform StructuredBuffer<float3> gColors;
 
 uniform ConstantBuffer<SceneConstantBuffer> gSceneConstantBuffer;
 
+cbuffer PushConstants
+{
+    uint FrameIndex;
+};
+
 // Load three 16 bit indices from a byte addressed buffer.
 uint3 
 Load3x16BitIndices(uint offsetBytes)
@@ -90,7 +95,7 @@ GenerateCameraRay(uint2 index, out float3 origin, out float3 direction)
     float4 world = mul(gSceneConstantBuffer.ProjectionToWorldTransformMatrix, float4(screenPos, 0, 1));
 
     world.xyz /= world.w;
-    origin = gSceneConstantBuffer.CameraPosition.xyz + worldSample.xyz * 0.000001f;
+    origin = gSceneConstantBuffer.CameraPosition.xyz;
     direction = normalize(world.xyz - origin);
 }
 
@@ -136,8 +141,8 @@ float4 CalculateDiffuseLighting(float3 hitPosition, float3 normal)
 
     // Generate two randoms
     float2 u;
-    u.x = CanonicalSample(DispatchRaysIndex().xy, 0, 0);
-    u.y = CanonicalSample(DispatchRaysIndex().xy, 0, 1);
+    u.x = CanonicalSample(DispatchRaysIndex().xy, FrameIndex, 0);
+    u.y = CanonicalSample(DispatchRaysIndex().xy, FrameIndex, 1);
 
     // Sampled point
     const float3 sampledPos = SampleParallelogram(p0, e1, e2, u);

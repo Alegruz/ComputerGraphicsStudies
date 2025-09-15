@@ -963,6 +963,17 @@ namespace cgs
                         },
                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
                     },
+                    // Push Constants
+                    {
+                        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
+                        .Constants = 
+                        {
+                            .ShaderRegister = 1,
+                            .RegisterSpace = 0,
+                            .Num32BitValues = 1,
+                        },
+                        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+                    },
                 };
 
                 static constexpr D3D12_ROOT_SIGNATURE_DESC ROOT_SIGNATURE_DESC =
@@ -3159,6 +3170,7 @@ namespace cgs
         graphicsCommandList.SetPipelineState1(gRaytracingStateObject.Get());
         
         graphicsCommandList.SetComputeRootConstantBufferView(2, gSceneConstantBuffers[renderWork.FrameIndex]->GetGPUVirtualAddress());
+        graphicsCommandList.SetComputeRoot32BitConstants(4, 1, &renderWork.WorkIndex, 0);
 
         const uint32 geometriesCount = static_cast<uint32>(renderWork.Geometries.size());
         for(uint32 i = 0; i < geometriesCount; ++i)
