@@ -441,10 +441,30 @@ namespace cgs
     {
         return float4x4
         {
-            lhs * rhs.Data[0],
-            lhs * rhs.Data[1],
-            lhs * rhs.Data[2],
-            lhs * rhs.Data[3],
+            float4{
+                lhs.Data[0].X * rhs.Data[0].X + lhs.Data[0].Y * rhs.Data[1].X + lhs.Data[0].Z * rhs.Data[2].X + lhs.Data[0].W * rhs.Data[3].X,
+                lhs.Data[0].X * rhs.Data[0].Y + lhs.Data[0].Y * rhs.Data[1].Y + lhs.Data[0].Z * rhs.Data[2].Y + lhs.Data[0].W * rhs.Data[3].Y,
+                lhs.Data[0].X * rhs.Data[0].Z + lhs.Data[0].Y * rhs.Data[1].Z + lhs.Data[0].Z * rhs.Data[2].Z + lhs.Data[0].W * rhs.Data[3].Z,
+                lhs.Data[0].X * rhs.Data[0].W + lhs.Data[0].Y * rhs.Data[1].W + lhs.Data[0].Z * rhs.Data[2].W + lhs.Data[0].W * rhs.Data[3].W,
+            },
+            float4{
+                lhs.Data[1].X * rhs.Data[0].X + lhs.Data[1].Y * rhs.Data[1].X + lhs.Data[1].Z * rhs.Data[2].X + lhs.Data[1].W * rhs.Data[3].X,
+                lhs.Data[1].X * rhs.Data[0].Y + lhs.Data[1].Y * rhs.Data[1].Y + lhs.Data[1].Z * rhs.Data[2].Y + lhs.Data[1].W * rhs.Data[3].Y,
+                lhs.Data[1].X * rhs.Data[0].Z + lhs.Data[1].Y * rhs.Data[1].Z + lhs.Data[1].Z * rhs.Data[2].Z + lhs.Data[1].W * rhs.Data[3].Z,
+                lhs.Data[1].X * rhs.Data[0].W + lhs.Data[1].Y * rhs.Data[1].W + lhs.Data[1].Z * rhs.Data[2].W + lhs.Data[1].W * rhs.Data[3].W,
+            },
+            float4{
+                lhs.Data[2].X * rhs.Data[0].X + lhs.Data[2].Y * rhs.Data[1].X + lhs.Data[2].Z * rhs.Data[2].X + lhs.Data[2].W * rhs.Data[3].X,
+                lhs.Data[2].X * rhs.Data[0].Y + lhs.Data[2].Y * rhs.Data[1].Y + lhs.Data[2].Z * rhs.Data[2].Y + lhs.Data[2].W * rhs.Data[3].Y,
+                lhs.Data[2].X * rhs.Data[0].Z + lhs.Data[2].Y * rhs.Data[1].Z + lhs.Data[2].Z * rhs.Data[2].Z + lhs.Data[2].W * rhs.Data[3].Z,
+                lhs.Data[2].X * rhs.Data[0].W + lhs.Data[2].Y * rhs.Data[1].W + lhs.Data[2].Z * rhs.Data[2].W + lhs.Data[2].W * rhs.Data[3].W,
+            },
+            float4{
+                lhs.Data[3].X * rhs.Data[0].X + lhs.Data[3].Y * rhs.Data[1].X + lhs.Data[3].Z * rhs.Data[2].X + lhs.Data[3].W * rhs.Data[3].X,
+                lhs.Data[3].X * rhs.Data[0].Y + lhs.Data[3].Y * rhs.Data[1].Y + lhs.Data[3].Z * rhs.Data[2].Y + lhs.Data[3].W * rhs.Data[3].Y,
+                lhs.Data[3].X * rhs.Data[0].Z + lhs.Data[3].Y * rhs.Data[1].Z + lhs.Data[3].Z * rhs.Data[2].Z + lhs.Data[3].W * rhs.Data[3].Z,
+                lhs.Data[3].X * rhs.Data[0].W + lhs.Data[3].Y * rhs.Data[1].W + lhs.Data[3].Z * rhs.Data[2].W + lhs.Data[3].W * rhs.Data[3].W,
+            }
         };
     }
 

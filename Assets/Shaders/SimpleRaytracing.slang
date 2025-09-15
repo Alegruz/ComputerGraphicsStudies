@@ -87,10 +87,10 @@ GenerateCameraRay(uint2 index, out float3 origin, out float3 direction)
     screenPos.y = -screenPos.y;
 
     // Unproject the pixel coordinate into a ray.
-    float4 world = mul(float4(screenPos, 0, 1), gSceneConstantBuffer.ProjectionToWorldTransformMatrix);
+    float4 world = mul(gSceneConstantBuffer.ProjectionToWorldTransformMatrix, float4(screenPos, 0, 1));
 
     world.xyz /= world.w;
-    origin = gSceneConstantBuffer.CameraPosition.xyz;
+    origin = gSceneConstantBuffer.CameraPosition.xyz + worldSample.xyz * 0.000001f;
     direction = normalize(world.xyz - origin);
 }
 
@@ -211,6 +211,6 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
 [shader("miss")]
 void MissMain(inout RayPayload payload)
 {
-    float4 background = float4(0.0f, 0.0f, 0.0f, 1.0f);
+    float4 background = float4(0.0f, 0.0f, 5.0f, 1.0f);
     payload.color = background;
 }
