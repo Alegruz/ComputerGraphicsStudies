@@ -42,6 +42,7 @@ uniform ConstantBuffer<SceneConstantBuffer> gSceneConstantBuffer;
 cbuffer PushConstants
 {
     uint FrameIndex;
+    uint BounceDepth;
 };
 
 // Load three 16 bit indices from a byte addressed buffer.
@@ -79,7 +80,9 @@ Load3x16BitIndices(uint offsetBytes)
 
 struct RayPayload
 {
-    float4 color;
+    float4 Color;
+    float Distance;
+    uint Depth;
 };
 
 // Retrieve hit world position.
@@ -158,21 +161,32 @@ RandomInt(const uint2 pixel, const uint frameIndex, const uint dimension, const 
     return (uint)(rnd * maxN); // uniformly in [0, maxN-1]
 }
 
-float4 EvaluateRadiance(const float3 lightPosition, const float3 lightColor, const float radius, const float3 hitPosition, const float3 normal)
+float4 
+EvaluateRadiance(inout RayPayload payload, const float3 lightPosition, const float3 lightColor, const float radius, const float3 hitPosition, const float3 normal)
 {
     const float3 lightToHitPosition = lightPosition - hitPosition;
     const float3 lightDirection = normalize(lightToHitPosition);
 
     // Mutual visibility
-    // RayDesc ray;
-    // ray.Origin = hitPosition + normal;
-    // ray.Direction = lightDirection;
-    // // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
-    // // TMin should be kept small to prevent missing geometry at close contact areas.
-    // ray.TMin = 0.001;
-    // ray.TMax = 10000.0;
-    // RayPayload payload = { float4(0, 0, 0, 0) };
-    // TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
+    if(payload.Depth > 0)
+    {
+        RayDesc ray;
+        ray.Origin = hitPosition + normal;
+        ray.Direction = lightDirection;
+        // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
+        // TMin should be kept small to prevent missing geometry at close contact areas.
+        ray.TMin = 0.001;
+        ray.TMax = 10000.0;
+        RayPayload shadowRayPayload;
+        shadowRayPayload.Color = float4(0, 0, 0, 0);
+        shadowRayPayload.Distance = 0.0f;
+        shadowRayPayload.Depth = payload.Depth - 1;
+        // TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, shadowRayPayload);
+        // if(shadowRayPayload.Distance == 0.0f)
+        // {
+        //     return float4(0, 0, 0, 0);
+        // }
+    }
 
     // BSDF
     // Emitted radiance
@@ -193,7 +207,7 @@ float4 EvaluateRadiance(const float3 lightPosition, const float3 lightColor, con
 }
 
 float4 
-ComputeRenderingEquation(const float3 hitPosition, const float3 normal)
+ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, const float3 normal)
 {
     const uint2 pixel = DispatchRaysIndex().xy;
 
@@ -218,7 +232,7 @@ ComputeRenderingEquation(const float3 hitPosition, const float3 normal)
         const float3 lightPosition = SampleParallelogram(p0, e1, e2, u);
         const float3 lightColor = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Color;
         const float radius = 0.0f;
-        parallelogramLightContribution = EvaluateRadiance(lightPosition, lightColor, radius, hitPosition, normal);
+        parallelogramLightContribution = EvaluateRadiance(payload, lightPosition, lightColor, radius, hitPosition, normal);
     }
 
     float4 pointLightContribution = float4(0, 0, 0, 0);
@@ -228,7 +242,7 @@ ComputeRenderingEquation(const float3 hitPosition, const float3 normal)
         const float3 lightColor = gPointLightInfos[randomPointLightInfoIndex].Color;
         const float radius = gPointLightInfos[randomPointLightInfoIndex].Radius;
 
-        pointLightContribution = EvaluateRadiance(lightPosition, lightColor, radius, hitPosition, normal);
+        pointLightContribution = EvaluateRadiance(payload, lightPosition, lightColor, radius, hitPosition, normal);
     }
 
     const float4 lightContribution = parallelogramLightContribution * 0.5f + pointLightContribution * 0.5f;
@@ -255,11 +269,11 @@ void RayGenMain()
     // TMin should be kept small to prevent missing geometry at close contact areas.
     ray.TMin = 0.001;
     ray.TMax = 10000.0;
-    RayPayload payload = { float4(0, 0, 0, 0) };
+    RayPayload payload = { float4(0, 0, 0, 0), 0.0f, BounceDepth };
     TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
 
     // Write the raytraced color to the output texture.
-    gRenderTarget[DispatchRaysIndex().xy] = payload.color;
+    gRenderTarget[DispatchRaysIndex().xy] = payload.Color;
 }
 
 
@@ -277,9 +291,13 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
     // Load up 3 16 bit indices for the triangle.
     const uint3 indices = Load3x16BitIndices(baseIndex);
 
-    const uint isEmissiveBaseIndex = PrimitiveIndex() / 4;
-    const uint isEmissiveOffset = PrimitiveIndex() % 4;
-    const uint isEmissive = (gIsEmissive.Load(isEmissiveBaseIndex) & (0xFF << (isEmissiveOffset * 8))) >> (isEmissiveOffset * 8);
+    // const uint isEmissiveBaseIndex = PrimitiveIndex() / 4;
+    // const uint isEmissiveOffset = PrimitiveIndex() % 4;
+    // const uint isEmissive32Data = gIsEmissive.Load(isEmissiveBaseIndex);
+    // const uint isEmissive = (isEmissive32Data & (0xFF << (isEmissiveOffset * 8))) >> (isEmissiveOffset * 8);
+    const uint isEmissiveBaseIndex = PrimitiveIndex();
+    const uint isEmissive32Data = gIsEmissive.Load(isEmissiveBaseIndex);
+    const uint isEmissive = (isEmissive32Data & (0xFF << (isEmissiveBaseIndex * 8))) >> (isEmissiveBaseIndex * 8);
 
     // Retrieve corresponding vertex normals for the triangle vertices.
     const float3 vertexNormals[3] = 
@@ -294,19 +312,21 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
     // as all the per-vertex normals are the same and match triangle's normal in this sample. 
     const float3 triangleNormal = HitAttribute(vertexNormals, attr);
 
-    float4 color = ComputeRenderingEquation(hitPosition, triangleNormal);
+    float4 color = ComputeRenderingEquation(payload, hitPosition, triangleNormal);
 
     if(isEmissive == 1)
     {
         color.xyz += gColors[PrimitiveIndex()];
     }
 
-    payload.color = color;
+    payload.Color = color;
+    payload.Distance = length(hitPosition - WorldRayOrigin());
 }
 
 [shader("miss")]
 void MissMain(inout RayPayload payload)
 {
     float4 background = float4(0.0f, 0.0f, 5.0f, 1.0f);
-    payload.color = background;
+    payload.Color = background;
+    payload.Distance = 0.0f;
 }

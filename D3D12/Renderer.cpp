@@ -1007,7 +1007,7 @@ namespace cgs
                         {
                             .ShaderRegister = 1,
                             .RegisterSpace = 0,
-                            .Num32BitValues = 1,
+                            .Num32BitValues = 2,
                         },
                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
                     },
@@ -1138,7 +1138,7 @@ namespace cgs
             // Shader config
             const D3D12_RAYTRACING_SHADER_CONFIG raytracingShaderConfig =
             {
-                .MaxPayloadSizeInBytes = 4 * sizeof(float),     // float4 color
+                .MaxPayloadSizeInBytes = 4 * sizeof(float) + sizeof(float) + sizeof(uint32),     // float4 color, float distance, uint32 depth
                 .MaxAttributeSizeInBytes = 2 * sizeof(float),   // float2 barycentrics
             };
 
@@ -3456,7 +3456,17 @@ namespace cgs
         
         graphicsCommandList.SetComputeRootConstantBufferView(2, gSceneConstantBuffers[renderWork.FrameIndex]->GetGPUVirtualAddress());
         graphicsCommandList.SetComputeRootDescriptorTable(4, gParallelogramAreaLightInfosBuffer->GetGpuDescriptor());
-        graphicsCommandList.SetComputeRoot32BitConstants(5, 1, &renderWork.WorkIndex, 0);
+        struct PushConstant final
+        {
+            uint32 FrameIndex = 0;
+            uint32 BoundDepth = 0;
+        };
+        const PushConstant pushConstant = 
+        {
+            .FrameIndex = static_cast<uint32>(renderWork.WorkIndex),
+            .BoundDepth = 3,
+        };
+        graphicsCommandList.SetComputeRoot32BitConstants(5, sizeof(PushConstant) / sizeof(uint32), &pushConstant, 0);
 
         const uint32 geometriesCount = static_cast<uint32>(renderWork.Geometries.size());
         for(uint32 i = 0; i < geometriesCount; ++i)
