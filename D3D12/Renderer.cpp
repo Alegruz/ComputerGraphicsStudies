@@ -1138,7 +1138,7 @@ namespace cgs
             // Shader config
             const D3D12_RAYTRACING_SHADER_CONFIG raytracingShaderConfig =
             {
-                .MaxPayloadSizeInBytes = 4 * sizeof(float) + sizeof(float) + sizeof(uint32),     // float4 color, float distance, uint32 depth
+                .MaxPayloadSizeInBytes = 4 * sizeof(float) + sizeof(float) + 2 * sizeof(uint32),     // float4 color, float rayt, uint32 primitive index, uint32 depth
                 .MaxAttributeSizeInBytes = 2 * sizeof(float),   // float2 barycentrics
             };
 

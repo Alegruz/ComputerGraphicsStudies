@@ -1,5 +1,8 @@
 // shaders.slang
 
+#define FLT_MAX         (3.402823466e+38)
+#define PI              (3.1415926535897f)
+
 struct SceneConstantBuffer
 {
     float4x4 ProjectionToWorldTransformMatrix;
@@ -89,6 +92,7 @@ IsEmissive(const uint index)
 struct RayPayload
 {
     float4 Color;
+    float RayT;
     uint PrimitiveIndex;
     uint Depth;
 };
@@ -170,37 +174,11 @@ RandomInt(const uint2 pixel, const uint frameIndex, const uint dimension, const 
 }
 
 float4 
-EvaluateRadiance(inout RayPayload payload, const float3 lightPosition, const float3 lightColor, const float radius, const float3 hitPosition, const float3 normal)
+EvaluateRadiance(const float3 lightToHitPosition, const float3 lightColor, const float radius, const float3 normal)
 {
-    const float3 lightToHitPosition = lightPosition - hitPosition;
     const float3 lightDirection = normalize(lightToHitPosition);
 
     // Mutual visibility
-    if(payload.Depth > 0)
-    {
-        RayDesc ray;
-        ray.Origin = hitPosition;
-        ray.Direction = lightDirection;
-        // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
-        // TMin should be kept small to prevent missing geometry at close contact areas.
-        ray.TMin = 0.001;
-        ray.TMax = 10000.0;
-        RayPayload shadowRayPayload;
-        shadowRayPayload.Color = float4(0, 0, 0, 0);
-        shadowRayPayload.PrimitiveIndex = 0xFFFFFFFF;
-        shadowRayPayload.Depth = payload.Depth - 1;
-        TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, shadowRayPayload);
-        if(shadowRayPayload.PrimitiveIndex == 0xFFFFFFFF)
-        {
-            return float4(0, 0, 0, 0);
-        }
-
-        const uint isEmissive = IsEmissive(shadowRayPayload.PrimitiveIndex);
-        if(isEmissive == 0)
-        {
-            return float4(0, 0, 0, 0);
-        }
-    }
 
     // BSDF
     // Emitted radiance
@@ -227,39 +205,132 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
 
     float4 parallelogramLightContribution = float4(0, 0, 0, 0);
     {
-        const uint randomParallelogramAreaLightInfoIndex = RandomInt(pixel, FrameIndex, 1, gSceneConstantBuffer.ParallelogramAreaLightInfosCount);
+        if(payload.Depth > 0)
+        {
+            const uint randomParallelogramAreaLightInfoIndex = RandomInt(pixel, FrameIndex, PrimitiveIndex() + 0, gSceneConstantBuffer.ParallelogramAreaLightInfosCount);
 
-        // Given emissive geometry corners p0, p1, p3 (parallelogram assumption)
-        const float3 p0 = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Positions[0];
-        const float3 p1 = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Positions[1];
-        const float3 p3 = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Positions[2];
+            // Given emissive geometry corners p0, p1, p3 (parallelogram assumption)
+            const float3 p0 = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Positions[0];
+            const float3 p1 = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Positions[1];
+            const float3 p3 = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Positions[2];
 
-        const float3 e1 = p1 - p0;
-        const float3 e2 = p3 - p0;
+            const float3 e1 = p1 - p0;
+            const float3 e2 = p3 - p0;
 
-        // Generate two randoms
-        float2 u;
-        u.x = CanonicalSample(pixel, FrameIndex, 0);
-        u.y = CanonicalSample(pixel, FrameIndex, 1);
+            // Generate two randoms
+            float2 u;
+            u.x = CanonicalSample(pixel, FrameIndex, PrimitiveIndex() + 0);
+            u.y = CanonicalSample(pixel, FrameIndex, PrimitiveIndex() + 1);
 
-        // Sampled point
-        const float3 lightPosition = SampleParallelogram(p0, e1, e2, u);
-        const float3 lightColor = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Color;
-        const float radius = 0.0f;
-        parallelogramLightContribution = EvaluateRadiance(payload, lightPosition, lightColor, radius, hitPosition, normal);
+            // Sampled point
+            float3 lightPosition = SampleParallelogram(p0, e1, e2, u);
+            float3 lightColor = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Color;
+            float3 lightToHitPosition = lightPosition - hitPosition;
+            const float3 lightDirection = normalize(lightToHitPosition);
+            
+            RayDesc ray;
+            ray.Origin = hitPosition;
+            ray.Direction = lightDirection;
+            // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
+            // TMin should be kept small to prevent missing geometry at close contact areas.
+            ray.TMin = 0.001;
+            ray.TMax = 10000.0;
+            RayPayload shadowRayPayload;
+            shadowRayPayload.Color = float4(0, 0, 0, 0);
+            shadowRayPayload.RayT = 0.0f;
+            shadowRayPayload.PrimitiveIndex = 0xFFFFFFFF;
+            shadowRayPayload.Depth = payload.Depth - 1;
+            TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, shadowRayPayload);
+            if(shadowRayPayload.PrimitiveIndex == 0xFFFFFFFF)
+            {
+                return float4(0, 0, 0, 0);
+            }
+
+            const uint isEmissive = IsEmissive(shadowRayPayload.PrimitiveIndex);
+            if(isEmissive == 0)
+            {
+                lightPosition = hitPosition + lightDirection * shadowRayPayload.RayT;
+                lightColor = shadowRayPayload.Color.rgb;
+                lightToHitPosition = lightPosition - hitPosition;
+            }
+            const float radius = 0.0f;
+            parallelogramLightContribution = EvaluateRadiance(lightToHitPosition, lightColor, radius, normal);
+        }
     }
 
     float4 pointLightContribution = float4(0, 0, 0, 0);
     {
-        const uint randomPointLightInfoIndex = RandomInt(pixel, FrameIndex, 1, gSceneConstantBuffer.PointLightInfosCount);
+        const uint randomPointLightInfoIndex = RandomInt(pixel, FrameIndex, PrimitiveIndex() + 1, gSceneConstantBuffer.PointLightInfosCount);
         const float3 lightPosition = gPointLightInfos[randomPointLightInfoIndex].Positions;
+        const float3 lightToHitPosition = lightPosition - hitPosition;
         const float3 lightColor = gPointLightInfos[randomPointLightInfoIndex].Color;
         const float radius = gPointLightInfos[randomPointLightInfoIndex].Radius;
 
-        pointLightContribution = EvaluateRadiance(payload, lightPosition, lightColor, radius, hitPosition, normal);
+        pointLightContribution = EvaluateRadiance(lightToHitPosition, lightColor, radius, normal);
     }
 
-    const float4 lightContribution = parallelogramLightContribution * 0.5f + pointLightContribution * 0.5f;
+    float4 indirectIlluminationContribution = float4(0, 0, 0, 0);
+    {
+        if(payload.Depth > 0)
+        {
+            float3 lightColor = float3(0, 0, 0);
+
+            const float u1 = CanonicalSample(pixel, FrameIndex, PrimitiveIndex() + 2);
+            const float u2 = CanonicalSample(pixel, FrameIndex, PrimitiveIndex() + 3);
+            const float r = sqrt(u1);
+            const float theta = 2.0f * PI * u2;
+            const float x = r * cos(theta);
+            const float y = r * sin(theta);
+            const float z = sqrt(1.0f - u1);
+
+            // Create an orthonormal basis (n, t, b)
+            const float3 n = normalize(normal);
+            const float3 t = (fabs(normal.x) > 0.1f ? float3(0,1,0) : normalize(cross(float3(1,0,0), n)));
+            const float3 b = cross(n, t);
+
+            const float3 lightDirection = (t * x) + (b * y) + (n * z);
+            const float radius = 0.0f;
+
+            RayDesc ray;
+            ray.Origin = hitPosition;
+            ray.Direction = lightDirection;
+            // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
+            // TMin should be kept small to prevent missing geometry at close contact areas.
+            ray.TMin = 0.001;
+            ray.TMax = 10000.0;
+            RayPayload shadowRayPayload;
+            shadowRayPayload.Color = float4(0, 0, 0, 0);
+            shadowRayPayload.RayT = 0.0f;
+            shadowRayPayload.PrimitiveIndex = 0xFFFFFFFF;
+            shadowRayPayload.Depth = payload.Depth - 1;
+            TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, shadowRayPayload);
+            if(shadowRayPayload.PrimitiveIndex == 0xFFFFFFFF)
+            {
+                return float4(0, 0, 0, 0);
+            }
+
+            const uint isEmissive = IsEmissive(shadowRayPayload.PrimitiveIndex);
+            if(isEmissive == 0)
+            {
+                lightColor = shadowRayPayload.Color.rgb;
+                const float3 lightToHitPosition = lightDirection * shadowRayPayload.RayT;
+                indirectIlluminationContribution = EvaluateRadiance(lightToHitPosition, lightColor, radius, normal);
+            }
+        }
+    }
+
+    float parallelogramLightContributionWeight = 0.34f;
+    float pointLightContributionWeight = 0.33f;
+    float indirectIlluminationContributionWeight = 0.33f;
+    if(payload.Depth == BounceDepth)
+    {
+        // parallelogramLightContribution = float4(0, 0, 0, 0);
+        // parallelogramLightContributionWeight = 0.0f;
+        // pointLightContribution = float4(0, 0, 0, 0);
+        // pointLightContributionWeight = 0.0f;
+        // indirectIlluminationContributionWeight = 1.0f;
+    }
+    const float4 lightContribution = parallelogramLightContribution * parallelogramLightContributionWeight + pointLightContribution * pointLightContributionWeight + indirectIlluminationContribution * indirectIlluminationContributionWeight;
 
     const float3 baseColor = gColors[PrimitiveIndex()];
     return float4(baseColor, 1.0f) * lightContribution;
@@ -283,7 +354,7 @@ void RayGenMain()
     // TMin should be kept small to prevent missing geometry at close contact areas.
     ray.TMin = 0.001;
     ray.TMax = 10000.0;
-    RayPayload payload = { float4(0, 0, 0, 0), 0.0f, BounceDepth };
+    RayPayload payload = { float4(0, 0, 0, 0), 0.0f, 0, BounceDepth };
     TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
 
     // Write the raytraced color to the output texture.
@@ -329,6 +400,7 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
     }
 
     payload.Color = color;
+    payload.RayT = RayTCurrent();
     payload.PrimitiveIndex = PrimitiveIndex();
 }
 
@@ -337,5 +409,6 @@ void MissMain(inout RayPayload payload)
 {
     float4 background = float4(0.0f, 0.0f, 5.0f, 1.0f);
     payload.Color = background;
+    payload.RayT = FLT_MAX;
     payload.PrimitiveIndex = 0xFFFFFFFF;
 }
