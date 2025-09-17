@@ -78,10 +78,18 @@ Load3x16BitIndices(uint offsetBytes)
     return indices;
 }
 
+uint
+IsEmissive(const uint index)
+{
+    const uint isEmissive32Data = gIsEmissive.Load(index);
+    const uint isEmissive = (isEmissive32Data & (0xFF << (index * 8))) >> (index * 8);
+    return isEmissive;
+}
+
 struct RayPayload
 {
     float4 Color;
-    float Distance;
+    uint PrimitiveIndex;
     uint Depth;
 };
 
@@ -171,7 +179,7 @@ EvaluateRadiance(inout RayPayload payload, const float3 lightPosition, const flo
     if(payload.Depth > 0)
     {
         RayDesc ray;
-        ray.Origin = hitPosition + normal;
+        ray.Origin = hitPosition;
         ray.Direction = lightDirection;
         // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
         // TMin should be kept small to prevent missing geometry at close contact areas.
@@ -179,13 +187,19 @@ EvaluateRadiance(inout RayPayload payload, const float3 lightPosition, const flo
         ray.TMax = 10000.0;
         RayPayload shadowRayPayload;
         shadowRayPayload.Color = float4(0, 0, 0, 0);
-        shadowRayPayload.Distance = 0.0f;
+        shadowRayPayload.PrimitiveIndex = 0xFFFFFFFF;
         shadowRayPayload.Depth = payload.Depth - 1;
-        // TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, shadowRayPayload);
-        // if(shadowRayPayload.Distance == 0.0f)
-        // {
-        //     return float4(0, 0, 0, 0);
-        // }
+        TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, shadowRayPayload);
+        if(shadowRayPayload.PrimitiveIndex == 0xFFFFFFFF)
+        {
+            return float4(0, 0, 0, 0);
+        }
+
+        const uint isEmissive = IsEmissive(shadowRayPayload.PrimitiveIndex);
+        if(isEmissive == 0)
+        {
+            return float4(0, 0, 0, 0);
+        }
     }
 
     // BSDF
@@ -290,14 +304,9 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
 
     // Load up 3 16 bit indices for the triangle.
     const uint3 indices = Load3x16BitIndices(baseIndex);
-
-    // const uint isEmissiveBaseIndex = PrimitiveIndex() / 4;
-    // const uint isEmissiveOffset = PrimitiveIndex() % 4;
-    // const uint isEmissive32Data = gIsEmissive.Load(isEmissiveBaseIndex);
-    // const uint isEmissive = (isEmissive32Data & (0xFF << (isEmissiveOffset * 8))) >> (isEmissiveOffset * 8);
+    
     const uint isEmissiveBaseIndex = PrimitiveIndex();
-    const uint isEmissive32Data = gIsEmissive.Load(isEmissiveBaseIndex);
-    const uint isEmissive = (isEmissive32Data & (0xFF << (isEmissiveBaseIndex * 8))) >> (isEmissiveBaseIndex * 8);
+    const uint isEmissive = IsEmissive(isEmissiveBaseIndex);
 
     // Retrieve corresponding vertex normals for the triangle vertices.
     const float3 vertexNormals[3] = 
@@ -320,7 +329,7 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
     }
 
     payload.Color = color;
-    payload.Distance = length(hitPosition - WorldRayOrigin());
+    payload.PrimitiveIndex = PrimitiveIndex();
 }
 
 [shader("miss")]
@@ -328,5 +337,5 @@ void MissMain(inout RayPayload payload)
 {
     float4 background = float4(0.0f, 0.0f, 5.0f, 1.0f);
     payload.Color = background;
-    payload.Distance = 0.0f;
+    payload.PrimitiveIndex = 0xFFFFFFFF;
 }

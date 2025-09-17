@@ -1152,7 +1152,7 @@ namespace cgs
 
             const D3D12_RAYTRACING_PIPELINE_CONFIG pipelineConfig =
             {
-                .MaxTraceRecursionDepth = 1,
+                .MaxTraceRecursionDepth = 5,
             };
 
             std::vector<D3D12_STATE_SUBOBJECT> subObjects = 
