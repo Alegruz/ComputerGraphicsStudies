@@ -33,6 +33,7 @@ uniform RWTexture2D gRenderTarget;
 uniform ByteAddressBuffer gIndices;
 uniform StructuredBuffer<VertexPN> gVertices;
 uniform StructuredBuffer<float3> gColors;
+uniform ByteAddressBuffer gIsEmissive;
 uniform StructuredBuffer<ParallelogramAreaLightInfo> gParallelogramAreaLightInfos;
 uniform StructuredBuffer<PointLightInfo> gPointLightInfos;
 
@@ -162,9 +163,19 @@ float4 EvaluateRadiance(const float3 lightPosition, const float3 lightColor, con
     const float3 lightToHitPosition = lightPosition - hitPosition;
     const float3 lightDirection = normalize(lightToHitPosition);
 
+    // Mutual visibility
+    // RayDesc ray;
+    // ray.Origin = hitPosition + normal;
+    // ray.Direction = lightDirection;
+    // // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
+    // // TMin should be kept small to prevent missing geometry at close contact areas.
+    // ray.TMin = 0.001;
+    // ray.TMax = 10000.0;
+    // RayPayload payload = { float4(0, 0, 0, 0) };
+    // TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
+
     // BSDF
     // Emitted radiance
-    // Mutual visibility
     
     // Geometry term
     // inverse squared distance
@@ -266,6 +277,10 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
     // Load up 3 16 bit indices for the triangle.
     const uint3 indices = Load3x16BitIndices(baseIndex);
 
+    const uint isEmissiveBaseIndex = PrimitiveIndex() / 4;
+    const uint isEmissiveOffset = PrimitiveIndex() % 4;
+    const uint isEmissive = (gIsEmissive.Load(isEmissiveBaseIndex) & (0xFF << (isEmissiveOffset * 8))) >> (isEmissiveOffset * 8);
+
     // Retrieve corresponding vertex normals for the triangle vertices.
     const float3 vertexNormals[3] = 
     { 
@@ -279,7 +294,12 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
     // as all the per-vertex normals are the same and match triangle's normal in this sample. 
     const float3 triangleNormal = HitAttribute(vertexNormals, attr);
 
-    const float4 color = ComputeRenderingEquation(hitPosition, triangleNormal);
+    float4 color = ComputeRenderingEquation(hitPosition, triangleNormal);
+
+    if(isEmissive == 1)
+    {
+        color.xyz += gColors[PrimitiveIndex()];
+    }
 
     payload.color = color;
 }

@@ -309,6 +309,7 @@ namespace cgs
         INDICES,
         VERTICES,
         COLORS,
+        IS_EMISSIVES,
         PARALLELOGRAM_AREA_LIGHT_INFOS,
         POINT_LIGHT_INFOS,
         COUNT,
@@ -933,8 +934,8 @@ namespace cgs
                     // Geometry Information
                     {
                         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-                        .NumDescriptors = 3,
-                        .BaseShaderRegister = 1,    // t0: AS, t1: index buffer, t2: vertex buffer, t3: color buffer
+                        .NumDescriptors = 4,
+                        .BaseShaderRegister = 1,    // t0: AS, t1: index buffer, t2: vertex buffer, t3: color buffer, t4: is emissives buffer
                         .RegisterSpace = 0,
                         .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
                     },
@@ -942,7 +943,7 @@ namespace cgs
                     {
                         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
                         .NumDescriptors = 2,
-                        .BaseShaderRegister = 4,    // t4: parallelogram area light info buffer, t5: point light info buffer
+                        .BaseShaderRegister = 5,    // t5: parallelogram area light info buffer, t6: point light info buffer
                         .RegisterSpace = 0,
                         .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
                     },
@@ -1521,7 +1522,7 @@ namespace cgs
             .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
             .Buffer = 
             {
-                .NumElements = static_cast<uint32>(indices.size() / 4),
+                .NumElements = static_cast<uint32>(indices.size() * sizeof(uint16) / 4),
                 .StructureByteStride = 0,
                 .Flags = D3D12_BUFFER_SRV_FLAG_RAW,
             },
@@ -1684,6 +1685,10 @@ namespace cgs
         static constexpr uint32 SHORT_BLOCK_TRIANGLES_COUNT = CUBE_TRIANGLES_COUNT;
         static constexpr uint32 TALL_BLOCK_TRIANGLES_COUNT = CUBE_TRIANGLES_COUNT;
         colors.reserve(FLOOR_TRIANGLES_COUNT + LIGHT_TRIANGLES_COUNT + CEILING_TRIANGLES_COUNT + BACK_WALL_TRIANGLES_COUNT + RIGHT_WALL_TRIANGLES_COUNT + LEFT_WALL_TRIANGLES_COUNT + SHORT_BLOCK_TRIANGLES_COUNT + TALL_BLOCK_TRIANGLES_COUNT);
+
+        std::vector<uint8> isEmissives;
+        isEmissives.reserve(FLOOR_TRIANGLES_COUNT + LIGHT_TRIANGLES_COUNT + CEILING_TRIANGLES_COUNT + BACK_WALL_TRIANGLES_COUNT + RIGHT_WALL_TRIANGLES_COUNT + LEFT_WALL_TRIANGLES_COUNT + SHORT_BLOCK_TRIANGLES_COUNT + TALL_BLOCK_TRIANGLES_COUNT);
+
         bool result = false;
 
         // Floor
@@ -1695,6 +1700,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
         }
         
         // Light
@@ -1730,10 +1737,10 @@ namespace cgs
         }
 
         {
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -343.0f, 548.8f, 332.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -343.0f, 548.8f, 227.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -213.0f, 548.8f, 227.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -213.0f, 548.8f, 332.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -343.0f, 548.8f - 0.0001f, 332.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -343.0f, 548.8f - 0.0001f, 227.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -213.0f, 548.8f - 0.0001f, 227.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -213.0f, 548.8f - 0.0001f, 332.0f };
             const uint32 primitiveIndex = static_cast<uint32>(indices.size()) / 3;
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
 
@@ -1746,6 +1753,8 @@ namespace cgs
             emissiveBuffer.Color = float3{1.0f, 1.0f, 1.0f};
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            isEmissives.push_back(true);
+            isEmissives.push_back(true);
 
             parallelogramAreaLightInfos.push_back(
                 ParallelogramAreaLightInfo
@@ -1951,6 +1960,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
         }
         
         // Back wall
@@ -1962,6 +1973,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
         }
 
         // Right wall
@@ -1973,6 +1986,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
             colors.push_back(float3{0.0f, 1.0f, 0.0f});
             colors.push_back(float3{0.0f, 1.0f, 0.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
         }
         
         // Left wall
@@ -1984,6 +1999,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
             colors.push_back(float3{1.0f, 0.0f, 0.0f});
             colors.push_back(float3{1.0f, 0.0f, 0.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
         }
 
         // Short block
@@ -1995,6 +2012,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v4 = { -290.0f, 165.0f, 114.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v5 = { -290.0f, 0.0f, 114.0f };
@@ -2003,6 +2022,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v4, v5, v6, v7);
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v8 = { -130.0f, 165.0f, 65.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v9 = { -130.0f, 0.0f, 65.0f };
@@ -2011,6 +2032,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v8, v9, v10, v11);
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v12 = { -82.0f, 165.0f, 225.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v13 = { -82.0f, 0.0f, 225.0f };
@@ -2019,6 +2042,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v12, v13, v14, v15);
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v16 = { -240.0f, 165.0f, 272.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v17 = { -240.0f, 0.0f, 272.0f };
@@ -2027,6 +2052,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v16, v17, v18, v19);
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
         }
 
         // Tall block
@@ -2038,6 +2065,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v4 = { -423.0f, 330.0f, 247.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v5 = { -423.0f, 0.0f, 247.0f };
@@ -2046,6 +2075,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v4, v5, v6, v7);
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v8 = { -472.0f, 330.0f, 406.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v9 = { -472.0f, 0.0f, 406.0f };
@@ -2054,6 +2085,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v8, v9, v10, v11);
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v12 = { -314.0f, 330.0f, 456.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v13 = { -314.0f, 0.0f, 456.0f };
@@ -2062,6 +2095,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v12, v13, v14, v15);
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
 
             constexpr const Coordinate<eCoordinateSpace::WORLD> v16 = { -265.0f, 330.0f, 296.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v17 = { -265.0f, 0.0f, 296.0f };
@@ -2070,6 +2105,8 @@ namespace cgs
             addQuadVertices(vertices, indices, v16, v17, v18, v19);
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            isEmissives.push_back(false);
+            isEmissives.push_back(false);
         }
 
         {
@@ -2128,7 +2165,7 @@ namespace cgs
             std::memcpy(colorDataBegin, colors.data(), sizeof(float3) * colors.size());
             colorsBufferCreateInfo.Data->Unmap(0, nullptr);
 
-            const D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc =
+            D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc =
             {
                 .Format = DXGI_FORMAT_UNKNOWN,
                 .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
@@ -2141,7 +2178,7 @@ namespace cgs
                 },
             };
             
-            const uint32 descriptorIndex = renderMethod == eRenderMethod::RASTERIZATION ? static_cast<uint32>(eCbvSrvUavRasterizationDescriptorType::COLORS) : static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::COLORS);
+            uint32 descriptorIndex = renderMethod == eRenderMethod::RASTERIZATION ? static_cast<uint32>(eCbvSrvUavRasterizationDescriptorType::COLORS) : static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::COLORS);
             result = gCbvSrvUavHeap->AllocateStaticDescriptor(colorsBufferCreateInfo.View, colorsBufferCreateInfo.GpuDescriptor, descriptorIndex);
             if(result == false)
             {
@@ -2151,6 +2188,66 @@ namespace cgs
             gDevice->CreateShaderResourceView(colorsBufferCreateInfo.Data.Get(), &srvDesc, colorsBufferCreateInfo.View);
 
             cornellBox.SetColorBuffer(RenderResource(std::move(colorsBufferCreateInfo)));
+            
+            if( renderMethod == eRenderMethod::RAYTRACING )
+            {
+                RenderResource::CreateInfo isEmissivesBufferCreateInfo;
+                isEmissivesBufferCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
+                isEmissivesBufferCreateInfo.Name = "CornellBoxIsEmissivesBuffer";
+                bufferDesc.Width = sizeof(uint8) * isEmissives.size();
+                hr = gDevice->CreateCommittedResource(
+                    &bufferHeapProperties,
+                    D3D12_HEAP_FLAG_NONE,
+                    &bufferDesc,
+                    isEmissivesBufferCreateInfo.State,
+                    nullptr,
+                    IID_PPV_ARGS(isEmissivesBufferCreateInfo.Data.GetAddressOf())
+                );
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to create is emissives buffer");
+                    return false;
+                }
+                
+                range = { .Begin = 0, .End = 0 };
+                byte* isEmissivesDataBegin = nullptr;
+                hr = isEmissivesBufferCreateInfo.Data->Map(
+                    0,
+                    &range,
+                    reinterpret_cast<void**>(&isEmissivesDataBegin)
+                );
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to map is emissives buffer");
+                    return false;
+                }
+
+                std::memcpy(isEmissivesDataBegin, isEmissives.data(), sizeof(uint8) * isEmissives.size());
+                isEmissivesBufferCreateInfo.Data->Unmap(0, nullptr);
+
+                srvDesc =
+                {
+                    .Format = DXGI_FORMAT_R32_TYPELESS,
+                    .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+                    .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+                    .Buffer = 
+                    {
+                        .NumElements = static_cast<uint32>(isEmissives.size() * sizeof(uint8) / 4),
+                        .StructureByteStride = 0,
+                        .Flags = D3D12_BUFFER_SRV_FLAG_RAW,
+                    },
+                };
+                // eCbvSrvUavRaytracingDescriptorType
+                result = gCbvSrvUavHeap->AllocateStaticDescriptor(isEmissivesBufferCreateInfo.View, isEmissivesBufferCreateInfo.GpuDescriptor, static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::IS_EMISSIVES));
+                if(result == false)
+                {
+                    assert(false && "Failed to allocate static descriptor for is emissives buffer");
+                    return false;
+                }
+                gDevice->CreateShaderResourceView(isEmissivesBufferCreateInfo.Data.Get(), &srvDesc, isEmissivesBufferCreateInfo.View);
+
+                cornellBox.SetIsEmissiveBuffer(RenderResource(std::move(isEmissivesBufferCreateInfo)));
+            }
         }
 
         // Emissive Information

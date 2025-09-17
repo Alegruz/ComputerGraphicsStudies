@@ -632,6 +632,8 @@ namespace cgs
         CGS_INLINE constexpr void
         SetColorBuffer(RenderResource&& colorBuffer) noexcept { mColorBuffer = std::move(colorBuffer); }
         CGS_INLINE constexpr void
+        SetIsEmissiveBuffer(RenderResource&& isEmissiveBuffer) noexcept { mIsEmissiveBuffer = std::move(isEmissiveBuffer); }
+        CGS_INLINE constexpr void
         SetName(const std::string& name) noexcept { mName = name; }
 
         [[nodiscard]] CGS_INLINE constexpr const VertexBuffer&
@@ -646,6 +648,10 @@ namespace cgs
         GetColorBuffer() const noexcept { return mColorBuffer; }
         [[nodiscard]] CGS_INLINE constexpr RenderResource&
         GetColorBuffer() noexcept { return mColorBuffer; }
+        [[nodiscard]] CGS_INLINE constexpr const RenderResource&
+        GetIsEmissiveBuffer() const noexcept { return mIsEmissiveBuffer; }
+        [[nodiscard]] CGS_INLINE constexpr RenderResource&
+        GetIsEmissiveBuffer() noexcept { return mIsEmissiveBuffer; }
         [[nodiscard]] CGS_INLINE constexpr const std::string&
         GetName() const noexcept { return mName; }
 
@@ -653,6 +659,7 @@ namespace cgs
         VertexBuffer mVertexBuffer;
         IndexBuffer mIndexBuffer;
         RenderResource mColorBuffer;
+        RenderResource mIsEmissiveBuffer;
         std::string mName;
     };
 
