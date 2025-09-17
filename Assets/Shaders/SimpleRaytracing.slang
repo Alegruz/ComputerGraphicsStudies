@@ -157,46 +157,73 @@ RandomInt(const uint2 pixel, const uint frameIndex, const uint dimension, const 
     return (uint)(rnd * maxN); // uniformly in [0, maxN-1]
 }
 
-// Diffuse lighting calculation.
-float4 
-CalculateDiffuseLighting(float3 hitPosition, float3 normal)
+float4 EvaluateRadiance(const float3 lightPosition, const float3 lightColor, const float radius, const float3 hitPosition, const float3 normal)
 {
-    const uint2 pixel = DispatchRaysIndex().xy;
-    const uint randomInt = RandomInt(pixel, FrameIndex, 0, gSceneConstantBuffer.ParallelogramAreaLightInfosCount);
-
-    // Given emissive geometry corners p0, p1, p3 (parallelogram assumption)
-    const float3 p0 = gParallelogramAreaLightInfos[randomInt].Positions[0];
-    const float3 p1 = gParallelogramAreaLightInfos[randomInt].Positions[1];
-    const float3 p3 = gParallelogramAreaLightInfos[randomInt].Positions[2];
-
-    const float3 e1 = p1 - p0;
-    const float3 e2 = p3 - p0;
-
-    // Generate two randoms
-    float2 u;
-    u.x = CanonicalSample(pixel, FrameIndex, 0);
-    u.y = CanonicalSample(pixel, FrameIndex, 1);
-
-    // Sampled point
-    const float3 sampledPos = SampleParallelogram(p0, e1, e2, u);
-
-    const float3 pixelToLight = normalize(sampledPos - hitPosition);
-
-    // Diffuse contribution.
-    float fNDotL = max(0.0f, dot(pixelToLight, normal));
-
-    return float4(gColors[PrimitiveIndex()], 1.0f) * float4(gParallelogramAreaLightInfos[randomInt].Color, 1.0f) * fNDotL;
-}
-
-float4 ComputeRenderingEquation(const float3 hitPosition, const float3 normal)
-{
-    const float4 diffuseColor = CalculateDiffuseLighting(hitPosition, normal);
+    const float3 lightToHitPosition = lightPosition - hitPosition;
+    const float3 lightDirection = normalize(lightToHitPosition);
 
     // BSDF
     // Emitted radiance
     // Mutual visibility
+    
     // Geometry term
-    return diffuseColor;
+    // inverse squared distance
+    float distanceAttenuation = 1.0f;
+    if(radius > 0.0f)
+    {
+        const float distanceSqr = dot(lightToHitPosition, lightToHitPosition);
+        const float eta = 0.01f;
+        distanceAttenuation = radius * radius / (distanceSqr + eta);
+    }
+    // cosine foreshortening term at light source
+    float fNDotL = max(0.0f, dot(lightDirection, normal));
+
+    return float4(lightColor * distanceAttenuation * fNDotL, 1.0f);
+}
+
+float4 
+ComputeRenderingEquation(const float3 hitPosition, const float3 normal)
+{
+    const uint2 pixel = DispatchRaysIndex().xy;
+
+    float4 parallelogramLightContribution = float4(0, 0, 0, 0);
+    {
+        const uint randomParallelogramAreaLightInfoIndex = RandomInt(pixel, FrameIndex, 1, gSceneConstantBuffer.ParallelogramAreaLightInfosCount);
+
+        // Given emissive geometry corners p0, p1, p3 (parallelogram assumption)
+        const float3 p0 = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Positions[0];
+        const float3 p1 = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Positions[1];
+        const float3 p3 = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Positions[2];
+
+        const float3 e1 = p1 - p0;
+        const float3 e2 = p3 - p0;
+
+        // Generate two randoms
+        float2 u;
+        u.x = CanonicalSample(pixel, FrameIndex, 0);
+        u.y = CanonicalSample(pixel, FrameIndex, 1);
+
+        // Sampled point
+        const float3 lightPosition = SampleParallelogram(p0, e1, e2, u);
+        const float3 lightColor = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Color;
+        const float radius = 0.0f;
+        parallelogramLightContribution = EvaluateRadiance(lightPosition, lightColor, radius, hitPosition, normal);
+    }
+
+    float4 pointLightContribution = float4(0, 0, 0, 0);
+    {
+        const uint randomPointLightInfoIndex = RandomInt(pixel, FrameIndex, 1, gSceneConstantBuffer.PointLightInfosCount);
+        const float3 lightPosition = gPointLightInfos[randomPointLightInfoIndex].Positions;
+        const float3 lightColor = gPointLightInfos[randomPointLightInfoIndex].Color;
+        const float radius = gPointLightInfos[randomPointLightInfoIndex].Radius;
+
+        pointLightContribution = EvaluateRadiance(lightPosition, lightColor, radius, hitPosition, normal);
+    }
+
+    const float4 lightContribution = parallelogramLightContribution * 0.5f + pointLightContribution * 0.5f;
+
+    const float3 baseColor = gColors[PrimitiveIndex()];
+    return float4(baseColor, 1.0f) * lightContribution;
 }
 
 [shader("raygeneration")]

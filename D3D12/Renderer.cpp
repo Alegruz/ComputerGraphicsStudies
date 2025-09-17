@@ -1709,19 +1709,20 @@ namespace cgs
 
         // Random point lights
         {
-            constexpr uint32 POINT_LIGHTS_COUNT = 1;
+            constexpr uint32 POINT_LIGHTS_COUNT = 64;
             static std::random_device rd;
             static std::mt19937 gen(rd());
-            std::uniform_real_distribution<float> dist(-500.0f, 0.0f);
-            std::uniform_real_distribution<float> radiusDist(100.0f, 250.0f);
+            std::uniform_real_distribution<float> dist(0.0f, 500.0f);
+            std::uniform_real_distribution<float> uniformDist(0.0f, 1.0f);
+            std::uniform_real_distribution<float> radiusDist(10.0f, 100.0f);
 
             for (uint32 i = 0; i < POINT_LIGHTS_COUNT; ++i)
             {
                 pointLightInfos.push_back(
                     PointLightInfo
                     {
-                        .Positions = { dist(gen), dist(gen), dist(gen), },
-                        .Color = {1.0f, 1.0f, 1.0f},
+                        .Positions = { -dist(gen), dist(gen), dist(gen), },
+                        .Color = { uniformDist(gen), uniformDist(gen), uniformDist(gen), },
                         .Radius = radiusDist(gen),
                     }
                 );
