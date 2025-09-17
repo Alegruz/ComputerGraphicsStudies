@@ -37,8 +37,22 @@ namespace cgs
     {
         float4x4 ProjectionToWorldTransformMatrix;
         float4 CameraPosition;
-        float4 EmissiveGeometryPositions[4];
-        float4 EmissiveColor;
+        uint32 ParallelogramAreaLightInfosCount;
+        uint32 PointLightInfosCount;
+    };
+
+    struct ParallelogramAreaLightInfo
+    {
+        float3 Positions[3];
+        float3 Color;
+        uint32 PrimitiveIndices[2];
+    };
+
+    struct PointLightInfo
+    {
+        float3 Positions;
+        float3 Color;
+        float Radius;
     };
 
     class DescriptorHeap final
@@ -286,6 +300,8 @@ namespace cgs
     static D3DPtr<ID3D12Resource> gMissShaderTable;
     static D3DPtr<ID3D12Resource> gHitGroupShaderTable;
     static std::vector<std::unique_ptr<ConstantBuffer>> gSceneConstantBuffers(BACK_BUFFERS_COUNT);
+    static std::unique_ptr<RenderResource> gParallelogramAreaLightInfosBuffer;
+    static std::unique_ptr<RenderResource> gPointLightInfosBuffer;
     
     enum class eCbvSrvUavRaytracingDescriptorType : uint8
     {
@@ -293,6 +309,8 @@ namespace cgs
         INDICES,
         VERTICES,
         COLORS,
+        PARALLELOGRAM_AREA_LIGHT_INFOS,
+        POINT_LIGHT_INFOS,
         COUNT,
     };
 
@@ -920,6 +938,14 @@ namespace cgs
                         .RegisterSpace = 0,
                         .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
                     },
+                    // Emissive Information
+                    {
+                        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+                        .NumDescriptors = 2,
+                        .BaseShaderRegister = 4,    // t4: parallelogram area light info buffer, t5: point light info buffer
+                        .RegisterSpace = 0,
+                        .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
+                    },
                 };
                 static constexpr D3D12_ROOT_PARAMETER ROOT_PARAMETERS[] = 
                 {
@@ -960,6 +986,16 @@ namespace cgs
                         {
                             .NumDescriptorRanges = 1,
                             .pDescriptorRanges = &DESCRIPTOR_RANGE[1],
+                        },
+                        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+                    },
+                    // Emissive information
+                    {
+                        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+                        .DescriptorTable = 
+                        {
+                            .NumDescriptorRanges = 1,
+                            .pDescriptorRanges = &DESCRIPTOR_RANGE[2],
                         },
                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
                     },
@@ -1668,16 +1704,36 @@ namespace cgs
             float3 Color;
         };
         EmissiveBuffer emissiveBuffer;
+        std::vector<ParallelogramAreaLightInfo> parallelogramAreaLightInfos;
+        std::vector<PointLightInfo> pointLightInfos;
+
+        // Random point lights
+        {
+            constexpr uint32 POINT_LIGHTS_COUNT = 1;
+            static std::random_device rd;
+            static std::mt19937 gen(rd());
+            std::uniform_real_distribution<float> dist(-500.0f, 0.0f);
+            std::uniform_real_distribution<float> radiusDist(100.0f, 250.0f);
+
+            for (uint32 i = 0; i < POINT_LIGHTS_COUNT; ++i)
+            {
+                pointLightInfos.push_back(
+                    PointLightInfo
+                    {
+                        .Positions = { dist(gen), dist(gen), dist(gen), },
+                        .Color = {1.0f, 1.0f, 1.0f},
+                        .Radius = radiusDist(gen),
+                    }
+                );
+            }
+        }
 
         {
             constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -343.0f, 548.8f, 332.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -343.0f, 548.8f, 227.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -213.0f, 548.8f, 227.0f };
             constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -213.0f, 548.8f, 332.0f };
-            sceneConstantBuffer.EmissiveGeometryPositions[0] = float4(v0, 1.0f);
-            sceneConstantBuffer.EmissiveGeometryPositions[1] = float4(v1, 1.0f);
-            sceneConstantBuffer.EmissiveGeometryPositions[2] = float4(v2, 1.0f);
-            sceneConstantBuffer.EmissiveGeometryPositions[3] = float4(v3, 1.0f);
+            const uint32 primitiveIndex = static_cast<uint32>(indices.size()) / 3;
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
 
             emissiveBuffer.Position = v0;
@@ -1689,6 +1745,15 @@ namespace cgs
             emissiveBuffer.Color = float3{1.0f, 1.0f, 1.0f};
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
+
+            parallelogramAreaLightInfos.push_back(
+                ParallelogramAreaLightInfo
+                {
+                    .Positions = { v0, v1, v3, },
+                    .Color =  { 1.0f, 1.0f, 1.0f },
+                    .PrimitiveIndices = { primitiveIndex, primitiveIndex + 1, }
+                }
+            );
         }
 
         if(renderMethod == eRenderMethod::RASTERIZATION)
@@ -1788,8 +1853,9 @@ namespace cgs
             float4x4 inverseMatrix;
             GetInverse(worldToProjectionMatrix, inverseMatrix);
 
-            sceneConstantBuffer.EmissiveColor = float4(emissiveBuffer.Color, 1.0f);
             sceneConstantBuffer.ProjectionToWorldTransformMatrix = inverseMatrix;
+            sceneConstantBuffer.ParallelogramAreaLightInfosCount = static_cast<uint32>(parallelogramAreaLightInfos.size());
+            sceneConstantBuffer.PointLightInfosCount = static_cast<uint32>(pointLightInfos.size());
         }
 
         const D3D12_RESOURCE_DESC sceneConstantBufferDesc =
@@ -2084,6 +2150,127 @@ namespace cgs
             gDevice->CreateShaderResourceView(colorsBufferCreateInfo.Data.Get(), &srvDesc, colorsBufferCreateInfo.View);
 
             cornellBox.SetColorBuffer(RenderResource(std::move(colorsBufferCreateInfo)));
+        }
+
+        // Emissive Information
+        if( renderMethod == eRenderMethod::RAYTRACING )
+        {
+            D3D12_RESOURCE_DESC bufferDesc =
+            {
+                .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+                .Alignment = 0,
+                .Width = static_cast<uint32>(sizeof(ParallelogramAreaLightInfo) * parallelogramAreaLightInfos.size()),
+                .Height = 1,
+                .DepthOrArraySize = 1,
+                .MipLevels = 1,
+                .Format = DXGI_FORMAT_UNKNOWN,
+                .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+                .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+                .Flags = D3D12_RESOURCE_FLAG_NONE,
+            };
+
+            RenderResource::CreateInfo parallelogramAreaLightInfosBufferCreateInfo;
+            parallelogramAreaLightInfosBufferCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
+            parallelogramAreaLightInfosBufferCreateInfo.Name = "CornellBoxParallelogramAreaLightInfosBuffer";
+            hr = gDevice->CreateCommittedResource(
+                &bufferHeapProperties,
+                D3D12_HEAP_FLAG_NONE,
+                &bufferDesc,
+                parallelogramAreaLightInfosBufferCreateInfo.State,
+                nullptr,
+                IID_PPV_ARGS(parallelogramAreaLightInfosBufferCreateInfo.Data.GetAddressOf())
+            );
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to create parallelogram area light infos buffer");
+                return false;
+            }
+            
+            D3D12_RANGE range = { .Begin = 0, .End = 0 };
+            byte* parallelogramAreaLightInfosDataBegin = nullptr;
+            hr = parallelogramAreaLightInfosBufferCreateInfo.Data->Map(
+                0,
+                &range,
+                reinterpret_cast<void**>(&parallelogramAreaLightInfosDataBegin)
+            );
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to map parallelogram area light infos buffer");
+                return false;
+            }
+
+            std::memcpy(parallelogramAreaLightInfosDataBegin, parallelogramAreaLightInfos.data(), sizeof(ParallelogramAreaLightInfo) * parallelogramAreaLightInfos.size());
+            parallelogramAreaLightInfosBufferCreateInfo.Data->Unmap(0, nullptr);
+
+            D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc =
+            {
+                .Format = DXGI_FORMAT_UNKNOWN,
+                .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+                .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+                .Buffer = 
+                {
+                    .NumElements = static_cast<uint32>(parallelogramAreaLightInfos.size()),
+                    .StructureByteStride = sizeof(ParallelogramAreaLightInfo),
+                    .Flags = D3D12_BUFFER_SRV_FLAG_NONE,
+                },
+            };
+            
+            uint32 descriptorIndex = static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::PARALLELOGRAM_AREA_LIGHT_INFOS);
+            result = gCbvSrvUavHeap->AllocateStaticDescriptor(parallelogramAreaLightInfosBufferCreateInfo.View, parallelogramAreaLightInfosBufferCreateInfo.GpuDescriptor, descriptorIndex);
+            if(result == false)
+            {
+                assert(false && "Failed to allocate static descriptor for parallelogram area light infos buffer");
+                return false;
+            }
+            gDevice->CreateShaderResourceView(parallelogramAreaLightInfosBufferCreateInfo.Data.Get(), &srvDesc, parallelogramAreaLightInfosBufferCreateInfo.View);
+            gParallelogramAreaLightInfosBuffer = std::make_unique<RenderResource>(std::move(parallelogramAreaLightInfosBufferCreateInfo));
+
+            bufferDesc.Width = sizeof(PointLightInfo) * pointLightInfos.size();
+            RenderResource::CreateInfo pointLightInfosBufferCreateInfo;
+            pointLightInfosBufferCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
+            pointLightInfosBufferCreateInfo.Name = "CornellBoxPointLightInfosBuffer";
+            hr = gDevice->CreateCommittedResource(
+                &bufferHeapProperties,
+                D3D12_HEAP_FLAG_NONE,
+                &bufferDesc,
+                pointLightInfosBufferCreateInfo.State,
+                nullptr,
+                IID_PPV_ARGS(pointLightInfosBufferCreateInfo.Data.GetAddressOf())
+            );
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to create point light infos buffer");
+                return false;
+            }
+            
+            range = { .Begin = 0, .End = 0 };
+            byte* pointLightInfosDataBegin = nullptr;
+            hr = pointLightInfosBufferCreateInfo.Data->Map(
+                0,
+                &range,
+                reinterpret_cast<void**>(&pointLightInfosDataBegin)
+            );
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to map point light infos buffer");
+                return false;
+            }
+
+            std::memcpy(pointLightInfosDataBegin, pointLightInfos.data(), sizeof(PointLightInfo) * pointLightInfos.size());
+            pointLightInfosBufferCreateInfo.Data->Unmap(0, nullptr);
+
+            srvDesc.Buffer.NumElements = static_cast<uint32>(pointLightInfos.size());
+            srvDesc.Buffer.StructureByteStride = sizeof(PointLightInfo);
+            
+            descriptorIndex = static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::POINT_LIGHT_INFOS);
+            result = gCbvSrvUavHeap->AllocateStaticDescriptor(pointLightInfosBufferCreateInfo.View, pointLightInfosBufferCreateInfo.GpuDescriptor, descriptorIndex);
+            if(result == false)
+            {
+                assert(false && "Failed to allocate static descriptor for point light infos buffer");
+                return false;
+            }
+            gDevice->CreateShaderResourceView(pointLightInfosBufferCreateInfo.Data.Get(), &srvDesc, pointLightInfosBufferCreateInfo.View);
+            gPointLightInfosBuffer = std::make_unique<RenderResource>(std::move(pointLightInfosBufferCreateInfo));
         }
 
         if (result == false)
@@ -3170,7 +3357,8 @@ namespace cgs
         graphicsCommandList.SetPipelineState1(gRaytracingStateObject.Get());
         
         graphicsCommandList.SetComputeRootConstantBufferView(2, gSceneConstantBuffers[renderWork.FrameIndex]->GetGPUVirtualAddress());
-        graphicsCommandList.SetComputeRoot32BitConstants(4, 1, &renderWork.WorkIndex, 0);
+        graphicsCommandList.SetComputeRootDescriptorTable(4, gParallelogramAreaLightInfosBuffer->GetGpuDescriptor());
+        graphicsCommandList.SetComputeRoot32BitConstants(5, 1, &renderWork.WorkIndex, 0);
 
         const uint32 geometriesCount = static_cast<uint32>(renderWork.Geometries.size());
         for(uint32 i = 0; i < geometriesCount; ++i)

@@ -4,8 +4,8 @@ struct SceneConstantBuffer
 {
     float4x4 ProjectionToWorldTransformMatrix;
     float4 CameraPosition;
-    float4 EmissiveGeometryPositions[4];
-    float4 EmissiveColor;
+    uint ParallelogramAreaLightInfosCount;
+    uint PointLightInfosCount;
 };
 
 struct VertexPN
@@ -14,11 +14,27 @@ struct VertexPN
     float3 Normal;
 };
 
+struct ParallelogramAreaLightInfo
+{
+    float3 Positions[3];
+    float3 Color;
+    uint PrimitiveIndices[2];
+};
+
+struct PointLightInfo
+{
+    float3 Positions;
+    float3 Color;
+    float Radius;
+};
+
 uniform RaytracingAccelerationStructure gScene;
 uniform RWTexture2D gRenderTarget;
 uniform ByteAddressBuffer gIndices;
 uniform StructuredBuffer<VertexPN> gVertices;
 uniform StructuredBuffer<float3> gColors;
+uniform StructuredBuffer<ParallelogramAreaLightInfo> gParallelogramAreaLightInfos;
+uniform StructuredBuffer<PointLightInfo> gPointLightInfos;
 
 uniform ConstantBuffer<SceneConstantBuffer> gSceneConstantBuffer;
 
@@ -128,21 +144,38 @@ CanonicalSample(const uint2 pixel, const uint frameIndex, const uint dimension)
     return HashToUnitFloat(seed);
 }
 
-// Diffuse lighting calculation.
-float4 CalculateDiffuseLighting(float3 hitPosition, float3 normal)
+uint 
+RandomInt(const uint2 pixel, const uint frameIndex, const uint dimension, const uint maxN)
 {
+    // Mix in pixel, frame, and dimension for decorrelation
+    const uint seed = pixel.x * 73856093u
+              ^ pixel.y * 19349663u
+              ^ frameIndex * 83492791u
+              ^ dimension * 2654435761u;
+
+    const float rnd = HashToUnitFloat(seed);
+    return (uint)(rnd * maxN); // uniformly in [0, maxN-1]
+}
+
+// Diffuse lighting calculation.
+float4 
+CalculateDiffuseLighting(float3 hitPosition, float3 normal)
+{
+    const uint2 pixel = DispatchRaysIndex().xy;
+    const uint randomInt = RandomInt(pixel, FrameIndex, 0, gSceneConstantBuffer.ParallelogramAreaLightInfosCount);
+
     // Given emissive geometry corners p0, p1, p3 (parallelogram assumption)
-    const float3 p0 = gSceneConstantBuffer.EmissiveGeometryPositions[0].xyz;
-    const float3 p1 = gSceneConstantBuffer.EmissiveGeometryPositions[1].xyz;
-    const float3 p3 = gSceneConstantBuffer.EmissiveGeometryPositions[3].xyz;
+    const float3 p0 = gParallelogramAreaLightInfos[randomInt].Positions[0];
+    const float3 p1 = gParallelogramAreaLightInfos[randomInt].Positions[1];
+    const float3 p3 = gParallelogramAreaLightInfos[randomInt].Positions[2];
 
     const float3 e1 = p1 - p0;
     const float3 e2 = p3 - p0;
 
     // Generate two randoms
     float2 u;
-    u.x = CanonicalSample(DispatchRaysIndex().xy, FrameIndex, 0);
-    u.y = CanonicalSample(DispatchRaysIndex().xy, FrameIndex, 1);
+    u.x = CanonicalSample(pixel, FrameIndex, 0);
+    u.y = CanonicalSample(pixel, FrameIndex, 1);
 
     // Sampled point
     const float3 sampledPos = SampleParallelogram(p0, e1, e2, u);
@@ -152,7 +185,18 @@ float4 CalculateDiffuseLighting(float3 hitPosition, float3 normal)
     // Diffuse contribution.
     float fNDotL = max(0.0f, dot(pixelToLight, normal));
 
-    return float4(gColors[PrimitiveIndex()], 1.0f) * gSceneConstantBuffer.EmissiveColor * fNDotL;
+    return float4(gColors[PrimitiveIndex()], 1.0f) * float4(gParallelogramAreaLightInfos[randomInt].Color, 1.0f) * fNDotL;
+}
+
+float4 ComputeRenderingEquation(const float3 hitPosition, const float3 normal)
+{
+    const float4 diffuseColor = CalculateDiffuseLighting(hitPosition, normal);
+
+    // BSDF
+    // Emitted radiance
+    // Mutual visibility
+    // Geometry term
+    return diffuseColor;
 }
 
 [shader("raygeneration")]
@@ -184,19 +228,20 @@ void RayGenMain()
 [shader("closesthit")]
 void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    float3 hitPosition = HitWorldPosition();
+    const float3 hitPosition = HitWorldPosition();
 
     // Get the base index of the triangle's first 16 bit index.
-    uint indexSizeInBytes = 2;
-    uint indicesPerTriangle = 3;
-    uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
-    uint baseIndex = PrimitiveIndex() * triangleIndexStride;
+    const uint indexSizeInBytes = 2;
+    const uint indicesPerTriangle = 3;
+    const uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
+    const uint baseIndex = PrimitiveIndex() * triangleIndexStride;
 
     // Load up 3 16 bit indices for the triangle.
     const uint3 indices = Load3x16BitIndices(baseIndex);
 
     // Retrieve corresponding vertex normals for the triangle vertices.
-    float3 vertexNormals[3] = { 
+    const float3 vertexNormals[3] = 
+    { 
         gVertices[indices[0]].Normal, 
         gVertices[indices[1]].Normal, 
         gVertices[indices[2]].Normal 
@@ -205,10 +250,9 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
     // Compute the triangle's normal.
     // This is redundant and done for illustration purposes 
     // as all the per-vertex normals are the same and match triangle's normal in this sample. 
-    float3 triangleNormal = HitAttribute(vertexNormals, attr);
+    const float3 triangleNormal = HitAttribute(vertexNormals, attr);
 
-    float4 diffuseColor = CalculateDiffuseLighting(hitPosition, triangleNormal);
-    float4 color = diffuseColor;
+    const float4 color = ComputeRenderingEquation(hitPosition, triangleNormal);
 
     payload.color = color;
 }
