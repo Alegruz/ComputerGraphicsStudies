@@ -58,3 +58,5 @@ Target platforms (sorted by priority):
 * **[2025.09.13]**: fixed some D3D12 warnings
 * **[2025.09.14]**: added descriptor heap class for managing descriptor heaps; refactored related resource allocation logic. First raytracing scene rendering.
 * **[2025.09.15]**: fixed raytracing. **first raytraced image of cornell box!**
+* **[2025.09.16]**: skipped
+* **[2025.09.17]**: added parallelogram area lights and point lights
