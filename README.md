@@ -60,4 +60,4 @@ Target platforms (sorted by priority):
 * **[2025.09.15]**: fixed raytracing. **first raytraced image of cornell box!**
 * **[2025.09.16]**: skipped
 * **[2025.09.17]**: added parallelogram area lights and point lights
-* **[2025.09.18]**: implemented monte carlo integration
+* **[2025.09.18]**: implemented monte carlo integration and multiple importance sampling of point lights and hemisphere sampling. **first global illumination image of cornell box!**

@@ -246,6 +246,17 @@ CalculateLambertianDiffuseBrdf(const uint primitiveIndex)
     return baseColor / PI;
 }
 
+float
+PowerHeuristic(const uint samplesCountA, const float pdfA, const uint samplesCountB, const float pdfB)
+{
+    const float a = samplesCountA * pdfA;
+    const float b = samplesCountB * pdfB;
+    return (a * a) / (a * a + b * b);
+}
+
+#define POINT_LIGHT_SAMPLES_COUNT (1)
+#define HEMISPHERE_SAMPLES_COUNT (1)
+
 float4 
 ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, const float3 normal)
 {
@@ -258,17 +269,94 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
         const float tempEmissiveStrength = 100.0f;
         emissiveRadiance = gColors[PrimitiveIndex()] * tempEmissiveStrength;
     }
-    
-    // Integral
+
     float3 monteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
+
+    // NEE
+    float3 neeMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
+    float weights[64] = { 0.0f, };
+#if POINT_LIGHT_SAMPLES_COUNT > 0
+    if (payload.Depth > 0)
+    {
+        // Point lights Integral
+        // BRDF. Lambertian diffuse BRDF is constant, so we can take it out of the integral.
+        // Note: For other BRDFs, the BRDF would need to be evaluated per sample.
+        const float3 brdf = CalculateLambertianDiffuseBrdf(PrimitiveIndex());
+        float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
+        float totalDistances = 0.0f;
+        for (uint lightIndex = 0; lightIndex < gSceneConstantBuffer.PointLightInfosCount; ++lightIndex)
+        {
+            const float3 hitPositionToPointLight = hitPosition - gPointLightInfos[lightIndex].Positions;
+            const float distanceSquared = dot(hitPositionToPointLight, hitPositionToPointLight);
+            const float distance = sqrt(distanceSquared);
+            const float minDistance = max(0.001f, distance - gPointLightInfos[lightIndex].Radius);
+            weights[lightIndex] = minDistance;
+            totalDistances += weights[lightIndex];
+        }
+
+        for (uint lightIndex = 0; lightIndex < gSceneConstantBuffer.PointLightInfosCount; ++lightIndex)
+        {
+            weights[lightIndex] /= totalDistances;
+        }
+
+        for (uint sampleIndex = 0; sampleIndex < POINT_LIGHT_SAMPLES_COUNT; ++sampleIndex)
+        {
+            const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex, 3);
+            uint pointLightIndex = 0;
+            float cumulativeWeight = 0.0f;
+            for (uint lightIndex = 0; lightIndex < gSceneConstantBuffer.PointLightInfosCount; ++lightIndex)
+            {
+                cumulativeWeight += weights[lightIndex];
+                if (canonicalSample < cumulativeWeight)
+                {
+                    pointLightIndex = lightIndex;
+                    break;
+                }
+            }
+
+            const float3 pointLightPosition = gPointLightInfos[pointLightIndex].Positions;
+            const float3 hitPositionToPointLightPosition = pointLightPosition - hitPosition;
+            const float distanceSquared = dot(hitPositionToPointLightPosition, hitPositionToPointLightPosition);
+            const float distance = sqrt(distanceSquared);
+            const float3 worldSampleDir = normalize(pointLightPosition - hitPosition);
+
+            // Trace a ray in the sampled direction.
+            RayDesc ray;
+            ray.Origin = hitPosition;
+            ray.Direction = worldSampleDir;
+            ray.TMin = 0.001;
+            ray.TMax = 10000.0;
+
+            RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, 0, 0 };
+            TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, newPayload);
+
+            if (newPayload.RayT > distance)
+            {
+                const float pointLightStrength = 100.0f;
+                const float3 incomingRadiance = gPointLightInfos[pointLightIndex].Color * pointLightStrength;
+                const float geometryTerm = dot(worldSampleDir, normal) / distanceSquared;
+
+                const float pdf = dot(worldSampleDir, normal) / PI;
+                const float misWeight = PowerHeuristic(POINT_LIGHT_SAMPLES_COUNT, weights[pointLightIndex], HEMISPHERE_SAMPLES_COUNT, pdf);
+                const float3 integrand = incomingRadiance * geometryTerm * misWeight;
+
+                monteCarloIntegrandSum += (integrand / weights[pointLightIndex]);
+            }
+        }
+        neeMonteCarloEstimate = (monteCarloIntegrandSum * brdf) / POINT_LIGHT_SAMPLES_COUNT;
+    }
+#endif  // POINT_LIGHT_SAMPLES_COUNT > 0
+
+    // Indirect Illumination Integral
+    float3 indirectIlluminationMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
+#if HEMISPHERE_SAMPLES_COUNT > 0
     if (payload.Depth > 0)
     {
         // BRDF. Lambertian diffuse BRDF is constant, so we can take it out of the integral.
         // Note: For other BRDFs, the BRDF would need to be evaluated per sample.
         const float3 brdf = CalculateLambertianDiffuseBrdf(PrimitiveIndex());
-        const uint HEMISPHERE_SAMPLES_COUNT = 4;
         float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
-        for(uint sampleIndex = 0; sampleIndex < HEMISPHERE_SAMPLES_COUNT; ++sampleIndex)
+        for (uint sampleIndex = 0; sampleIndex < HEMISPHERE_SAMPLES_COUNT; ++sampleIndex)
         {
             // 1. Generate a sample: Cosine-weighted hemisphere sampling
             const float2 uniformSample = float2(
@@ -307,11 +395,18 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             // 4. Cosine term is embedded in the sampling pdf for cosine-weighted hemisphere sampling.
 
             // 5. Integrand
-            const float3 integrand = incomingRadiance;
+            const float pdf = dot(worldSampleDir, normal) / PI; // cosine-weighted hemisphere pdf
+            const float pointLightPdf = 0.0f; // assume that the sampled direction doesn't hit a point light
+            const float misWeight = PowerHeuristic(HEMISPHERE_SAMPLES_COUNT, pdf, POINT_LIGHT_SAMPLES_COUNT, pointLightPdf);
+            const float3 integrand = incomingRadiance * misWeight;
             monteCarloIntegrandSum += integrand;
         }
-        monteCarloEstimate = (monteCarloIntegrandSum * brdf) / HEMISPHERE_SAMPLES_COUNT;
+        indirectIlluminationMonteCarloEstimate = (monteCarloIntegrandSum * brdf) / HEMISPHERE_SAMPLES_COUNT;
     }
+#endif // HEMISPHERE_SAMPLES_COUNT > 0
+
+    monteCarloEstimate += neeMonteCarloEstimate;
+    monteCarloEstimate += indirectIlluminationMonteCarloEstimate;
 
     return float4(emissiveRadiance + monteCarloEstimate, 1.0f);
 }
