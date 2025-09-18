@@ -89,6 +89,15 @@ IsEmissive(const uint index)
     return isEmissive;
 }
 
+#if 1
+struct RayPayload
+{
+    float4 Color;
+    float RayT;
+    uint PrimitiveIndex;
+    uint Depth;
+};
+#else
 struct [raypayload] RayPayload
 {
     float4 Color : read(closesthit, miss, caller) : write(closesthit, miss, caller);
@@ -96,6 +105,7 @@ struct [raypayload] RayPayload
     uint PrimitiveIndex : read(closesthit, miss, caller) : write(closesthit, miss, caller);
     uint Depth : read(closesthit, miss, caller) : write(closesthit, miss, caller);
 };
+#endif
 
 // Retrieve hit world position.
 float3 
@@ -104,13 +114,46 @@ HitWorldPosition()
     return WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 }
 
-// Retrieve attribute at a hit position interpolated from vertex attributes using the hit's barycentrics.
 float3 
-HitAttribute(float3 vertexAttribute[3], BuiltInTriangleIntersectionAttributes attr)
+InterpolateByBarycentric(float3 vertexAttribute[3], const float2 barycentrics)
 {
     return vertexAttribute[0] +
-        attr.barycentrics.x * (vertexAttribute[1] - vertexAttribute[0]) +
-        attr.barycentrics.y * (vertexAttribute[2] - vertexAttribute[0]);
+        barycentrics.x * (vertexAttribute[1] - vertexAttribute[0]) +
+        barycentrics.y * (vertexAttribute[2] - vertexAttribute[0]);
+}
+
+// Retrieve attribute at a hit position interpolated from vertex attributes using the hit's barycentrics.
+float3
+HitAttribute(float3 vertexAttribute[3], BuiltInTriangleIntersectionAttributes attr)
+{
+    return InterpolateByBarycentric(vertexAttribute, attr.barycentrics);
+}
+
+float3
+GetWorldNormal(const uint primitiveIndex, const float2 barycentrics)
+{
+    // Get the base index of the triangle's first 16 bit index.
+    const uint indexSizeInBytes = 2;
+    const uint indicesPerTriangle = 3;
+    const uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
+    const uint baseIndex = PrimitiveIndex() * triangleIndexStride;
+
+    // Load up 3 16 bit indices for the triangle.
+    const uint3 indices = Load3x16BitIndices(baseIndex);
+
+    // Retrieve corresponding vertex normals for the triangle vertices.
+    const float3 vertexNormals[3] =
+        {
+            gVertices[indices[0]].Normal,
+            gVertices[indices[1]].Normal,
+            gVertices[indices[2]].Normal
+        };
+
+    // Compute the triangle's normal.
+    // This is redundant and done for illustration purposes
+    // as all the per-vertex normals are the same and match triangle's normal in this sample.
+    const float3 triangleNormal = InterpolateByBarycentric(vertexNormals, barycentrics);
+    return triangleNormal;
 }
 
 // Generate a ray in world space for a camera pixel corresponding to an index from the dispatched 2D grid.
@@ -195,38 +238,12 @@ RandomInt(const uint2 pixel, const uint frameIndex, const uint dimension, const 
     return (uint)(rnd * maxN); // uniformly in [0, maxN-1]
 }
 
-float4
-CalculateLambertianDiffuseBrdf()
+float3
+CalculateLambertianDiffuseBrdf(const uint primitiveIndex)
 {
     // Lambertian diffuse BRDF
-    return float4(1.0f / PI, 1.0f / PI, 1.0f / PI, 1.0f);
-}
-
-float4 
-EvaluateRadiance(const float3 lightToHitPosition, const float3 lightColor, const float radius, const float3 normal)
-{
-    const float3 lightDirection = normalize(lightToHitPosition);
-
-    // Mutual visibility
-
-    // BSDF
-    const float4 brdf = CalculateLambertianDiffuseBrdf();
-
-    // Emitted radiance
-    
-    // Geometry term
-    // inverse squared distance
-    float distanceAttenuation = 1.0f;
-    if(radius > 0.0f)
-    {
-        const float distanceSqr = dot(lightToHitPosition, lightToHitPosition);
-        const float eta = 0.01f;
-        distanceAttenuation = radius * radius / (distanceSqr + eta);
-    }
-    // cosine foreshortening term at light source
-    float fNDotL = max(0.0f, dot(lightDirection, normal));
-
-    return float4(lightColor * distanceAttenuation * fNDotL, 1.0f) * brdf;
+    const float3 baseColor = gColors[primitiveIndex];
+    return baseColor / PI;
 }
 
 float4 
@@ -234,195 +251,69 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
 {
     const uint2 pixel = DispatchRaysIndex().xy;
 
-    const uint parallelogramLightRaysCount = 3;
-    float4 parallelogramLightContribution = float4(0, 0, 0, 0);
+    // Emissive radiance
+    float3 emissiveRadiance = float3(0.0f, 0.0f, 0.0f);
+    if (IsEmissive(PrimitiveIndex()) == 1)
     {
-        if(payload.Depth > 0)
-        {
-            const uint randomParallelogramAreaLightInfoIndex = RandomInt(pixel, FrameIndex, PrimitiveIndex() + 0, gSceneConstantBuffer.ParallelogramAreaLightInfosCount);
-
-            // Given emissive geometry corners p0, p1, p3 (parallelogram assumption)
-            const float3 p0 = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Positions[0];
-            const float3 p1 = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Positions[1];
-            const float3 p3 = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Positions[2];
-
-            const float3 e1 = p1 - p0;
-            const float3 e2 = p3 - p0;
-
-            // Compute the area of the parallelogram
-            const float3 parallelogramNormal = cross(e1, e2);
-            const float3 parallelogramNormalizedNormal = normalize(parallelogramNormal);
-            const float parallelogramArea = length(parallelogramNormal);
-            const float parallelogramAreaPdf = 1.0f / parallelogramArea;
-
-            float3 lightColor = gParallelogramAreaLightInfos[randomParallelogramAreaLightInfoIndex].Color;
-            const float radius = 0.0f;
-
-            for (uint rayIndex = 0; rayIndex < parallelogramLightRaysCount; ++rayIndex)
-            {
-                // Generate two randoms
-                float2 u;
-                u.x = CanonicalSample(pixel, FrameIndex, (PrimitiveIndex() + 0) + rayIndex);
-                u.y = CanonicalSample(pixel, FrameIndex, (PrimitiveIndex() + 1) + rayIndex);
-
-                // Sampled point
-                float3 lightPosition = SampleParallelogram(p0, e1, e2, u);
-                float3 lightToHitPosition = lightPosition - hitPosition;
-                const float3 lightDirection = normalize(lightToHitPosition);
-
-                RayDesc ray;
-                ray.Origin = hitPosition;
-                ray.Direction = lightDirection;
-                // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
-                // TMin should be kept small to prevent missing geometry at close contact areas.
-                ray.TMin = 0.001;
-                ray.TMax = 10000.0;
-                RayPayload shadowRayPayload;
-                shadowRayPayload.Color = float4(0, 0, 0, 0);
-                shadowRayPayload.RayT = 0.0f;
-                shadowRayPayload.PrimitiveIndex = 0xFFFFFFFF;
-                shadowRayPayload.Depth = 0; // Only check for visibility
-                TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, shadowRayPayload);
-                if (shadowRayPayload.PrimitiveIndex != 0xFFFFFFFF)
-                {
-                    const uint isEmissive = IsEmissive(shadowRayPayload.PrimitiveIndex);
-                    if (isEmissive == 1)
-                    {
-                        const float3 areaRadiance = lightColor * (100.0f / (parallelogramArea * PI));
-                        float4 singleParallelogramLightContribution = EvaluateRadiance(lightToHitPosition, areaRadiance, radius, normal);
-                        const float pdf = parallelogramAreaPdf * dot(lightToHitPosition, lightToHitPosition) / max(0.001f, abs(dot(parallelogramNormalizedNormal, -lightDirection)));
-                        // const float pdf = 1.0f;
-                        parallelogramLightContribution += float4(singleParallelogramLightContribution.rgb / pdf, singleParallelogramLightContribution.a);
-                    }
-                }
-            }
-        }
+        const float tempEmissiveStrength = 100.0f;
+        emissiveRadiance = gColors[PrimitiveIndex()] * tempEmissiveStrength;
     }
-
-    float4 pointLightContribution = float4(0, 0, 0, 0);
+    
+    // Integral
+    float3 monteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
+    if (payload.Depth > 0)
     {
-        if (payload.Depth > 0)
+        // BRDF. Lambertian diffuse BRDF is constant, so we can take it out of the integral.
+        // Note: For other BRDFs, the BRDF would need to be evaluated per sample.
+        const float3 brdf = CalculateLambertianDiffuseBrdf(PrimitiveIndex());
+        const uint HEMISPHERE_SAMPLES_COUNT = 4;
+        float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
+        for(uint sampleIndex = 0; sampleIndex < HEMISPHERE_SAMPLES_COUNT; ++sampleIndex)
         {
-            float weights[64] = { 0.0f, };
-            float totalWeight = 0.0f;
-            for(uint pointLightIndex = 0; pointLightIndex < gSceneConstantBuffer.PointLightInfosCount; ++pointLightIndex)
-            {
-                const float3 lightPosition = gPointLightInfos[pointLightIndex].Positions;
-                const float3 lightToHitPosition = lightPosition - hitPosition;
-                const float distanceSqr = dot(lightToHitPosition, lightToHitPosition);
-                const float3 lightDirection = normalize(lightToHitPosition);
-                float fNDotL = max(0.0f, dot(lightDirection, normal));
-                weights[pointLightIndex] = fNDotL / distanceSqr;
-                totalWeight += weights[pointLightIndex];
-            }
+            // 1. Generate a sample: Cosine-weighted hemisphere sampling
+            const float2 uniformSample = float2(
+                CanonicalSample(pixel, FrameIndex + sampleIndex * 2, 0),
+                CanonicalSample(pixel, FrameIndex + sampleIndex * 2 + 1, 1));
+            const float3 localSampleDir = SampleHemisphereCosineWeighted(uniformSample);
 
-            // Sample an index using the weights (roulette selection)
-            float rnd = CanonicalSample(pixel, FrameIndex, PrimitiveIndex() + 10);
-            float accum = 0.0f;
-            uint randomPointLightInfoIndex = 0;
-            for(uint pointLightIndex = 0; pointLightIndex < gSceneConstantBuffer.PointLightInfosCount; ++pointLightIndex)
+            // Create an orthonormal basis (T, B, N) around the shading normal.
+            float3 T;
+            if (abs(normal.z) < 0.999f)
             {
-                accum += weights[pointLightIndex] / totalWeight;
-                if(rnd < accum)
-                {
-                    randomPointLightInfoIndex = pointLightIndex;
-                    break;
-                }
+                T = normalize(cross(normal, float3(0.0f, 0.0f, 1.0f)));
             }
-            const float3 lightPosition = gPointLightInfos[randomPointLightInfoIndex].Positions;
-            const float3 lightToHitPosition = lightPosition - hitPosition;
-            const float distanceSqr = dot(lightToHitPosition, lightToHitPosition);
-            const float3 lightDirection = normalize(lightToHitPosition);
-            const float3 lightColor = gPointLightInfos[randomPointLightInfoIndex].Color;
-            const float radius = gPointLightInfos[randomPointLightInfoIndex].Radius;
+            else
+            {
+                T = normalize(cross(normal, float3(0.0f, 1.0f, 0.0f)));
+            }
+            float3 B = cross(normal, T);
 
+            // Transform the local sample direction to world space.
+            const float3 worldSampleDir = localSampleDir.x * T + localSampleDir.y * B + localSampleDir.z * normal;
+
+            // Trace a ray in the sampled direction.
             RayDesc ray;
             ray.Origin = hitPosition;
-            ray.Direction = lightDirection;
-            // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
-            // TMin should be kept small to prevent missing geometry at close contact areas.
+            ray.Direction = worldSampleDir;
             ray.TMin = 0.001;
             ray.TMax = 10000.0;
-            RayPayload shadowRayPayload;
-            shadowRayPayload.Color = float4(0, 0, 0, 0);
-            shadowRayPayload.RayT = 0.0f;
-            shadowRayPayload.PrimitiveIndex = 0xFFFFFFFF;
-            shadowRayPayload.Depth = 0; // Only check for visibility
-            TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, shadowRayPayload);
-            if (shadowRayPayload.PrimitiveIndex == 0xFFFFFFFF || shadowRayPayload.RayT * shadowRayPayload.RayT > distanceSqr)
-            {
-                // PDF for weighted sampling
-                const float pdf = weights[randomPointLightInfoIndex] / totalWeight;
-                const float4 singlePointLightContribution = EvaluateRadiance(lightToHitPosition, lightColor, radius, normal);
-                pointLightContribution += float4(singlePointLightContribution.rgb / pdf, singlePointLightContribution.a);
-            }
+            
+            RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, 0, payload.Depth - 1 };
+            TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, newPayload);
+
+            // 3. Incoming radiance
+            const float3 incomingRadiance = newPayload.Color.rgb;
+            
+            // 4. Cosine term is embedded in the sampling pdf for cosine-weighted hemisphere sampling.
+
+            // 5. Integrand
+            const float3 integrand = incomingRadiance;
+            monteCarloIntegrandSum += integrand;
         }
+        monteCarloEstimate = (monteCarloIntegrandSum * brdf) / HEMISPHERE_SAMPLES_COUNT;
     }
 
-    const uint indirectRaysCount = 1;
-    float4 indirectIlluminationContribution = float4(0, 0, 0, 0);
-    {
-        if (payload.Depth > 0)
-        {
-            float3 lightColor = float3(0, 0, 0);
-
-            for (uint rayIndex = 0; rayIndex < indirectRaysCount; ++rayIndex)
-            {
-                const float u1 = CanonicalSample(pixel, FrameIndex, PrimitiveIndex() + 2);
-                const float u2 = CanonicalSample(pixel, FrameIndex, PrimitiveIndex() + 3);
-
-                const float3 sample = SampleHemisphereCosineWeighted(float2(u1, u2));
-
-                // Create an orthonormal basis (n, t, b)
-                const float3 n = normalize(normal);
-                const float3 t = (fabs(normal.x) > 0.1f ? float3(0,1,0) : normalize(cross(float3(1,0,0), n)));
-                const float3 b = cross(n, t);
-
-                const float3 lightDirection = (t * sample.x) + (b * sample.y) + (n * sample.z);
-                const float radius = 0.0f;
-
-                RayDesc ray;
-                ray.Origin = hitPosition;
-                ray.Direction = lightDirection;
-                // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
-                // TMin should be kept small to prevent missing geometry at close contact areas.
-                ray.TMin = 0.001;
-                ray.TMax = 10000.0;
-                RayPayload shadowRayPayload;
-                shadowRayPayload.Color = float4(0, 0, 0, 0);
-                shadowRayPayload.RayT = 0.0f;
-                shadowRayPayload.PrimitiveIndex = 0xFFFFFFFF;
-                shadowRayPayload.Depth = payload.Depth - 1;
-                TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, shadowRayPayload);
-                if (shadowRayPayload.PrimitiveIndex != 0xFFFFFFFF)
-                {
-                    const uint isEmissive = IsEmissive(shadowRayPayload.PrimitiveIndex);
-                    if (isEmissive == 0)
-                    {
-                        lightColor = shadowRayPayload.Color.rgb;
-                        const float3 lightToHitPosition = lightDirection * shadowRayPayload.RayT;
-                        float4 singleIndirectLightContribution = EvaluateRadiance(lightToHitPosition, lightColor, radius, normal);
-                        float fNDotL = max(0.0f, dot(lightDirection, normal));
-                        const float pdf = fNDotL / PI;
-                        indirectIlluminationContribution += float4(singleIndirectLightContribution.rgb / pdf, singleIndirectLightContribution.a);
-                    }
-                }
-            }
-        }
-    }
-
-    // const uint totalRaysCount = parallelogramLightRaysCount + 1 + indirectRaysCount;
-    // const float4 lightContribution = (parallelogramLightContribution + pointLightContribution + indirectIlluminationContribution) / (float)totalRaysCount;
-    // const float4 lightContribution = parallelogramLightContribution * ((float)gSceneConstantBuffer.ParallelogramAreaLightInfosCount / (float)parallelogramLightRaysCount);
-    // const float4 lightContribution = float4(indirectIlluminationContribution.rgb * (float)indirectRaysCount, indirectIlluminationContribution.a);
-    const float4 lightContribution =
-        // parallelogramLightContribution * ((float)gSceneConstantBuffer.ParallelogramAreaLightInfosCount / (float)parallelogramLightRaysCount)
-            + pointLightContribution
-        // + float4(indirectIlluminationContribution.rgb / (float)indirectRaysCount, indirectIlluminationContribution.a)
-        ;
-
-    const float3 baseColor = gColors[PrimitiveIndex()];
-    return float4(baseColor, 1.0f) * lightContribution;
+    return float4(emissiveRadiance + monteCarloEstimate, 1.0f);
 }
 
 [shader("raygeneration")]
@@ -456,37 +347,9 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
 {
     const float3 hitPosition = HitWorldPosition();
 
-    // Get the base index of the triangle's first 16 bit index.
-    const uint indexSizeInBytes = 2;
-    const uint indicesPerTriangle = 3;
-    const uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
-    const uint baseIndex = PrimitiveIndex() * triangleIndexStride;
+    const float3 triangleNormal = GetWorldNormal(PrimitiveIndex(), attr.barycentrics);
 
-    // Load up 3 16 bit indices for the triangle.
-    const uint3 indices = Load3x16BitIndices(baseIndex);
-    
-    const uint isEmissiveBaseIndex = PrimitiveIndex();
-    const uint isEmissive = IsEmissive(isEmissiveBaseIndex);
-
-    // Retrieve corresponding vertex normals for the triangle vertices.
-    const float3 vertexNormals[3] = 
-    { 
-        gVertices[indices[0]].Normal, 
-        gVertices[indices[1]].Normal, 
-        gVertices[indices[2]].Normal 
-    };
-
-    // Compute the triangle's normal.
-    // This is redundant and done for illustration purposes 
-    // as all the per-vertex normals are the same and match triangle's normal in this sample. 
-    const float3 triangleNormal = HitAttribute(vertexNormals, attr);
-
-    float4 color = ComputeRenderingEquation(payload, hitPosition, triangleNormal);
-
-    if(isEmissive == 1)
-    {
-        color.xyz += gColors[PrimitiveIndex()];
-    }
+    const float4 color = ComputeRenderingEquation(payload, hitPosition, triangleNormal);
 
     payload.Color = color;
     payload.RayT = RayTCurrent();
@@ -496,7 +359,7 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
 [shader("miss")]
 void MissMain(inout RayPayload payload)
 {
-    float4 background = float4(0.0f, 0.0f, 5.0f, 1.0f);
+    float4 background = float4(0.0f, 0.0f, 0.0f, 1.0f);
     payload.Color = background;
     payload.RayT = FLT_MAX;
     payload.PrimitiveIndex = 0xFFFFFFFF;

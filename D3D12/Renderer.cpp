@@ -1751,8 +1751,8 @@ namespace cgs
             emissiveBuffer.Position /= 4.0f;
             emissiveBuffer.Position.W = 1.0f;
             emissiveBuffer.Color = float3{1.0f, 1.0f, 1.0f};
-            colors.push_back(float3{1.0f, 1.0f, 1.0f});
-            colors.push_back(float3{1.0f, 1.0f, 1.0f});
+            colors.push_back(float3{1.0f, 0.905f, 0.777f});
+            colors.push_back(float3{1.0f, 0.905f, 0.777f});
             isEmissives.push_back(true);
             isEmissives.push_back(true);
 
