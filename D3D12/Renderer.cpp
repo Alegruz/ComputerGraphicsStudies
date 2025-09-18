@@ -1721,7 +1721,7 @@ namespace cgs
             static std::mt19937 gen(rd());
             std::uniform_real_distribution<float> dist(0.0f, 500.0f);
             std::uniform_real_distribution<float> uniformDist(0.0f, 1.0f);
-            std::uniform_real_distribution<float> radiusDist(10.0f, 100.0f);
+            std::uniform_real_distribution<float> radiusDist(10.0f, 50.0f);
 
             for (uint32 i = 0; i < POINT_LIGHTS_COUNT; ++i)
             {
@@ -1737,10 +1737,10 @@ namespace cgs
         }
 
         {
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -343.0f, 548.8f - 0.0001f, 332.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -343.0f, 548.8f - 0.0001f, 227.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -213.0f, 548.8f - 0.0001f, 227.0f };
-            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -213.0f, 548.8f - 0.0001f, 332.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v0 = { -343.0f, 548.8f - 0.001f, 332.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v1 = { -343.0f, 548.8f - 0.001f, 227.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v2 = { -213.0f, 548.8f - 0.001f, 227.0f };
+            constexpr const Coordinate<eCoordinateSpace::WORLD> v3 = { -213.0f, 548.8f - 0.001f, 332.0f };
             const uint32 primitiveIndex = static_cast<uint32>(indices.size()) / 3;
             addQuadVertices(vertices, indices, v0, v1, v2, v3);
 
