@@ -247,15 +247,17 @@ CalculateLambertianDiffuseBrdf(const uint primitiveIndex)
 }
 
 float
-PowerHeuristic(const uint samplesCountA, const float pdfA, const uint samplesCountB, const float pdfB)
+PowerHeuristic(const uint samplesCountA, const float pdfA, const uint samplesCountB, const float pdfB, const uint samplesCountC, const float pdfC)
 {
     const float a = samplesCountA * pdfA;
     const float b = samplesCountB * pdfB;
-    return (a * a) / (a * a + b * b);
+    const float c = samplesCountC * pdfC;
+    return (a * a) / (a * a + b * b + c * c);
 }
 
+#define PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT (1)
 #define POINT_LIGHT_SAMPLES_COUNT (1)
-#define HEMISPHERE_SAMPLES_COUNT (1)
+#define HEMISPHERE_SAMPLES_COUNT (2)
 
 float4 
 ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, const float3 normal)
@@ -266,7 +268,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
     float3 emissiveRadiance = float3(0.0f, 0.0f, 0.0f);
     if (IsEmissive(PrimitiveIndex()) == 1)
     {
-        const float tempEmissiveStrength = 100.0f;
+        const float tempEmissiveStrength = 40.0f;
         emissiveRadiance = gColors[PrimitiveIndex()] * tempEmissiveStrength;
     }
 
@@ -274,7 +276,111 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
 
     // NEE
     float3 neeMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
+
+    // Parallelogram area lights
+    float3 parallelogramAreaLightMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
+#if PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT > 0
+    if (payload.Depth > 0)
+    {
+        const float3 brdf = CalculateLambertianDiffuseBrdf(PrimitiveIndex());
+        float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
+        for (uint sampleIndex = 0; sampleIndex < PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT; ++sampleIndex)
+        {
+            const uint parallelogramLightIndex = 0;
+            const ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[parallelogramLightIndex];
+            const float2 uniformSample = float2(
+                CanonicalSample(pixel, FrameIndex + sampleIndex * 2, 0),
+                CanonicalSample(pixel, FrameIndex + sampleIndex * 2 + 1, 1));
+            const float3 p0 = lightInfo.Positions[0];
+            const float3 e1 = lightInfo.Positions[1] - lightInfo.Positions[0];
+            const float3 e2 = lightInfo.Positions[2] - lightInfo.Positions[0];
+
+            const float parallelogramArea = length(cross(e1, e2));
+
+            const float3 pointLightPosition = SampleParallelogram(p0, e1, e2, uniformSample);
+            const float3 hitPositionToPointLightPosition = pointLightPosition - hitPosition;
+            const float distanceSquared = dot(hitPositionToPointLightPosition, hitPositionToPointLightPosition);
+            const float distance = sqrt(distanceSquared);
+            const float3 worldSampleDir = normalize(pointLightPosition - hitPosition);
+
+            // Trace a ray in the sampled direction.
+            RayDesc ray;
+            ray.Origin = hitPosition;
+            ray.Direction = worldSampleDir;
+            ray.TMin = 0.001;
+            ray.TMax = 10000.0;
+
+            RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, 0, 0 };
+            TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, newPayload);
+
+            if (IsEmissive(newPayload.PrimitiveIndex) == 1)
+            {
+                // Calculate barycentrics for the hit point on the triangle using primitive index, RayT, and worldSampleDir
+                float3 hitPoint = ray.Origin + newPayload.RayT * ray.Direction;
+
+                const uint indexSizeInBytes = 2;
+                const uint indicesPerTriangle = 3;
+                const uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
+                const uint baseIndex = newPayload.PrimitiveIndex * triangleIndexStride;
+                const uint3 indices = Load3x16BitIndices(baseIndex);
+
+                float3 v0 = gVertices[indices[0]].Position;
+                float3 v1 = gVertices[indices[1]].Position;
+                float3 v2 = gVertices[indices[2]].Position;
+
+                // Compute barycentric coordinates of hitPoint with respect to triangle (v0, v1, v2)
+                float3 v0v1 = v1 - v0;
+                float3 v0v2 = v2 - v0;
+                float3 v0p = hitPoint - v0;
+                float d00 = dot(v0v1, v0v1);
+                float d01 = dot(v0v1, v0v2);
+                float d11 = dot(v0v2, v0v2);
+                float d20 = dot(v0p, v0v1);
+                float d21 = dot(v0p, v0v2);
+                float denom = d00 * d11 - d01 * d01;
+                float v = (d11 * d20 - d01 * d21) / denom;
+                float w = (d00 * d21 - d01 * d20) / denom;
+                float u = 1.0f - v - w;
+                float2 barycentrics = float2(v, w);
+
+                // Retrieve corresponding vertex normals for the triangle vertices.
+                const float3 vertexNormals[3] =
+                    {
+                        gVertices[indices[0]].Normal,
+                        gVertices[indices[1]].Normal,
+                        gVertices[indices[2]].Normal
+                    };
+
+                // Compute the triangle's normal.
+                // This is redundant and done for illustration purposes
+                // as all the per-vertex normals are the same and match triangle's normal in this sample.
+                const float3 triangleNormal = InterpolateByBarycentric(vertexNormals, barycentrics);
+
+                const float3 incomingRadiance = newPayload.Color.rgb;
+                const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
+                const float cosAtLight = max(0.0f, dot(-worldSampleDir, triangleNormal));
+                const float geometryTerm = cosAtSurface * cosAtLight / distanceSquared;
+
+                const float pdfInArea = 1.0f / parallelogramArea;
+                if (cosAtLight > 0.0f)
+                {
+                    const float pdfInSolidAngle = (distanceSquared / cosAtLight) * pdfInArea;
+                    const float hemisphereCosineWeightedPdf = cosAtSurface / PI;
+                    const float misWeight = PowerHeuristic(PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, pdfInSolidAngle, POINT_LIGHT_SAMPLES_COUNT, 0.0f, HEMISPHERE_SAMPLES_COUNT, hemisphereCosineWeightedPdf);
+                    const float3 integrand = incomingRadiance * geometryTerm * misWeight;
+
+                    monteCarloIntegrandSum += (integrand / pdfInArea);
+                }
+            }
+        }
+        parallelogramAreaLightMonteCarloEstimate = (monteCarloIntegrandSum * brdf) / PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT;
+    }
+#endif // PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT > 0
+    neeMonteCarloEstimate += parallelogramAreaLightMonteCarloEstimate;
+
+    // Point lights
     float weights[64] = { 0.0f, };
+    float3 pointLightMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
 #if POINT_LIGHT_SAMPLES_COUNT > 0
     if (payload.Depth > 0)
     {
@@ -337,15 +443,25 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                 const float geometryTerm = dot(worldSampleDir, normal) / distanceSquared;
 
                 const float pdf = dot(worldSampleDir, normal) / PI;
-                const float misWeight = PowerHeuristic(POINT_LIGHT_SAMPLES_COUNT, weights[pointLightIndex], HEMISPHERE_SAMPLES_COUNT, pdf);
+                float parallelogramAreaLightPdf = 0.0f;
+                if (newPayload.PrimitiveIndex != 0xFFFFFFFF && IsEmissive(newPayload.PrimitiveIndex) == 1)
+                {
+                    const ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[0];
+                    const float3 e1 = lightInfo.Positions[1] - lightInfo.Positions[0];
+                    const float3 e2 = lightInfo.Positions[2] - lightInfo.Positions[0];
+                    const float parallelogramArea = length(cross(e1, e2));
+                    parallelogramAreaLightPdf = 1.0f / parallelogramArea;
+                }
+                const float misWeight = PowerHeuristic(POINT_LIGHT_SAMPLES_COUNT, weights[pointLightIndex], HEMISPHERE_SAMPLES_COUNT, pdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
                 const float3 integrand = incomingRadiance * geometryTerm * misWeight;
 
                 monteCarloIntegrandSum += (integrand / weights[pointLightIndex]);
             }
         }
-        neeMonteCarloEstimate = (monteCarloIntegrandSum * brdf) / POINT_LIGHT_SAMPLES_COUNT;
+        pointLightMonteCarloEstimate = (monteCarloIntegrandSum * brdf) / POINT_LIGHT_SAMPLES_COUNT;
     }
-#endif  // POINT_LIGHT_SAMPLES_COUNT > 0
+#endif // POINT_LIGHT_SAMPLES_COUNT > 0
+    neeMonteCarloEstimate += pointLightMonteCarloEstimate;
 
     // Indirect Illumination Integral
     float3 indirectIlluminationMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
@@ -396,8 +512,17 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
 
             // 5. Integrand
             const float pdf = dot(worldSampleDir, normal) / PI; // cosine-weighted hemisphere pdf
-            const float pointLightPdf = 0.0f; // assume that the sampled direction doesn't hit a point light
-            const float misWeight = PowerHeuristic(HEMISPHERE_SAMPLES_COUNT, pdf, POINT_LIGHT_SAMPLES_COUNT, pointLightPdf);
+            const float pointLightPdf = 0.0f;                   // assume that the sampled direction doesn't hit a point light
+            float parallelogramAreaLightPdf = 0.0f;
+            if (newPayload.PrimitiveIndex != 0xFFFFFFFF && IsEmissive(newPayload.PrimitiveIndex) == 1)
+            {
+                const ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[0];
+                const float3 e1 = lightInfo.Positions[1] - lightInfo.Positions[0];
+                const float3 e2 = lightInfo.Positions[2] - lightInfo.Positions[0];
+                const float parallelogramArea = length(cross(e1, e2));
+                parallelogramAreaLightPdf = 1.0f / parallelogramArea;
+            }
+            const float misWeight = PowerHeuristic(HEMISPHERE_SAMPLES_COUNT, pdf, POINT_LIGHT_SAMPLES_COUNT, pointLightPdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
             const float3 integrand = incomingRadiance * misWeight;
             monteCarloIntegrandSum += integrand;
         }
