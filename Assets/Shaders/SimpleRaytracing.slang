@@ -397,56 +397,67 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
         float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
         for (uint sampleIndex = 0; sampleIndex < POINT_LIGHT_SAMPLES_COUNT; ++sampleIndex)
         {
-            // Algorithm 1: Resampled importance sampling
-            // Input: M, q: number of candidates to generate (M ≥ 1) for pixel q
-            // Output: Sample y and the sum of RIS weights ∑i=1→M w(x_i)
-
-            // Generate proposals x = {x_1, ..., x_M}
-            uint proposals[RESAMPLE_COUNT];
-            float proposalWeights[RESAMPLE_COUNT];
-            float weightsSum = 0.0f;
-            for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
-            {
-                // generate x_i ~ p
-                const uint pointLightIndex = RandomInt(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4, gSceneConstantBuffer.PointLightInfosCount);
-                proposals[proposalIndex] = pointLightIndex;
-
-                const float3 pointLightPosition = gPointLightInfos[pointLightIndex].Positions;
-                const float3 hitPositionToPointLightPosition = pointLightPosition - hitPosition;
-                const float distanceSquared = dot(hitPositionToPointLightPosition, hitPositionToPointLightPosition);
-                const float distance = sqrt(distanceSquared);
-                const float3 worldSampleDir = normalize(pointLightPosition - hitPosition);
-
-                const float pointLightStrength = 10000.0f;
-                const float3 incomingRadiance = gPointLightInfos[pointLightIndex].Color * pointLightStrength;
-                const float geometryTerm = dot(worldSampleDir, normal) / distanceSquared;
-                const float3 integrand = incomingRadiance * geometryTerm;
-                const float desiredPdf = ConvertColorToLuminance(integrand);
-
-                const float pdf = (1.0f / gSceneConstantBuffer.PointLightInfosCount);
-                const float weight = desiredPdf / pdf;
-                weightsSum += weight;
-                proposalWeights[proposalIndex] = weight;
-            }
-
-            // Select from candidates proposals
-            float probabilities[RESAMPLE_COUNT];
-            for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
-            {
-                probabilities[proposalIndex] = proposalWeights[proposalIndex] / weightsSum;
-            }
-
-            const float probability = CanonicalSample(pixel, FrameIndex + sampleIndex, 5);
-            float cumulativeProbability = 0.0f;
             uint selectedProposalIndex = 0;
-            for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
+            float pdf = 0.0f;
+            if (RESAMPLE_COUNT <= POINT_LIGHT_SAMPLES_COUNT)
             {
-                cumulativeProbability += probabilities[proposalIndex];
-                if (probability <= cumulativeProbability)
+                // Algorithm 1: Resampled importance sampling
+                // Input: M, q: number of candidates to generate (M ≥ 1) for pixel q
+                // Output: Sample y and the sum of RIS weights ∑i=1→M w(x_i)
+
+                // Generate proposals x = {x_1, ..., x_M}
+                uint proposals[RESAMPLE_COUNT];
+                float proposalWeights[RESAMPLE_COUNT];
+                float weightsSum = 0.0f;
+                for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
                 {
-                    selectedProposalIndex = proposalIndex;
-                    break;
+                    // generate x_i ~ p
+                    const uint pointLightIndex = RandomInt(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4, gSceneConstantBuffer.PointLightInfosCount);
+                    proposals[proposalIndex] = pointLightIndex;
+
+                    const float3 pointLightPosition = gPointLightInfos[pointLightIndex].Positions;
+                    const float3 hitPositionToPointLightPosition = pointLightPosition - hitPosition;
+                    const float distanceSquared = dot(hitPositionToPointLightPosition, hitPositionToPointLightPosition);
+                    const float distance = sqrt(distanceSquared);
+                    const float3 worldSampleDir = normalize(pointLightPosition - hitPosition);
+
+                    const float pointLightStrength = 10000.0f;
+                    const float3 incomingRadiance = gPointLightInfos[pointLightIndex].Color * pointLightStrength;
+                    const float geometryTerm = dot(worldSampleDir, normal) / distanceSquared;
+                    const float3 integrand = incomingRadiance * geometryTerm;
+                    const float desiredPdf = ConvertColorToLuminance(integrand);
+
+                    const float pdf = (1.0f / gSceneConstantBuffer.PointLightInfosCount);
+                    const float weight = desiredPdf / pdf;
+                    weightsSum += weight;
+                    proposalWeights[proposalIndex] = weight;
                 }
+
+                // Select from candidates proposals
+                float probabilities[RESAMPLE_COUNT];
+                for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
+                {
+                    probabilities[proposalIndex] = proposalWeights[proposalIndex] / weightsSum;
+                }
+
+                const float probability = CanonicalSample(pixel, FrameIndex + sampleIndex, 5);
+                float cumulativeProbability = 0.0f;
+                for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
+                {
+                    cumulativeProbability += probabilities[proposalIndex];
+                    if (probability <= cumulativeProbability)
+                    {
+                        selectedProposalIndex = proposalIndex;
+                        break;
+                    }
+                }
+                pdf = probabilities[selectedProposalIndex] * weightsSum;
+            }
+            else
+            {
+                // Algorithm 2: Uniformly sample a point light
+                selectedProposalIndex = RandomInt(pixel, FrameIndex + sampleIndex, 4, gSceneConstantBuffer.PointLightInfosCount);
+                pdf = 1.0f / gSceneConstantBuffer.PointLightInfosCount;
             }
 
             const float3 pointLightPosition = gPointLightInfos[selectedProposalIndex].Positions;
@@ -472,7 +483,6 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                 const float geometryTerm = dot(worldSampleDir, normal) / distanceSquared;
 
                 // These are 0 because no parallelogram area light sampling nor hemisphere sampling can sample point lights
-                const float pdf = probabilities[selectedProposalIndex] * weightsSum;
                 float parallelogramAreaLightPdf = 0.0f;
                 float hemisphereSamplePdf = 0.0f;
                 const float misWeight = PowerHeuristic(POINT_LIGHT_SAMPLES_COUNT, pdf, HEMISPHERE_SAMPLES_COUNT, hemisphereSamplePdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
