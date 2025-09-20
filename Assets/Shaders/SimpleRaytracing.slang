@@ -292,43 +292,54 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
         const float3 brdf = CalculateLambertianDiffuseBrdf(PrimitiveIndex());
         float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
         for (uint sampleIndex = 0; sampleIndex < PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT; ++sampleIndex)
-        {
+        {            
             const uint parallelogramLightIndex = 0;
             const ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[parallelogramLightIndex];
-            const float2 uniformSample = float2(
-                CanonicalSample(pixel, FrameIndex + sampleIndex * 2, 0),
-                CanonicalSample(pixel, FrameIndex + sampleIndex * 2 + 1, 1));
-            const float3 p0 = lightInfo.Positions[0];
-            const float3 e1 = lightInfo.Positions[1] - lightInfo.Positions[0];
-            const float3 e2 = lightInfo.Positions[2] - lightInfo.Positions[0];
+            const uint basePrimitiveIndex = lightInfo.PrimitiveIndices[0];
+            const uint indexSizeInBytes = 2;
+            const uint indicesPerTriangle = 3;
+            const uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
+            uint baseIndex = basePrimitiveIndex * triangleIndexStride;
+            const uint3 baseIndices = Load3x16BitIndices(baseIndex);
+            const float3 baseV0 = gVertices[baseIndices[0]].Position;
+            const float3 baseV1 = gVertices[baseIndices[1]].Position;
+            
+            const uint nextPrimitiveIndex = lightInfo.PrimitiveIndices[1];
+            uint nextIndex = nextPrimitiveIndex * triangleIndexStride;
+            const uint3 nextIndices = Load3x16BitIndices(nextIndex);
 
+            const float3 baseV2 = gVertices[nextIndices[2]].Position;
+            const float3 p0 = baseV0;
+            const float3 e1 = baseV1 - baseV0;
+            const float3 e2 = baseV2 - baseV0;
             const float parallelogramArea = length(cross(e1, e2));
-
-            const float3 pointLightPosition = SampleParallelogram(p0, e1, e2, uniformSample);
-            const float3 hitPositionToPointLightPosition = pointLightPosition - hitPosition;
-            const float distanceSquared = dot(hitPositionToPointLightPosition, hitPositionToPointLightPosition);
-            const float distance = sqrt(distanceSquared);
-            const float3 worldSampleDir = normalize(pointLightPosition - hitPosition);
-
-            // Trace a ray in the sampled direction.
-            RayDesc ray;
-            ray.Origin = hitPosition;
-            ray.Direction = worldSampleDir;
-            ray.TMin = 0.001;
-            ray.TMax = 10000.0;
-
-            RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, 0, 0 };
-            TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, newPayload);
-
-            if (IsEmissive(newPayload.PrimitiveIndex) == 1)
+            float3 proposals[RESAMPLE_COUNT];
+            float3 proposalNormals[RESAMPLE_COUNT];
+            float proposalWeights[RESAMPLE_COUNT];
+            float weightsSum = 0.0f;
+            for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
             {
-                // Calculate barycentrics for the hit point on the triangle using primitive index, RayT, and worldSampleDir
-                float3 hitPoint = ray.Origin + newPayload.RayT * ray.Direction;
+                const float2 uniformSample = float2(
+                    CanonicalSample(pixel, FrameIndex + sampleIndex * 2 + proposalIndex * 17, 0),
+                    CanonicalSample(pixel, FrameIndex + sampleIndex * 2 + 1 + proposalIndex * 23, 1));
 
-                const uint indexSizeInBytes = 2;
-                const uint indicesPerTriangle = 3;
-                const uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
-                const uint baseIndex = newPayload.PrimitiveIndex * triangleIndexStride;
+                const float3 parallelogramAreaLightPosition = SampleParallelogram(p0, e1, e2, uniformSample);
+                proposals[proposalIndex] = parallelogramAreaLightPosition;
+                uint primitiveIndex = 0;
+                if(uniformSample.x > 0.5f && uniformSample.y > 0.5f)
+                {
+                    primitiveIndex = lightInfo.PrimitiveIndices[1];
+                }
+                else
+                {
+                    primitiveIndex = lightInfo.PrimitiveIndices[0];
+                }
+                const float3 hitPositionToParallelogramAreaLightPosition = parallelogramAreaLightPosition - hitPosition;
+                const float distanceSquared = dot(hitPositionToParallelogramAreaLightPosition, hitPositionToParallelogramAreaLightPosition);
+                const float distance = sqrt(distanceSquared);
+                const float3 worldSampleDir = normalize(parallelogramAreaLightPosition - hitPosition);
+
+                baseIndex = primitiveIndex * triangleIndexStride;
                 const uint3 indices = Load3x16BitIndices(baseIndex);
 
                 float3 v0 = gVertices[indices[0]].Position;
@@ -338,7 +349,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                 // Compute barycentric coordinates of hitPoint with respect to triangle (v0, v1, v2)
                 float3 v0v1 = v1 - v0;
                 float3 v0v2 = v2 - v0;
-                float3 v0p = hitPoint - v0;
+                float3 v0p = parallelogramAreaLightPosition - v0;
                 float d00 = dot(v0v1, v0v1);
                 float d01 = dot(v0v1, v0v2);
                 float d11 = dot(v0v2, v0v2);
@@ -363,20 +374,73 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                 // as all the per-vertex normals are the same and match triangle's normal in this sample.
                 const float3 triangleNormal = InterpolateByBarycentric(vertexNormals, barycentrics);
 
-                const float3 incomingRadiance = newPayload.Color.rgb;
+                const float3 incomingRadiance = lightInfo.Color.rgb;
                 const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
                 const float cosAtLight = max(0.0f, dot(-worldSampleDir, triangleNormal));
                 const float geometryTerm = cosAtSurface * cosAtLight / distanceSquared;
+                const float desiredPdf = ConvertColorToLuminance(incomingRadiance * geometryTerm);
+                const float pdf = 1.0f / parallelogramArea;
+                const float weight = desiredPdf / pdf;
+                weightsSum += weight;
+                proposalWeights[proposalIndex] = weight;
+                proposalNormals[proposalIndex] = triangleNormal;
+            }
 
-                const float pdfInArea = 1.0f / parallelogramArea;
+            // Select from candidates proposals
+            float probabilities[RESAMPLE_COUNT];
+            for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
+            {
+                probabilities[proposalIndex] = proposalWeights[proposalIndex] / weightsSum;
+            }
+
+            float3 selectedProposalPosition = float3(0.0f, 0.0f, 0.0f);
+            float3 selectedProposalNormal = float3(0.0f, 0.0f, 0.0f);
+            float pdf = 0.0f;
+            const float probability = CanonicalSample(pixel, FrameIndex + sampleIndex, 5);
+            float cumulativeProbability = 0.0f;
+            for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
+            {
+                cumulativeProbability += probabilities[proposalIndex];
+                if (probability <= cumulativeProbability)
+                {
+                    selectedProposalPosition = proposals[proposalIndex];
+                    selectedProposalNormal = proposalNormals[proposalIndex];
+                    pdf = proposalWeights[proposalIndex] / parallelogramArea;
+                    break;
+                }
+            }
+
+            const float3 parallelogramAreaLightPosition = selectedProposalPosition;
+            const float3 hitPositionToPointLightPosition = parallelogramAreaLightPosition - hitPosition;
+            const float distanceSquared = dot(hitPositionToPointLightPosition, hitPositionToPointLightPosition);
+            const float distance = sqrt(distanceSquared);
+            const float3 worldSampleDir = normalize(parallelogramAreaLightPosition - hitPosition);
+
+            // Trace a ray in the sampled direction.
+            RayDesc ray;
+            ray.Origin = hitPosition;
+            ray.Direction = worldSampleDir;
+            ray.TMin = 0.001;
+            ray.TMax = 10000.0;
+
+            RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, 0, 0 };
+            TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, newPayload);
+
+            if (IsEmissive(newPayload.PrimitiveIndex) == 1)
+            {
+                const float3 incomingRadiance = newPayload.Color.rgb;
+                const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
+                const float cosAtLight = max(0.0f, dot(-worldSampleDir, selectedProposalNormal));
+                const float geometryTerm = cosAtSurface * cosAtLight / distanceSquared;
+                
                 if (cosAtLight > 0.0f)
                 {
-                    const float pdfInSolidAngle = (distanceSquared / cosAtLight) * pdfInArea;
+                    const float pdfInSolidAngle = (distanceSquared / cosAtLight) * pdf;
                     const float hemisphereCosineWeightedPdf = cosAtSurface / PI;
                     const float misWeight = PowerHeuristic(PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, pdfInSolidAngle, POINT_LIGHT_SAMPLES_COUNT, 0.0f, HEMISPHERE_SAMPLES_COUNT, hemisphereCosineWeightedPdf);
-                    const float3 integrand = incomingRadiance * geometryTerm * misWeight;
+                    const float3 integrand = incomingRadiance * geometryTerm * misWeight * weightsSum / RESAMPLE_COUNT;
 
-                    monteCarloIntegrandSum += (integrand / pdfInArea);
+                    monteCarloIntegrandSum += (integrand / pdf);
                 }
             }
         }
@@ -399,7 +463,8 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
         {
             uint selectedProposalIndex = 0;
             float pdf = 0.0f;
-            if (RESAMPLE_COUNT <= POINT_LIGHT_SAMPLES_COUNT)
+            float weightsSum = 0.0f;
+            if (RESAMPLE_COUNT <= gSceneConstantBuffer.PointLightInfosCount)
             {
                 // Algorithm 1: Resampled importance sampling
                 // Input: M, q: number of candidates to generate (M ≥ 1) for pixel q
@@ -408,7 +473,6 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                 // Generate proposals x = {x_1, ..., x_M}
                 uint proposals[RESAMPLE_COUNT];
                 float proposalWeights[RESAMPLE_COUNT];
-                float weightsSum = 0.0f;
                 for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
                 {
                     // generate x_i ~ p
@@ -451,7 +515,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                         break;
                     }
                 }
-                pdf = probabilities[selectedProposalIndex] * weightsSum;
+                pdf = proposalWeights[selectedProposalIndex] / gSceneConstantBuffer.PointLightInfosCount;
             }
             else
             {
@@ -486,7 +550,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                 float parallelogramAreaLightPdf = 0.0f;
                 float hemisphereSamplePdf = 0.0f;
                 const float misWeight = PowerHeuristic(POINT_LIGHT_SAMPLES_COUNT, pdf, HEMISPHERE_SAMPLES_COUNT, hemisphereSamplePdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
-                const float3 integrand = incomingRadiance * geometryTerm * misWeight;
+                const float3 integrand = incomingRadiance * geometryTerm * misWeight * weightsSum / RESAMPLE_COUNT;
 
                 monteCarloIntegrandSum += (integrand / pdf);
             }
