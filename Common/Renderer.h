@@ -63,6 +63,7 @@ namespace cgs
         const std::vector<std::unique_ptr<Geometry>>& Geometries;
         uint64 WorkIndex;
         uint32 FrameIndex;
+        const float DeltaTime;
     };
 
     struct RenderThreadInfo final
@@ -210,5 +211,5 @@ namespace cgs
     InitializeCornellBoxCamera() noexcept;
 
     void
-    Render(uint64& inoutWorkIndex, RenderThreadInfo& inoutRenderThreadInfo, const std::vector<std::unique_ptr<Geometry>>& geometries) noexcept;
+    Render(const float deltaTime, uint64& inoutWorkIndex, RenderThreadInfo& inoutRenderThreadInfo, const std::vector<std::unique_ptr<Geometry>>& geometries) noexcept;
 }

@@ -407,7 +407,7 @@ namespace cgs
     }
 
     void
-    Render(uint64& inoutWorkIndex, RenderThreadInfo& inoutRenderThreadInfo, const std::vector<std::unique_ptr<Geometry>>& geometries) noexcept
+    Render(const float deltaTime, uint64& inoutWorkIndex, RenderThreadInfo& inoutRenderThreadInfo, const std::vector<std::unique_ptr<Geometry>>& geometries) noexcept
     {
         const uint32 currentFrameIndexToRender = static_cast<uint32>(inoutWorkIndex % 3);
         bool isFirstFrame = false;
@@ -437,6 +437,7 @@ namespace cgs
                     .Geometries = geometries,
                     .WorkIndex = inoutWorkIndex++,
                     .FrameIndex = currentFrameIndexToRender,
+                    .DeltaTime = deltaTime,
                 });
         }
     }

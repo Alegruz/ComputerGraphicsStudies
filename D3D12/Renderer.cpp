@@ -302,6 +302,8 @@ namespace cgs
     static std::vector<std::unique_ptr<ConstantBuffer>> gSceneConstantBuffers(BACK_BUFFERS_COUNT);
     static std::unique_ptr<RenderResource> gParallelogramAreaLightInfosBuffer;
     static std::unique_ptr<RenderResource> gPointLightInfosBuffer;
+    static std::vector<PointLightInfo> gPointLightInfos;
+    static Coordinate<eCoordinateSpace::WORLD> gRotationAxis;
     
     enum class eCbvSrvUavRaytracingDescriptorType : uint8
     {
@@ -372,6 +374,27 @@ namespace cgs
         };
         commandList.ResourceBarrier(1, &barrier);
         mState = newState;
+    }
+    
+    bool
+    RenderResource::Map(const uint32 size, void* data) noexcept
+    {
+        D3D12_RANGE range = { .Begin = 0, .End = 0 };
+        byte* dataBegin = nullptr;
+        HRESULT hr = mData->Map(
+            0,
+            &range,
+            reinterpret_cast<void**>(&dataBegin)
+        );
+        if(FAILED(hr))
+        {
+            assert(false && "Failed to map point light infos buffer");
+            return false;
+        }
+
+        std::memcpy(dataBegin, data, size);
+        mData->Unmap(0, nullptr);
+        return true;
     }
 
     Slang::ComPtr<slang::IBlob>
@@ -1702,6 +1725,8 @@ namespace cgs
             colors.push_back(float3{1.0f, 1.0f, 1.0f});
             isEmissives.push_back(false);
             isEmissives.push_back(false);
+
+            gRotationAxis = (v0 + v1 + v2 + v3) / 4.0f;
         }
         
         // Light
@@ -1712,11 +1737,11 @@ namespace cgs
         };
         EmissiveBuffer emissiveBuffer;
         std::vector<ParallelogramAreaLightInfo> parallelogramAreaLightInfos;
-        std::vector<PointLightInfo> pointLightInfos;
 
         // Random point lights
         {
             constexpr uint32 POINT_LIGHTS_COUNT = 64;
+            gPointLightInfos.reserve(POINT_LIGHTS_COUNT);
             static std::random_device rd;
             static std::mt19937 gen(rd());
             std::uniform_real_distribution<float> dist(0.0f, 500.0f);
@@ -1725,7 +1750,7 @@ namespace cgs
 
             for (uint32 i = 0; i < POINT_LIGHTS_COUNT; ++i)
             {
-                pointLightInfos.push_back(
+                gPointLightInfos.push_back(
                     PointLightInfo
                     {
                         .Positions = { -dist(gen), dist(gen), dist(gen), },
@@ -1865,7 +1890,7 @@ namespace cgs
 
             sceneConstantBuffer.ProjectionToWorldTransformMatrix = inverseMatrix;
             sceneConstantBuffer.ParallelogramAreaLightInfosCount = static_cast<uint32>(parallelogramAreaLightInfos.size());
-            sceneConstantBuffer.PointLightInfosCount = static_cast<uint32>(pointLightInfos.size());
+            sceneConstantBuffer.PointLightInfosCount = static_cast<uint32>(gPointLightInfos.size());
         }
 
         const D3D12_RESOURCE_DESC sceneConstantBufferDesc =
@@ -2323,7 +2348,7 @@ namespace cgs
             gDevice->CreateShaderResourceView(parallelogramAreaLightInfosBufferCreateInfo.Data.Get(), &srvDesc, parallelogramAreaLightInfosBufferCreateInfo.View);
             gParallelogramAreaLightInfosBuffer = std::make_unique<RenderResource>(std::move(parallelogramAreaLightInfosBufferCreateInfo));
 
-            bufferDesc.Width = sizeof(PointLightInfo) * pointLightInfos.size();
+            bufferDesc.Width = sizeof(PointLightInfo) * gPointLightInfos.size();
             RenderResource::CreateInfo pointLightInfosBufferCreateInfo;
             pointLightInfosBufferCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
             pointLightInfosBufferCreateInfo.Name = "CornellBoxPointLightInfosBuffer";
@@ -2354,10 +2379,10 @@ namespace cgs
                 return false;
             }
 
-            std::memcpy(pointLightInfosDataBegin, pointLightInfos.data(), sizeof(PointLightInfo) * pointLightInfos.size());
+            std::memcpy(pointLightInfosDataBegin, gPointLightInfos.data(), sizeof(PointLightInfo) * gPointLightInfos.size());
             pointLightInfosBufferCreateInfo.Data->Unmap(0, nullptr);
 
-            srvDesc.Buffer.NumElements = static_cast<uint32>(pointLightInfos.size());
+            srvDesc.Buffer.NumElements = static_cast<uint32>(gPointLightInfos.size());
             srvDesc.Buffer.StructureByteStride = sizeof(PointLightInfo);
             
             descriptorIndex = static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::POINT_LIGHT_INFOS);
@@ -2627,7 +2652,7 @@ namespace cgs
     }
     
     void
-    Render(uint64& inoutWorkIndex, RenderThreadInfo& inoutRenderThreadInfo, const std::vector<std::unique_ptr<Geometry>>& geometries) noexcept
+    Render(const float deltaTime, uint64& inoutWorkIndex, RenderThreadInfo& inoutRenderThreadInfo, const std::vector<std::unique_ptr<Geometry>>& geometries) noexcept
     {
         bool isFirstFrame = false;
         while (true)
@@ -2651,6 +2676,7 @@ namespace cgs
                     .Geometries = geometries,
                     .WorkIndex = inoutWorkIndex++,
                     .FrameIndex = 0,
+                    .DeltaTime = deltaTime,
                 });
         }
     }
@@ -3422,6 +3448,27 @@ namespace cgs
     void
     raytracing(ID3D12GraphicsCommandList4& graphicsCommandList, SceneRenderTarget& sceneRenderTarget, RenderWork& renderWork) noexcept
     {
+        const uint32 pointLightInfosCount = static_cast<uint32>(gPointLightInfos.size());
+        for(uint32 lightIndex = 0; lightIndex < pointLightInfosCount; ++lightIndex)
+        {
+            PointLightInfo& pointLightInfo = gPointLightInfos[lightIndex];
+            // Rotate the point light position around the rotation axis
+            const float angle = renderWork.DeltaTime * 0.001f; // DeltaTime is in ms, convert to seconds
+            const float3 pos = pointLightInfo.Positions;
+            const float3 axis = Normalize(gRotationAxis);
+
+            // Rodrigues' rotation formula
+            const float cosA = std::cos(angle);
+            const float sinA = std::sin(angle);
+            const float3 rotatedPos =
+                pos * cosA +
+                axis * Dot(axis, pos) * (1.0f - cosA) +
+                Cross(axis, pos) * sinA;
+
+            pointLightInfo.Positions = rotatedPos;
+        }
+        gPointLightInfosBuffer->Map(static_cast<uint32>(sizeof(PointLightInfo) * pointLightInfosCount), gPointLightInfos.data());
+            
         graphicsCommandList.SetComputeRootSignature(gRaytracingGlobalRootSignature.Get());
 
         // Bind the heaps, acceleration structure and dispatch rays.

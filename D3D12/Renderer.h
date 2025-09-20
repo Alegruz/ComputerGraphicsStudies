@@ -340,6 +340,8 @@ namespace cgs
 
         void 
         Transition(ID3D12GraphicsCommandList& commandList, const D3D12_RESOURCE_STATES newState) noexcept;
+        bool
+        Map(const uint32 size, void* data) noexcept;
 
         [[nodiscard]] CGS_INLINE CGS_CONSTEXPR_WITH_ASSERT bool
         SetName(const std::string& name) noexcept

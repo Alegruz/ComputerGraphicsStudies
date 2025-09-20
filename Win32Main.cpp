@@ -463,7 +463,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, [[maybe_un
             }
         }
 
-        cgs::Render(workIndex, cgs::gRenderThread, cornellBox);
+        cgs::Render(deltaTimeInMs, workIndex, cgs::gRenderThread, cornellBox);
 
         QueryPerformanceCounter(&endTime);
         elapsedMicroseconds.QuadPart = (endTime.QuadPart - startTime.QuadPart) * 1000000 / frequency.QuadPart;

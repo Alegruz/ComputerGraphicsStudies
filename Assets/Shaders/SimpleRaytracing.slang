@@ -257,7 +257,7 @@ PowerHeuristic(const uint samplesCountA, const float pdfA, const uint samplesCou
 
 #define PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT (1)
 #define POINT_LIGHT_SAMPLES_COUNT (1)
-#define HEMISPHERE_SAMPLES_COUNT (2)
+#define HEMISPHERE_SAMPLES_COUNT (1)
 
 float4 
 ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, const float3 normal)
@@ -438,21 +438,14 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
 
             if (newPayload.RayT > distance)
             {
-                const float pointLightStrength = 100.0f;
+                const float pointLightStrength = 10000.0f;
                 const float3 incomingRadiance = gPointLightInfos[pointLightIndex].Color * pointLightStrength;
                 const float geometryTerm = dot(worldSampleDir, normal) / distanceSquared;
 
-                const float pdf = dot(worldSampleDir, normal) / PI;
+                // These are 0 because no parallelogram area light sampling nor hemisphere sampling can sample point lights
                 float parallelogramAreaLightPdf = 0.0f;
-                if (newPayload.PrimitiveIndex != 0xFFFFFFFF && IsEmissive(newPayload.PrimitiveIndex) == 1)
-                {
-                    const ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[0];
-                    const float3 e1 = lightInfo.Positions[1] - lightInfo.Positions[0];
-                    const float3 e2 = lightInfo.Positions[2] - lightInfo.Positions[0];
-                    const float parallelogramArea = length(cross(e1, e2));
-                    parallelogramAreaLightPdf = 1.0f / parallelogramArea;
-                }
-                const float misWeight = PowerHeuristic(POINT_LIGHT_SAMPLES_COUNT, weights[pointLightIndex], HEMISPHERE_SAMPLES_COUNT, pdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
+                float hemisphereSamplePdf = 0.0f;
+                const float misWeight = PowerHeuristic(POINT_LIGHT_SAMPLES_COUNT, weights[pointLightIndex], HEMISPHERE_SAMPLES_COUNT, hemisphereSamplePdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
                 const float3 integrand = incomingRadiance * geometryTerm * misWeight;
 
                 monteCarloIntegrandSum += (integrand / weights[pointLightIndex]);
@@ -554,7 +547,7 @@ void RayGenMain()
     // TMin should be kept small to prevent missing geometry at close contact areas.
     ray.TMin = 0.001;
     ray.TMax = 10000.0;
-    RayPayload payload = { float4(0, 0, 0, 0), 0.0f, 0, BounceDepth };
+    RayPayload payload = { float4(0, 0, 0, 0), 0.0f, 0, 1 };
     TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
 
     // Write the raytraced color to the output texture.

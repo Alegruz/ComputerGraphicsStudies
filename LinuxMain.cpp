@@ -606,7 +606,7 @@ main(int argc, char** argv)
         gFrameCallback = wl_surface_frame(gSurface);
         wl_callback_add_listener(gFrameCallback, &gFrameListener, nullptr);
 
-        cgs::Render(workIndex, cgs::gRenderThread, cornellBox);
+        cgs::Render(deltaTimeInMs, workIndex, cgs::gRenderThread, cornellBox);
 
         timespec endTime;
         clock_gettime(CLOCK_MONOTONIC_RAW, &endTime);
