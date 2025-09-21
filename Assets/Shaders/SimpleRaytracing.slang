@@ -31,8 +31,36 @@ struct PointLightInfo
     float Radius;
 };
 
+struct ParallelogramAreaLightReservoir
+{
+    float3 ParallelogramAreaLightPositionSample;
+    float3 ParallelogramAreaLightNormalSample;
+    float Pdf;
+    float WeightSum;
+    uint SamplesCount;
+};
+
+struct PointLightReservoir
+{
+    uint LightIndexSample;
+    float Pdf;
+    float WeightSum;
+    uint SamplesCount;
+};
+
+struct IndirectLightReservoir
+{
+    float3 Direction;
+    float Pdf;
+    float WeightSum;
+    uint SamplesCount;
+};
+
 uniform RaytracingAccelerationStructure gScene;
 uniform RWTexture2D gRenderTarget;
+uniform RWStructuredBuffer<ParallelogramAreaLightReservoir> gParallelogramAreaLightReservoir;
+uniform RWStructuredBuffer<PointLightReservoir> gPointLightReservoir;
+uniform RWStructuredBuffer<IndirectLightReservoir> gIndirectLightReservoir;
 uniform ByteAddressBuffer gIndices;
 uniform StructuredBuffer<VertexPN> gVertices;
 uniform StructuredBuffer<float3> gColors;
@@ -284,6 +312,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
     // NEE
     float3 neeMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
 
+    const uint bufferIndexByPixel = pixel.y * DispatchRaysDimensions().x + pixel.x;
     // Parallelogram area lights
     float3 parallelogramAreaLightMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
 #if PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT > 0
@@ -292,7 +321,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
         const float3 brdf = CalculateLambertianDiffuseBrdf(PrimitiveIndex());
         float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
         for (uint sampleIndex = 0; sampleIndex < PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT; ++sampleIndex)
-        {            
+        {
             const uint parallelogramLightIndex = 0;
             const ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[parallelogramLightIndex];
             const uint basePrimitiveIndex = lightInfo.PrimitiveIndices[0];
@@ -313,10 +342,6 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             const float3 e1 = baseV1 - baseV0;
             const float3 e2 = baseV2 - baseV0;
             const float parallelogramArea = length(cross(e1, e2));
-            float3 proposals[RESAMPLE_COUNT];
-            float3 proposalNormals[RESAMPLE_COUNT];
-            float proposalWeights[RESAMPLE_COUNT];
-            float weightsSum = 0.0f;
             for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
             {
                 const float2 uniformSample = float2(
@@ -324,7 +349,6 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                     CanonicalSample(pixel, FrameIndex + sampleIndex * 2 + 1 + proposalIndex * 23, 1));
 
                 const float3 parallelogramAreaLightPosition = SampleParallelogram(p0, e1, e2, uniformSample);
-                proposals[proposalIndex] = parallelogramAreaLightPosition;
                 uint primitiveIndex = 0;
                 if(uniformSample.x > 0.5f && uniformSample.y > 0.5f)
                 {
@@ -374,41 +398,29 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                 // as all the per-vertex normals are the same and match triangle's normal in this sample.
                 const float3 triangleNormal = InterpolateByBarycentric(vertexNormals, barycentrics);
 
-                const float3 incomingRadiance = lightInfo.Color.rgb;
+                const float3 incomingRadiance = lightInfo.Color.rgb * 40.0f;
                 const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
                 const float cosAtLight = max(0.0f, dot(-worldSampleDir, triangleNormal));
                 const float geometryTerm = cosAtSurface * cosAtLight / distanceSquared;
                 const float desiredPdf = ConvertColorToLuminance(incomingRadiance * geometryTerm);
                 const float pdf = 1.0f / parallelogramArea;
                 const float weight = desiredPdf / pdf;
-                weightsSum += weight;
-                proposalWeights[proposalIndex] = weight;
-                proposalNormals[proposalIndex] = triangleNormal;
-            }
 
-            // Select from candidates proposals
-            float probabilities[RESAMPLE_COUNT];
-            for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
-            {
-                probabilities[proposalIndex] = proposalWeights[proposalIndex] / weightsSum;
-            }
-
-            float3 selectedProposalPosition = float3(0.0f, 0.0f, 0.0f);
-            float3 selectedProposalNormal = float3(0.0f, 0.0f, 0.0f);
-            float pdf = 0.0f;
-            const float probability = CanonicalSample(pixel, FrameIndex + sampleIndex, 5);
-            float cumulativeProbability = 0.0f;
-            for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
-            {
-                cumulativeProbability += probabilities[proposalIndex];
-                if (probability <= cumulativeProbability)
+                float weightsSum = gParallelogramAreaLightReservoir[bufferIndexByPixel].WeightSum + weight;
+                gParallelogramAreaLightReservoir[bufferIndexByPixel].WeightSum = weightsSum;
+                gParallelogramAreaLightReservoir[bufferIndexByPixel].SamplesCount = gParallelogramAreaLightReservoir[bufferIndexByPixel].SamplesCount + 1;
+                const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+                const float probability = weight / weightsSum;
+                if(canonicalSample < probability)
                 {
-                    selectedProposalPosition = proposals[proposalIndex];
-                    selectedProposalNormal = proposalNormals[proposalIndex];
-                    pdf = proposalWeights[proposalIndex] / parallelogramArea;
-                    break;
+                    gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightPositionSample = parallelogramAreaLightPosition;
+                    gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightNormalSample = triangleNormal;
+                    gParallelogramAreaLightReservoir[bufferIndexByPixel].Pdf = pdf;
                 }
             }
+            const float3 selectedProposalPosition = gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightPositionSample;
+            const float3 selectedProposalNormal = gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightNormalSample;
+            const float pdf = gParallelogramAreaLightReservoir[bufferIndexByPixel].Pdf;
 
             const float3 parallelogramAreaLightPosition = selectedProposalPosition;
             const float3 hitPositionToPointLightPosition = parallelogramAreaLightPosition - hitPosition;
@@ -438,7 +450,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                     const float pdfInSolidAngle = (distanceSquared / cosAtLight) * pdf;
                     const float hemisphereCosineWeightedPdf = cosAtSurface / PI;
                     const float misWeight = PowerHeuristic(PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, pdfInSolidAngle, POINT_LIGHT_SAMPLES_COUNT, 0.0f, HEMISPHERE_SAMPLES_COUNT, hemisphereCosineWeightedPdf);
-                    const float3 integrand = incomingRadiance * geometryTerm * misWeight * weightsSum / RESAMPLE_COUNT;
+                    const float3 integrand = incomingRadiance * geometryTerm * misWeight * gParallelogramAreaLightReservoir[bufferIndexByPixel].WeightSum / gParallelogramAreaLightReservoir[bufferIndexByPixel].SamplesCount;
 
                     monteCarloIntegrandSum += (integrand / pdf);
                 }
@@ -466,18 +478,10 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             float weightsSum = 0.0f;
             if (RESAMPLE_COUNT <= gSceneConstantBuffer.PointLightInfosCount)
             {
-                // Algorithm 1: Resampled importance sampling
-                // Input: M, q: number of candidates to generate (M ≥ 1) for pixel q
-                // Output: Sample y and the sum of RIS weights ∑i=1→M w(x_i)
-
-                // Generate proposals x = {x_1, ..., x_M}
-                uint proposals[RESAMPLE_COUNT];
-                float proposalWeights[RESAMPLE_COUNT];
                 for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
                 {
                     // generate x_i ~ p
                     const uint pointLightIndex = RandomInt(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4, gSceneConstantBuffer.PointLightInfosCount);
-                    proposals[proposalIndex] = pointLightIndex;
 
                     const float3 pointLightPosition = gPointLightInfos[pointLightIndex].Positions;
                     const float3 hitPositionToPointLightPosition = pointLightPosition - hitPosition;
@@ -485,7 +489,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                     const float distance = sqrt(distanceSquared);
                     const float3 worldSampleDir = normalize(pointLightPosition - hitPosition);
 
-                    const float pointLightStrength = 10000.0f;
+                    const float pointLightStrength = 1000.0f;
                     const float3 incomingRadiance = gPointLightInfos[pointLightIndex].Color * pointLightStrength;
                     const float geometryTerm = dot(worldSampleDir, normal) / distanceSquared;
                     const float3 integrand = incomingRadiance * geometryTerm;
@@ -493,29 +497,20 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
 
                     const float pdf = (1.0f / gSceneConstantBuffer.PointLightInfosCount);
                     const float weight = desiredPdf / pdf;
-                    weightsSum += weight;
-                    proposalWeights[proposalIndex] = weight;
-                }
 
-                // Select from candidates proposals
-                float probabilities[RESAMPLE_COUNT];
-                for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
-                {
-                    probabilities[proposalIndex] = proposalWeights[proposalIndex] / weightsSum;
-                }
-
-                const float probability = CanonicalSample(pixel, FrameIndex + sampleIndex, 5);
-                float cumulativeProbability = 0.0f;
-                for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
-                {
-                    cumulativeProbability += probabilities[proposalIndex];
-                    if (probability <= cumulativeProbability)
+                    float weightsSum = gPointLightReservoir[bufferIndexByPixel].WeightSum + weight;
+                    gPointLightReservoir[bufferIndexByPixel].WeightSum = weightsSum;
+                    gPointLightReservoir[bufferIndexByPixel].SamplesCount = gPointLightReservoir[bufferIndexByPixel].SamplesCount + 1;
+                    const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex * 17, 4);
+                    const float probability = weight / weightsSum;
+                    if(canonicalSample < probability)
                     {
-                        selectedProposalIndex = proposalIndex;
-                        break;
+                        gPointLightReservoir[bufferIndexByPixel].LightIndexSample = proposalIndex;
+                        gPointLightReservoir[bufferIndexByPixel].Pdf = pdf;
                     }
                 }
-                pdf = proposalWeights[selectedProposalIndex] / gSceneConstantBuffer.PointLightInfosCount;
+                selectedProposalIndex = gPointLightReservoir[bufferIndexByPixel].LightIndexSample;
+                pdf = gPointLightReservoir[bufferIndexByPixel].Pdf;
             }
             else
             {
@@ -550,7 +545,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                 float parallelogramAreaLightPdf = 0.0f;
                 float hemisphereSamplePdf = 0.0f;
                 const float misWeight = PowerHeuristic(POINT_LIGHT_SAMPLES_COUNT, pdf, HEMISPHERE_SAMPLES_COUNT, hemisphereSamplePdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
-                const float3 integrand = incomingRadiance * geometryTerm * misWeight * weightsSum / RESAMPLE_COUNT;
+                const float3 integrand = incomingRadiance * geometryTerm * misWeight * gPointLightReservoir[bufferIndexByPixel].WeightSum / gPointLightReservoir[bufferIndexByPixel].SamplesCount;
 
                 monteCarloIntegrandSum += (integrand / pdf);
             }
@@ -571,26 +566,47 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
         float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
         for (uint sampleIndex = 0; sampleIndex < HEMISPHERE_SAMPLES_COUNT; ++sampleIndex)
         {
-            // 1. Generate a sample: Cosine-weighted hemisphere sampling
-            const float2 uniformSample = float2(
-                CanonicalSample(pixel, FrameIndex + sampleIndex * 2, 0),
-                CanonicalSample(pixel, FrameIndex + sampleIndex * 2 + 1, 1));
-            const float3 localSampleDir = SampleHemisphereCosineWeighted(uniformSample);
-
-            // Create an orthonormal basis (T, B, N) around the shading normal.
-            float3 T;
-            if (abs(normal.z) < 0.999f)
+            for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
             {
-                T = normalize(cross(normal, float3(0.0f, 0.0f, 1.0f)));
-            }
-            else
-            {
-                T = normalize(cross(normal, float3(0.0f, 1.0f, 0.0f)));
-            }
-            float3 B = cross(normal, T);
+                // 1. Generate a sample: Cosine-weighted hemisphere sampling
+                const float2 uniformSample = float2(
+                    CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex * 17, 0),
+                    CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex * 23, 1));
+                const float3 localSampleDir = SampleHemisphereCosineWeighted(uniformSample);
 
-            // Transform the local sample direction to world space.
-            const float3 worldSampleDir = localSampleDir.x * T + localSampleDir.y * B + localSampleDir.z * normal;
+                // Create an orthonormal basis (T, B, N) around the shading normal.
+                float3 T;
+                if (abs(normal.z) < 0.999f)
+                {
+                    T = normalize(cross(normal, float3(0.0f, 0.0f, 1.0f)));
+                }
+                else
+                {
+                    T = normalize(cross(normal, float3(0.0f, 1.0f, 0.0f)));
+                }
+                float3 B = cross(normal, T);
+
+                // Transform the local sample direction to world space.
+                const float3 worldSampleDir = localSampleDir.x * T + localSampleDir.y * B + localSampleDir.z * normal;
+
+                const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
+                const float desiredPdf = cosAtSurface;
+                const float pdf = dot(worldSampleDir, normal) / PI;
+                const float weight = desiredPdf / pdf;
+
+                float weightsSum = gIndirectLightReservoir[bufferIndexByPixel].WeightSum + weight;
+                gIndirectLightReservoir[bufferIndexByPixel].WeightSum = weightsSum;
+                gIndirectLightReservoir[bufferIndexByPixel].SamplesCount = gIndirectLightReservoir[bufferIndexByPixel].SamplesCount + 1;
+                const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+                const float probability = weight / weightsSum;
+                if (canonicalSample < probability)
+                {
+                    gIndirectLightReservoir[bufferIndexByPixel].Direction = worldSampleDir;
+                    gIndirectLightReservoir[bufferIndexByPixel].Pdf = pdf;
+                }
+            }
+            const float3 worldSampleDir = gIndirectLightReservoir[bufferIndexByPixel].Direction;
+            const float pdf = gIndirectLightReservoir[bufferIndexByPixel].Pdf;
 
             // Trace a ray in the sampled direction.
             RayDesc ray;
@@ -608,7 +624,6 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             // 4. Cosine term is embedded in the sampling pdf for cosine-weighted hemisphere sampling.
 
             // 5. Integrand
-            const float pdf = dot(worldSampleDir, normal) / PI; // cosine-weighted hemisphere pdf
             const float pointLightPdf = 0.0f;                   // assume that the sampled direction doesn't hit a point light
             float parallelogramAreaLightPdf = 0.0f;
             if (newPayload.PrimitiveIndex != 0xFFFFFFFF && IsEmissive(newPayload.PrimitiveIndex) == 1)
@@ -620,8 +635,8 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                 parallelogramAreaLightPdf = 1.0f / parallelogramArea;
             }
             const float misWeight = PowerHeuristic(HEMISPHERE_SAMPLES_COUNT, pdf, POINT_LIGHT_SAMPLES_COUNT, pointLightPdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
-            const float3 integrand = incomingRadiance * misWeight;
-            monteCarloIntegrandSum += integrand;
+            const float3 integrand = incomingRadiance * misWeight * gIndirectLightReservoir[bufferIndexByPixel].WeightSum / gIndirectLightReservoir[bufferIndexByPixel].SamplesCount;
+            monteCarloIntegrandSum += (integrand / pdf);
         }
         indirectIlluminationMonteCarloEstimate = (monteCarloIntegrandSum * brdf) / HEMISPHERE_SAMPLES_COUNT;
     }
@@ -651,7 +666,7 @@ void RayGenMain()
     // TMin should be kept small to prevent missing geometry at close contact areas.
     ray.TMin = 0.001;
     ray.TMax = 10000.0;
-    RayPayload payload = { float4(0, 0, 0, 0), 0.0f, 0, 1 };
+    RayPayload payload = { float4(0, 0, 0, 0), 0.0f, 0, BounceDepth };
     TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
 
     // Write the raytraced color to the output texture.

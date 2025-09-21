@@ -212,7 +212,8 @@ namespace cgs
         {
             D3DPtr<ID3D12Resource> Data;
             D3D12_SHADER_RESOURCE_VIEW_DESC SrvView = {};
-            D3D12_CPU_DESCRIPTOR_HANDLE View = {};
+            D3D12_UNORDERED_ACCESS_VIEW_DESC UavView = {};
+            D3D12_CPU_DESCRIPTOR_HANDLE CpuDescriptor = { .ptr = 0 };
             D3D12_GPU_DESCRIPTOR_HANDLE GpuDescriptor = { .ptr = 0 };
             D3D12_RESOURCE_STATES State = {};
             std::string Name;
@@ -223,7 +224,8 @@ namespace cgs
         RenderResource() noexcept
             : mData()
             , mSrvView()
-            , mView()
+            , mUavView()
+            , mCpuDescriptor()
             , mGpuDescriptor()
             , mState(D3D12_RESOURCE_STATE_COMMON)
             , mName()
@@ -234,7 +236,8 @@ namespace cgs
         RenderResource(CreateInfo&& createInfo) noexcept
             : mData(std::move(createInfo.Data))
             , mSrvView(createInfo.SrvView)
-            , mView(createInfo.View)
+            , mUavView(createInfo.UavView)
+            , mCpuDescriptor(createInfo.CpuDescriptor)
             , mGpuDescriptor(createInfo.GpuDescriptor)
             , mState(createInfo.State)
             , mName(std::move(createInfo.Name))
@@ -251,7 +254,8 @@ namespace cgs
         RenderResource(RenderResource&& other) noexcept
             : mData(std::move(other.mData))
             , mSrvView(std::move(other.mSrvView))
-            , mView(other.mView)
+            , mUavView(std::move(other.mUavView))
+            , mCpuDescriptor(other.mCpuDescriptor)
             , mGpuDescriptor(other.mGpuDescriptor)
             , mState(other.mState)
             , mName(std::move(other.mName))
@@ -278,7 +282,8 @@ namespace cgs
             {
                 mData = std::move(other.mData);
                 mSrvView = other.mSrvView;
-                mView = other.mView;
+                mUavView = other.mUavView;
+                mCpuDescriptor = other.mCpuDescriptor;
                 mGpuDescriptor = other.mGpuDescriptor;
                 mState = other.mState;
                 mName = std::move(other.mName);
@@ -296,7 +301,8 @@ namespace cgs
         {
             mData = std::move(createInfo.Data);
             mSrvView = std::move(createInfo.SrvView);
-            mView = createInfo.View;
+            mUavView = std::move(createInfo.UavView);
+            mCpuDescriptor = createInfo.CpuDescriptor;
             mGpuDescriptor = createInfo.GpuDescriptor;
             mState = createInfo.State;
             mName = std::move(createInfo.Name);
@@ -321,9 +327,9 @@ namespace cgs
         }
 
         CGS_INLINE constexpr const D3D12_CPU_DESCRIPTOR_HANDLE&
-        GetView() const noexcept
+        GetCpuDescriptor() const noexcept
         {
-            return mView;
+            return mCpuDescriptor;
         }
 
         CGS_INLINE constexpr const D3D12_SHADER_RESOURCE_VIEW_DESC&
@@ -331,6 +337,9 @@ namespace cgs
         {
             return mSrvView;
         }
+        
+        CGS_INLINE constexpr const D3D12_UNORDERED_ACCESS_VIEW_DESC&
+        GetUavView() const noexcept { return mUavView; }
 
         CGS_INLINE constexpr const D3D12_GPU_DESCRIPTOR_HANDLE&
         GetGpuDescriptor() const noexcept
@@ -366,7 +375,8 @@ namespace cgs
     protected:
         D3DPtr<ID3D12Resource> mData;
         D3D12_SHADER_RESOURCE_VIEW_DESC mSrvView;
-        D3D12_CPU_DESCRIPTOR_HANDLE mView;
+        D3D12_UNORDERED_ACCESS_VIEW_DESC mUavView;
+        D3D12_CPU_DESCRIPTOR_HANDLE mCpuDescriptor;
         D3D12_GPU_DESCRIPTOR_HANDLE mGpuDescriptor;
         D3D12_RESOURCE_STATES mState;
         std::string mName;
@@ -379,7 +389,6 @@ namespace cgs
         {
             RenderResource::CreateInfo ParentCreateInfo;
             bool IsBackBuffer = false;
-            D3D12_UNORDERED_ACCESS_VIEW_DESC UavView;
         };
 
     public:
@@ -387,7 +396,6 @@ namespace cgs
         Texture() noexcept
             : RenderResource()
             , mIsBackBuffer(false)
-            , mUavView{}
         {
         }
 
@@ -395,7 +403,6 @@ namespace cgs
         Texture(CreateInfo&& createInfo) noexcept
             : RenderResource(std::move(createInfo.ParentCreateInfo))
             , mIsBackBuffer(createInfo.IsBackBuffer)
-            , mUavView(createInfo.UavView)
         {
             const D3D12_RESOURCE_DESC desc = mData->GetDesc();
             mWidth = static_cast<uint32>(desc.Width);
@@ -438,8 +445,6 @@ namespace cgs
         GetWidth() const noexcept { return mWidth; }
         CGS_INLINE constexpr uint32
         GetHeight() const noexcept { return mHeight; }
-        CGS_INLINE constexpr const D3D12_UNORDERED_ACCESS_VIEW_DESC&
-        GetUavView() const noexcept { return mUavView; }
 
     protected:
         CGS_INLINE void
@@ -449,7 +454,6 @@ namespace cgs
         bool mIsBackBuffer;
         uint32 mWidth;
         uint32 mHeight;
-        D3D12_UNORDERED_ACCESS_VIEW_DESC mUavView;
     };
 
     class IndexBuffer final : public RenderResource

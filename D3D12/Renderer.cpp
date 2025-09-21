@@ -33,7 +33,7 @@ namespace cgs
         RenderWork& Work;
     };
 
-    struct SceneConstantBuffer
+    struct SceneConstantBuffer final
     {
         float4x4 ProjectionToWorldTransformMatrix;
         float4 CameraPosition;
@@ -41,18 +41,43 @@ namespace cgs
         uint32 PointLightInfosCount;
     };
 
-    struct ParallelogramAreaLightInfo
+    struct ParallelogramAreaLightInfo final
     {
         float3 Positions[3];
         float3 Color;
         uint32 PrimitiveIndices[2];
     };
 
-    struct PointLightInfo
+    struct PointLightInfo final
     {
         float3 Positions;
         float3 Color;
         float Radius;
+    };
+
+    struct ParallelogramAreaLightReservoir final
+    {
+        float3 ParallelogramAreaLightPositionSample;
+        float3 ParallelogramAreaLightNormalSample;
+        float Pdf;
+        float WeightSum;
+        uint32 SamplesCount;
+    };
+
+    struct PointLightReservoir final
+    {
+        uint32 LightIndexSample;
+        float Pdf;
+        float WeightSum;
+        uint32 SamplesCount;
+    };
+
+    struct IndirectLightReservoir final
+    {
+        float3 Direction;
+        float Pdf;
+        float WeightSum;
+        uint32 SamplesCount;
     };
 
     class DescriptorHeap final
@@ -169,6 +194,18 @@ namespace cgs
             return allocate(outCpuDescriptors, outGpuDescriptors, index, false);
         }
 
+        [[nodiscard]] CGS_INLINE constexpr bool
+        AllocateDynamicDescriptors(std::vector<D3D12_CPU_DESCRIPTOR_HANDLE>& outCpuDescriptors, const uint32 index) noexcept
+        {
+            if(outCpuDescriptors.size() != BACK_BUFFERS_COUNT)
+            {
+                assert(false && "Number of dynamic descriptors requested must be equal to the number of frame buffers!");
+                return false;
+            }
+
+            return allocate(outCpuDescriptors, index, false);
+        }
+
     private:
         [[nodiscard]] CGS_INLINE constexpr bool
         allocate(std::vector<D3D12_CPU_DESCRIPTOR_HANDLE>& outCpuDescriptors, std::vector<D3D12_GPU_DESCRIPTOR_HANDLE>& outGpuDescriptors, const uint32 index, const bool isStatic) noexcept
@@ -200,6 +237,39 @@ namespace cgs
                 outCpuDescriptors[i].ptr += mDescriptorSize * descriptorIndex;
                 outGpuDescriptors[i] = mHeap->GetGPUDescriptorHandleForHeapStart();
                 outGpuDescriptors[i].ptr += mDescriptorSize * descriptorIndex;
+
+                mIsDescriptorAllocated[descriptorIndex] = true;
+            }
+            return true;
+        }
+        [[nodiscard]] CGS_INLINE constexpr bool
+        allocate(std::vector<D3D12_CPU_DESCRIPTOR_HANDLE>& outCpuDescriptors, const uint32 index, const bool isStatic) noexcept
+        {
+            const uint32 descriptorsCount = static_cast<uint32>(outCpuDescriptors.size());
+            if(descriptorsCount != outCpuDescriptors.size())
+            {
+                assert(false && "Number of cpu descriptors requested must be equal!!");
+                return false;
+            }
+
+            if(index >= mMaxDescriptorsCount)
+            {
+                assert(false && "Index exceeds maximum number of descriptors allocatable");
+                return false;
+            }
+
+            uint32 descriptorIndex = isStatic ? index : (index + mMaxStaticDescriptorsCount);
+            for(uint32 i = 0; i < descriptorsCount; ++i, descriptorIndex += mMaxDynamicDescriptorsCount)
+            {
+                const bool isAllocated = mIsDescriptorAllocated[descriptorIndex];
+                if(isAllocated == true)
+                {
+                    assert(false && "There already is a descriptor allocated here!");
+                    return false;
+                }
+
+                outCpuDescriptors[i] = mHeap->GetCPUDescriptorHandleForHeapStart();
+                outCpuDescriptors[i].ptr += mDescriptorSize * descriptorIndex;
 
                 mIsDescriptorAllocated[descriptorIndex] = true;
             }
@@ -269,6 +339,7 @@ namespace cgs
     static constexpr uint32 PER_FRAME_CBV_SRV_UAV_DESCRIPTORS_COUNT = 1024;
     static constexpr uint32 MAX_DESCRIPTORS_COUNT = GLOBAL_CBV_SRV_UAV_DESCRIPTORS_COUNT + PER_FRAME_CBV_SRV_UAV_DESCRIPTORS_COUNT * BACK_BUFFERS_COUNT;
     static std::unique_ptr<DescriptorHeap> gCbvSrvUavHeap;
+    static std::unique_ptr<DescriptorHeap> gCbvSrvUavHeapOnlyCpu;
     static uint32 gRtvIncrementSize = 0;
     static uint32 gDsvIncrementSize = 0;
     static std::vector<SceneRenderTarget> gSceneRenderTargets(BACK_BUFFERS_COUNT);
@@ -286,7 +357,10 @@ namespace cgs
 
     // Raytracing
     static std::vector<std::unique_ptr<Texture>> gRaytracingOutputs(BACK_BUFFERS_COUNT);
-    static uint32 gRaytracingOutputResourceUAVDescriptorHeapIndex = std::numeric_limits<uint32>::max();
+    static std::vector<std::unique_ptr<RenderResource>> gRaytracingParallelogramAreaLightSampleReservoirs(BACK_BUFFERS_COUNT);
+    static std::vector<std::unique_ptr<RenderResource>> gRaytracingPointLightReservoirs(BACK_BUFFERS_COUNT);
+    static std::vector<std::unique_ptr<RenderResource>> gRaytracingIndirectLightReservoirs(BACK_BUFFERS_COUNT);
+    static std::vector<std::unique_ptr<RenderResource>> gUploadBuffers(BACK_BUFFERS_COUNT);
     static D3DPtr<ID3D12RootSignature> gRaytracingGlobalRootSignature;
     static D3DPtr<ID3D12RootSignature> gRaytracingLocalRootSignature;
     static Slang::ComPtr<slang::IBlob> gRayGenShader;
@@ -946,10 +1020,10 @@ namespace cgs
             {
                 static constexpr D3D12_DESCRIPTOR_RANGE DESCRIPTOR_RANGE[]
                 {
-                    // Output Texture
+                    // UAVs
                     {
                         .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-                        .NumDescriptors = 1,
+                        .NumDescriptors = 4,    // u0: output texture, u1: parallelogram area light sample reservoir, u2: point light reservoir
                         .BaseShaderRegister = 0,
                         .RegisterSpace = 0,
                         .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
@@ -973,7 +1047,7 @@ namespace cgs
                 };
                 static constexpr D3D12_ROOT_PARAMETER ROOT_PARAMETERS[] = 
                 {
-                    // Output texture
+                    // UAVs
                     {
                         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
                         .DescriptorTable = 
@@ -1257,6 +1331,9 @@ namespace cgs
             gSceneConstantBuffers[i].reset();
         }
         gRaytracingOutputs.clear();
+        gRaytracingParallelogramAreaLightSampleReservoirs.clear();
+        gRaytracingPointLightReservoirs.clear();
+        gRaytracingIndirectLightReservoirs.clear();
 
         for(D3DPtr<ID3D12Resource>& bottomLevelAccelerationStructure : gBottomLevelAccelerationStructures)
         {
@@ -1326,6 +1403,7 @@ namespace cgs
         
         gSceneRenderTargets.clear();
 
+        gCbvSrvUavHeapOnlyCpu.reset();
         gCbvSrvUavHeap.reset();
         DestroyD3D12Object(gDsvHeap);
         DestroyD3D12Object(gRtvHeap);
@@ -1461,13 +1539,13 @@ namespace cgs
             },
         };
         // eCbvSrvUavRaytracingDescriptorType
-        const bool result = gCbvSrvUavHeap->AllocateStaticDescriptor(vertexBufferCreateInfo.ParentCreateInfo.View, vertexBufferCreateInfo.ParentCreateInfo.GpuDescriptor, static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::VERTICES));
+        const bool result = gCbvSrvUavHeap->AllocateStaticDescriptor(vertexBufferCreateInfo.ParentCreateInfo.CpuDescriptor, vertexBufferCreateInfo.ParentCreateInfo.GpuDescriptor, static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::VERTICES));
         if(result == false)
         {
             assert(false && "Failed to allocate static descriptor for vertex buffer");
             return false;
         }
-        gDevice->CreateShaderResourceView(vertexBufferCreateInfo.ParentCreateInfo.Data.Get(), &srvDesc, vertexBufferCreateInfo.ParentCreateInfo.View);
+        gDevice->CreateShaderResourceView(vertexBufferCreateInfo.ParentCreateInfo.Data.Get(), &srvDesc, vertexBufferCreateInfo.ParentCreateInfo.CpuDescriptor);
 
         outVertexBuffer.Initialize(std::move(vertexBufferCreateInfo));
         return true;
@@ -1551,13 +1629,13 @@ namespace cgs
             },
         };
         // eCbvSrvUavRaytracingDescriptorType
-        const bool result = gCbvSrvUavHeap->AllocateStaticDescriptor(indexBufferCreateInfo.ParentCreateInfo.View, indexBufferCreateInfo.ParentCreateInfo.GpuDescriptor, static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::INDICES));
+        const bool result = gCbvSrvUavHeap->AllocateStaticDescriptor(indexBufferCreateInfo.ParentCreateInfo.CpuDescriptor, indexBufferCreateInfo.ParentCreateInfo.GpuDescriptor, static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::INDICES));
         if(result == false)
         {
             assert(false && "Failed to allocate static descriptor for index buffer");
             return false;
         }
-        gDevice->CreateShaderResourceView(indexBufferCreateInfo.ParentCreateInfo.Data.Get(), &srvDesc, indexBufferCreateInfo.ParentCreateInfo.View);
+        gDevice->CreateShaderResourceView(indexBufferCreateInfo.ParentCreateInfo.Data.Get(), &srvDesc, indexBufferCreateInfo.ParentCreateInfo.CpuDescriptor);
 
         outIndexBuffer.Initialize(std::move(indexBufferCreateInfo));
         return true;
@@ -1954,7 +2032,7 @@ namespace cgs
         
         std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> sceneConstantBufferCpuDescriptors(BACK_BUFFERS_COUNT);
         std::vector<D3D12_GPU_DESCRIPTOR_HANDLE> sceneConstantBufferGpuDescriptors(BACK_BUFFERS_COUNT);
-        result = gCbvSrvUavHeap->AllocateDynamicDescriptors(sceneConstantBufferCpuDescriptors, sceneConstantBufferGpuDescriptors, 2);
+        result = gCbvSrvUavHeap->AllocateDynamicDescriptors(sceneConstantBufferCpuDescriptors, sceneConstantBufferGpuDescriptors, 4);
         if(result == false)
         {
             assert(false && "Failed to allocate dynamic descriptor for scene constant buffer");
@@ -1969,9 +2047,9 @@ namespace cgs
                 .SizeInBytes = static_cast<uint32>(sceneConstantBufferDesc.Width),
             };
 
-            sceneConstantBufferCreateInfo.View = sceneConstantBufferCpuDescriptors[i];
+            sceneConstantBufferCreateInfo.CpuDescriptor = sceneConstantBufferCpuDescriptors[i];
             sceneConstantBufferCreateInfo.GpuDescriptor = sceneConstantBufferGpuDescriptors[i];
-            gDevice->CreateConstantBufferView(&cbvDesc, sceneConstantBufferCreateInfo.View);
+            gDevice->CreateConstantBufferView(&cbvDesc, sceneConstantBufferCreateInfo.CpuDescriptor);
 
             gSceneConstantBuffers[i] = std::make_unique<ConstantBuffer>(std::move(sceneConstantBufferCreateInfo));
         }
@@ -2204,13 +2282,13 @@ namespace cgs
             };
             
             uint32 descriptorIndex = renderMethod == eRenderMethod::RASTERIZATION ? static_cast<uint32>(eCbvSrvUavRasterizationDescriptorType::COLORS) : static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::COLORS);
-            result = gCbvSrvUavHeap->AllocateStaticDescriptor(colorsBufferCreateInfo.View, colorsBufferCreateInfo.GpuDescriptor, descriptorIndex);
+            result = gCbvSrvUavHeap->AllocateStaticDescriptor(colorsBufferCreateInfo.CpuDescriptor, colorsBufferCreateInfo.GpuDescriptor, descriptorIndex);
             if(result == false)
             {
                 assert(false && "Failed to allocate static descriptor for color buffer");
                 return false;
             }
-            gDevice->CreateShaderResourceView(colorsBufferCreateInfo.Data.Get(), &srvDesc, colorsBufferCreateInfo.View);
+            gDevice->CreateShaderResourceView(colorsBufferCreateInfo.Data.Get(), &srvDesc, colorsBufferCreateInfo.CpuDescriptor);
 
             cornellBox.SetColorBuffer(RenderResource(std::move(colorsBufferCreateInfo)));
             
@@ -2263,13 +2341,13 @@ namespace cgs
                     },
                 };
                 // eCbvSrvUavRaytracingDescriptorType
-                result = gCbvSrvUavHeap->AllocateStaticDescriptor(isEmissivesBufferCreateInfo.View, isEmissivesBufferCreateInfo.GpuDescriptor, static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::IS_EMISSIVES));
+                result = gCbvSrvUavHeap->AllocateStaticDescriptor(isEmissivesBufferCreateInfo.CpuDescriptor, isEmissivesBufferCreateInfo.GpuDescriptor, static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::IS_EMISSIVES));
                 if(result == false)
                 {
                     assert(false && "Failed to allocate static descriptor for is emissives buffer");
                     return false;
                 }
-                gDevice->CreateShaderResourceView(isEmissivesBufferCreateInfo.Data.Get(), &srvDesc, isEmissivesBufferCreateInfo.View);
+                gDevice->CreateShaderResourceView(isEmissivesBufferCreateInfo.Data.Get(), &srvDesc, isEmissivesBufferCreateInfo.CpuDescriptor);
 
                 cornellBox.SetIsEmissiveBuffer(RenderResource(std::move(isEmissivesBufferCreateInfo)));
             }
@@ -2339,13 +2417,13 @@ namespace cgs
             };
             
             uint32 descriptorIndex = static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::PARALLELOGRAM_AREA_LIGHT_INFOS);
-            result = gCbvSrvUavHeap->AllocateStaticDescriptor(parallelogramAreaLightInfosBufferCreateInfo.View, parallelogramAreaLightInfosBufferCreateInfo.GpuDescriptor, descriptorIndex);
+            result = gCbvSrvUavHeap->AllocateStaticDescriptor(parallelogramAreaLightInfosBufferCreateInfo.CpuDescriptor, parallelogramAreaLightInfosBufferCreateInfo.GpuDescriptor, descriptorIndex);
             if(result == false)
             {
                 assert(false && "Failed to allocate static descriptor for parallelogram area light infos buffer");
                 return false;
             }
-            gDevice->CreateShaderResourceView(parallelogramAreaLightInfosBufferCreateInfo.Data.Get(), &srvDesc, parallelogramAreaLightInfosBufferCreateInfo.View);
+            gDevice->CreateShaderResourceView(parallelogramAreaLightInfosBufferCreateInfo.Data.Get(), &srvDesc, parallelogramAreaLightInfosBufferCreateInfo.CpuDescriptor);
             gParallelogramAreaLightInfosBuffer = std::make_unique<RenderResource>(std::move(parallelogramAreaLightInfosBufferCreateInfo));
 
             bufferDesc.Width = sizeof(PointLightInfo) * gPointLightInfos.size();
@@ -2386,13 +2464,13 @@ namespace cgs
             srvDesc.Buffer.StructureByteStride = sizeof(PointLightInfo);
             
             descriptorIndex = static_cast<uint32>(eCbvSrvUavRaytracingDescriptorType::POINT_LIGHT_INFOS);
-            result = gCbvSrvUavHeap->AllocateStaticDescriptor(pointLightInfosBufferCreateInfo.View, pointLightInfosBufferCreateInfo.GpuDescriptor, descriptorIndex);
+            result = gCbvSrvUavHeap->AllocateStaticDescriptor(pointLightInfosBufferCreateInfo.CpuDescriptor, pointLightInfosBufferCreateInfo.GpuDescriptor, descriptorIndex);
             if(result == false)
             {
                 assert(false && "Failed to allocate static descriptor for point light infos buffer");
                 return false;
             }
-            gDevice->CreateShaderResourceView(pointLightInfosBufferCreateInfo.Data.Get(), &srvDesc, pointLightInfosBufferCreateInfo.View);
+            gDevice->CreateShaderResourceView(pointLightInfosBufferCreateInfo.Data.Get(), &srvDesc, pointLightInfosBufferCreateInfo.CpuDescriptor);
             gPointLightInfosBuffer = std::make_unique<RenderResource>(std::move(pointLightInfosBufferCreateInfo));
         }
 
@@ -2637,6 +2715,44 @@ namespace cgs
                     graphicsCommandList.BuildRaytracingAccelerationStructure(&asBuildInfo.TopLevelBuildDesc, 0, nullptr);
                 }
             }
+
+#if 1
+            ID3D12DescriptorHeap* heaps[] = { gCbvSrvUavHeap->GetHeap().Get(), };
+            graphicsCommandList.SetDescriptorHeaps(CGS_ARRAYSIZE(heaps), heaps);
+            
+            for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
+            {
+                gRaytracingParallelogramAreaLightSampleReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+                gRaytracingPointLightReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+                gRaytracingIndirectLightReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+            }
+
+            for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
+            {
+                graphicsCommandList.CopyBufferRegion(
+                    gRaytracingParallelogramAreaLightSampleReservoirs[i]->GetResource().Get(), 0,
+                    gUploadBuffers[i]->GetResource().Get(), 0,
+                    sizeof(ParallelogramAreaLightReservoir) * cgs::gWidth * cgs::gHeight
+                );
+                graphicsCommandList.CopyBufferRegion(
+                    gRaytracingPointLightReservoirs[i]->GetResource().Get(), 0,
+                    gUploadBuffers[i]->GetResource().Get(), 0,
+                    sizeof(PointLightReservoir) * cgs::gWidth * cgs::gHeight
+                );
+                graphicsCommandList.CopyBufferRegion(
+                    gRaytracingIndirectLightReservoirs[i]->GetResource().Get(), 0,
+                    gUploadBuffers[i]->GetResource().Get(), 0,
+                    sizeof(IndirectLightReservoir) * cgs::gWidth * cgs::gHeight
+                );
+            }
+
+            for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
+            {
+                gRaytracingParallelogramAreaLightSampleReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                gRaytracingPointLightReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                gRaytracingIndirectLightReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            }
+#endif
                     
             // Kick off acceleration structure construction.
             graphicsCommandList.Close();
@@ -2776,6 +2892,158 @@ namespace cgs
         }
     }
 
+    bool
+    createBackBufferSizeUavTextures(std::vector<std::unique_ptr<Texture>>& inoutTextures, const DXGI_FORMAT format, const std::wstring& name, const uint32 index) noexcept
+    {
+        HRESULT hr = S_OK;
+        if(inoutTextures.size() < BACK_BUFFERS_COUNT)
+        {
+            inoutTextures.resize(BACK_BUFFERS_COUNT);
+        }
+        std::vector<Texture::CreateInfo> createInfos(BACK_BUFFERS_COUNT);
+        for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
+        {
+            Texture::CreateInfo& createInfo = createInfos[i];
+            D3D12_HEAP_PROPERTIES heapProperties = 
+            {
+                .Type = D3D12_HEAP_TYPE_DEFAULT,
+                .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+                .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+                .CreationNodeMask = 1,
+                .VisibleNodeMask = 1,
+            };
+
+            D3D12_RESOURCE_DESC bufferDesc =
+            {
+                .Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+                .Alignment = 0,
+                .Width = cgs::gWidth,
+                .Height = cgs::gHeight,
+                .DepthOrArraySize = 1,
+                .MipLevels = 1,
+                .Format = format,
+                .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+                .Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN,
+                .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            };
+            
+            createInfo.ParentCreateInfo.State = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            hr = gDevice->CreateCommittedResource(
+                &heapProperties, 
+                D3D12_HEAP_FLAG_NONE, 
+                &bufferDesc, 
+                createInfo.ParentCreateInfo.State, 
+                nullptr, 
+                IID_PPV_ARGS(createInfo.ParentCreateInfo.Data.GetAddressOf()));
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to create raytracing output resource");
+                return false;
+            }
+            const std::wstring resourceName = name + L"[" + std::to_wstring(i) + L"]";
+            createInfo.ParentCreateInfo.Data->SetName(resourceName.c_str());
+        }
+
+        std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> cpuDescriptorHandles(BACK_BUFFERS_COUNT);
+        std::vector<D3D12_GPU_DESCRIPTOR_HANDLE> gpuDescriptorHandles(BACK_BUFFERS_COUNT);
+        const bool result = gCbvSrvUavHeap->AllocateDynamicDescriptors(cpuDescriptorHandles, gpuDescriptorHandles, index);
+        if(result == false)
+        {
+            assert(false && "Failed to allocate dynamic descriptor for raytracing output buffer");
+            return false;
+        }
+        for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
+        {
+            Texture::CreateInfo& createInfo = createInfos[i];
+
+            createInfo.ParentCreateInfo.CpuDescriptor = cpuDescriptorHandles[i];
+            createInfo.ParentCreateInfo.UavView.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+            gDevice->CreateUnorderedAccessView(createInfo.ParentCreateInfo.Data.Get(), nullptr, &createInfo.ParentCreateInfo.UavView, createInfo.ParentCreateInfo.CpuDescriptor);
+            createInfo.ParentCreateInfo.GpuDescriptor = gpuDescriptorHandles[i];
+            inoutTextures[i] = std::make_unique<Texture>(std::move(createInfo));
+        }
+        return true;
+    }
+
+    template<typename T>
+    bool
+    createBackBufferSizeUavBuffers(std::vector<std::unique_ptr<RenderResource>>& inoutBuffers, const std::wstring& name, const uint32 index) noexcept
+    {
+        HRESULT hr = S_OK;
+        if(inoutBuffers.size() < BACK_BUFFERS_COUNT)
+        {
+            inoutBuffers.resize(BACK_BUFFERS_COUNT);
+        }
+        std::vector<RenderResource::CreateInfo> createInfos(BACK_BUFFERS_COUNT);
+        for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
+        {
+            RenderResource::CreateInfo& createInfo = createInfos[i];
+            D3D12_HEAP_PROPERTIES heapProperties = 
+            {
+                .Type = D3D12_HEAP_TYPE_DEFAULT,
+                .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+                .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+                .CreationNodeMask = 1,
+                .VisibleNodeMask = 1,
+            };
+            
+            D3D12_RESOURCE_DESC bufferDesc =
+            {
+                .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+                .Alignment = 0,
+                .Width = static_cast<uint32>(sizeof(T) * cgs::gWidth * cgs::gHeight),
+                .Height = 1,
+                .DepthOrArraySize = 1,
+                .MipLevels = 1,
+                .Format = DXGI_FORMAT_UNKNOWN,
+                .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+                .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+                .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            };
+            
+            createInfo.State = D3D12_RESOURCE_STATE_COMMON;
+            hr = gDevice->CreateCommittedResource(
+                &heapProperties, 
+                D3D12_HEAP_FLAG_NONE, 
+                &bufferDesc, 
+                createInfo.State, 
+                nullptr, 
+                IID_PPV_ARGS(createInfo.Data.GetAddressOf()));
+            if(FAILED(hr))
+            {
+                assert(false && "Failed to create raytracing output resource");
+                return false;
+            }
+            const std::wstring resourceName = name + L"[" + std::to_wstring(i) + L"]";
+            createInfo.Data->SetName(resourceName.c_str());
+        }
+
+        std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> cpuDescriptorHandles(BACK_BUFFERS_COUNT);
+        std::vector<D3D12_GPU_DESCRIPTOR_HANDLE> gpuDescriptorHandles(BACK_BUFFERS_COUNT);
+        bool result = gCbvSrvUavHeap->AllocateDynamicDescriptors(cpuDescriptorHandles, gpuDescriptorHandles, index);
+        if(result == false)
+        {
+            assert(false && "Failed to allocate dynamic descriptor for raytracing output buffer");
+            return false;
+        }
+
+        for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
+        {
+            RenderResource::CreateInfo& createInfo = createInfos[i];
+
+            createInfo.CpuDescriptor = cpuDescriptorHandles[i];
+            createInfo.UavView.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+            createInfo.UavView.Buffer = 
+            {
+                .NumElements = cgs::gWidth * cgs::gHeight,
+                .StructureByteStride = sizeof(T),
+            };
+            gDevice->CreateUnorderedAccessView(createInfo.Data.Get(), nullptr, &createInfo.UavView, createInfo.CpuDescriptor);
+            createInfo.GpuDescriptor = gpuDescriptorHandles[i];
+            inoutBuffers[i] = std::make_unique<RenderResource>(std::move(createInfo));
+        }
+        return true;
+    }
     bool
     InitializeRenderer(const RendererCreateInfo& createInfo) noexcept
     {
@@ -2970,6 +3238,22 @@ namespace cgs
         cbvSrvUavHeapCreateInfo.DynamicBlocksCount = BACK_BUFFERS_COUNT;
         gCbvSrvUavHeap = std::make_unique<DescriptorHeap>(std::move(cbvSrvUavHeapCreateInfo));
 
+        DescriptorHeap::CreateInfo cbvSrvUavHeapOnlyCpuCreateInfo = {};
+        cbvSrvUavHeapOnlyCpuCreateInfo.HeapType |= DescriptorHeap::eTypeBit::CONSTANT_BUFFER_SHADER_RESOURCE_UNORDERED_ACCESS;
+        cbvSrvUavHeapOnlyCpuCreateInfo.DescriptorSize = gDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        hr = gDevice->CreateDescriptorHeap(&cbvHeapDesc, IID_PPV_ARGS(cbvSrvUavHeapOnlyCpuCreateInfo.Heap.GetAddressOf()));
+        if (FAILED(hr))
+        {
+            assert(false && "Failed to create CPU-visible CBV descriptor heap for");
+            return false;
+        }
+        cbvSrvUavHeapOnlyCpuCreateInfo.Heap->SetName(TEXT("Main CPU-visible CBV Descriptor Heap"));
+        cbvSrvUavHeapOnlyCpuCreateInfo.MaxStaticDescriptorsCount = GLOBAL_CBV_SRV_UAV_DESCRIPTORS_COUNT;
+        cbvSrvUavHeapOnlyCpuCreateInfo.MaxDynamicDescriptorsCount = PER_FRAME_CBV_SRV_UAV_DESCRIPTORS_COUNT;
+        cbvSrvUavHeapOnlyCpuCreateInfo.DynamicBlocksCount = BACK_BUFFERS_COUNT;
+        gCbvSrvUavHeapOnlyCpu = std::make_unique<DescriptorHeap>(std::move(cbvSrvUavHeapOnlyCpuCreateInfo));
+
         DXGI_SWAP_CHAIN_DESC1 swapChainDesc = 
         {
             .Width = createInfo.Width,
@@ -3062,10 +3346,10 @@ namespace cgs
                 return false;
             }
 
-            colorBufferInfo.ParentCreateInfo.View.ptr = rtvStartHandle.ptr + (frameIndex * gRtvIncrementSize);
+            colorBufferInfo.ParentCreateInfo.CpuDescriptor.ptr = rtvStartHandle.ptr + (frameIndex * gRtvIncrementSize);
             colorBufferInfo.ParentCreateInfo.State = D3D12_RESOURCE_STATE_COMMON;    // https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-resource-barriers-to-synchronize-resource-states-in-direct3d-12#initial-states-for-resources
             colorBufferInfo.ParentCreateInfo.Name = "SwapChainColorBuffer[" + std::to_string(frameIndex) + "]";
-            gDevice->CreateRenderTargetView(colorBufferInfo.ParentCreateInfo.Data.Get(), &colorBufferViewDesc, colorBufferInfo.ParentCreateInfo.View);
+            gDevice->CreateRenderTargetView(colorBufferInfo.ParentCreateInfo.Data.Get(), &colorBufferViewDesc, colorBufferInfo.ParentCreateInfo.CpuDescriptor);
 
             gSceneRenderTargets[frameIndex].ColorBuffer.Initialize(std::move(colorBufferInfo));
 
@@ -3086,9 +3370,9 @@ namespace cgs
                 return false;
             }
 
-            depthBufferInfo.ParentCreateInfo.View.ptr = dsvStartHandle.ptr + (frameIndex * gDsvIncrementSize);
+            depthBufferInfo.ParentCreateInfo.CpuDescriptor.ptr = dsvStartHandle.ptr + (frameIndex * gDsvIncrementSize);
 
-            gDevice->CreateDepthStencilView(depthBufferInfo.ParentCreateInfo.Data.Get(), nullptr, depthBufferInfo.ParentCreateInfo.View);
+            gDevice->CreateDepthStencilView(depthBufferInfo.ParentCreateInfo.Data.Get(), nullptr, depthBufferInfo.ParentCreateInfo.CpuDescriptor);
 
             gSceneRenderTargets[frameIndex].DepthBuffer.Initialize(std::move(depthBufferInfo));
         }
@@ -3293,69 +3577,63 @@ namespace cgs
             }
         
             // Create the output resource. The dimensions and format should match the swap-chain.
-            std::vector<Texture::CreateInfo> raytracingOutputCreateInfos(BACK_BUFFERS_COUNT);
+            createBackBufferSizeUavTextures(gRaytracingOutputs, DXGI_FORMAT_R8G8B8A8_UNORM, TEXT("RaytracingOutput"), 0);
+
+            bufferDesc =
+            {
+                .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+                .Alignment = 0,
+                .Width = cgs::gWidth * cgs::gHeight * sizeof(ParallelogramAreaLightReservoir),
+                .Height = 1,
+                .DepthOrArraySize = 1,
+                .MipLevels = 1,
+                .Format = DXGI_FORMAT_UNKNOWN,
+                .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
+                .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+                .Flags = D3D12_RESOURCE_FLAG_NONE,
+            };
+
             for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
             {
-                Texture::CreateInfo& raytracingOutputCreateInfo = raytracingOutputCreateInfos[i];
-                D3D12_HEAP_PROPERTIES heapProperties = 
-                {
-                    .Type = D3D12_HEAP_TYPE_DEFAULT,
-                    .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
-                    .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
-                    .CreationNodeMask = 1,
-                    .VisibleNodeMask = 1,
-                };
-
-                bufferDesc =
-                D3D12_RESOURCE_DESC
-                {
-                    .Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-                    .Alignment = 0,
-                    .Width = cgs::gWidth,
-                    .Height = cgs::gHeight,
-                    .DepthOrArraySize = 1,
-                    .MipLevels = 1,
-                    .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
-                    .SampleDesc = DXGI_SAMPLE_DESC{ .Count = 1, .Quality = 0 },
-                    .Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN,
-                    .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
-                };
-                
-                raytracingOutputCreateInfo.ParentCreateInfo.State = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+                RenderResource::CreateInfo uploadBufferCreateInfo;
+                uploadBufferCreateInfo.State = D3D12_RESOURCE_STATE_GENERIC_READ;
+                uploadBufferCreateInfo.Name = "UploadBuffer[" + std::to_string(i) + "]";
                 hr = gDevice->CreateCommittedResource(
-                    &heapProperties, 
-                    D3D12_HEAP_FLAG_NONE, 
-                    &bufferDesc, 
-                    raytracingOutputCreateInfo.ParentCreateInfo.State, 
-                    nullptr, 
-                    IID_PPV_ARGS(raytracingOutputCreateInfo.ParentCreateInfo.Data.GetAddressOf()));
+                    &bufferHeapProperties,
+                    D3D12_HEAP_FLAG_NONE,
+                    &bufferDesc,
+                    uploadBufferCreateInfo.State,
+                    nullptr,
+                    IID_PPV_ARGS(uploadBufferCreateInfo.Data.GetAddressOf())
+                );
                 if(FAILED(hr))
                 {
-                    assert(false && "Failed to create raytracing output resource");
+                    assert(false && "Failed to create upload buffer");
                     return false;
                 }
-                const std::wstring resourceName = L"RaytracingOutputResource[" + std::to_wstring(i) + L"]";
-                raytracingOutputCreateInfo.ParentCreateInfo.Data->SetName(resourceName.c_str());
+                
+                D3D12_RANGE range = { .Begin = 0, .End = 0 };
+                byte* uploadBufferDataBegin = nullptr;
+                hr = uploadBufferCreateInfo.Data->Map(
+                    0,
+                    &range,
+                    reinterpret_cast<void**>(&uploadBufferDataBegin)
+                );
+                if(FAILED(hr))
+                {
+                    assert(false && "Failed to map upload buffer");
+                    return false;
+                }
+
+                std::memset(uploadBufferDataBegin, 0, static_cast<size_t>(bufferDesc.Width));
+                uploadBufferCreateInfo.Data->Unmap(0, nullptr);
+
+                gUploadBuffers[i] = std::make_unique<RenderResource>(std::move(uploadBufferCreateInfo));
             }
 
-            std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> cpuDescriptorHandles(BACK_BUFFERS_COUNT);
-            std::vector<D3D12_GPU_DESCRIPTOR_HANDLE> gpuDescriptorHandles(BACK_BUFFERS_COUNT);
-            result = gCbvSrvUavHeap->AllocateDynamicDescriptors(cpuDescriptorHandles, gpuDescriptorHandles, 0);
-            if(result == false)
-            {
-                assert(false && "Failed to allocate dynamic descriptor for raytracing output buffer");
-                return false;
-            }
-            for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
-            {
-                Texture::CreateInfo& raytracingOutputCreateInfo = raytracingOutputCreateInfos[i];
-
-                raytracingOutputCreateInfo.ParentCreateInfo.View = cpuDescriptorHandles[i];
-                raytracingOutputCreateInfo.UavView.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-                gDevice->CreateUnorderedAccessView(raytracingOutputCreateInfo.ParentCreateInfo.Data.Get(), nullptr, &raytracingOutputCreateInfo.UavView, raytracingOutputCreateInfo.ParentCreateInfo.View);
-                raytracingOutputCreateInfo.ParentCreateInfo.GpuDescriptor = gpuDescriptorHandles[i];
-                gRaytracingOutputs[i] = std::make_unique<Texture>(std::move(raytracingOutputCreateInfo));
-            }
+            createBackBufferSizeUavBuffers<ParallelogramAreaLightReservoir>(gRaytracingParallelogramAreaLightSampleReservoirs, TEXT("RaytracingParallelogramAreaLightReservoir"), 1);
+            createBackBufferSizeUavBuffers<PointLightReservoir>(gRaytracingPointLightReservoirs, TEXT("RaytracingPointLightReservoir"), 2);
+            createBackBufferSizeUavBuffers<IndirectLightReservoir>(gRaytracingIndirectLightReservoirs, TEXT("RaytracingIndirectLightReservoir"), 3);
         }
 
         gGlobalRenderContext.RenderDeviceType = eRenderDeviceType::D3D12;
@@ -3391,20 +3669,20 @@ namespace cgs
         };
         graphicsCommandList.RSSetScissorRects(1, &scissorRect);
 
-        D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[] = { sceneRenderTarget.ColorBuffer.GetView(), };
-        graphicsCommandList.OMSetRenderTargets(CGS_ARRAYSIZE(rtvHandles), rtvHandles, FALSE, &sceneRenderTarget.DepthBuffer.GetView());
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[] = { sceneRenderTarget.ColorBuffer.GetCpuDescriptor(), };
+        graphicsCommandList.OMSetRenderTargets(CGS_ARRAYSIZE(rtvHandles), rtvHandles, FALSE, &sceneRenderTarget.DepthBuffer.GetCpuDescriptor());
 
         sceneRenderTarget.ColorBuffer.Transition(graphicsCommandList, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
         constexpr float BLACK_COLOR[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
         graphicsCommandList.ClearRenderTargetView(
-            sceneRenderTarget.ColorBuffer.GetView(),
+            sceneRenderTarget.ColorBuffer.GetCpuDescriptor(),
             BLACK_COLOR,
             0,
             nullptr
         );
         graphicsCommandList.ClearDepthStencilView(
-            sceneRenderTarget.DepthBuffer.GetView(),
+            sceneRenderTarget.DepthBuffer.GetCpuDescriptor(),
             D3D12_CLEAR_FLAG_DEPTH,
             1.0f,
             0,
