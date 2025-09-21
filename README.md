@@ -63,3 +63,13 @@ Target platforms (sorted by priority):
 * **[2025.09.18]**: implemented monte carlo integration and multiple importance sampling of point lights and hemisphere sampling. **first global illumination image of cornell box!**
 * **[2025.09.19]**: added parallelogram area light sampling into multiple importance sampling.
 * **[2025.09.20]**: Implemented RIS (Resampled Importance Sampling) for parallelogram area light and point lights. Fixed some bugs in MIS.
+* **[2025.09.21]**: Added reservoir and temporal resampling.
+  * ![2025.09.21](/Docs/2025_09_21.png)
+  * [Video demonstration on YouTube](https://youtu.be/T5tYhoAHzLU?si=QjRvoQsYwbGVvsPR)
+    * Problems:
+      * Noise patterns are visible
+      * Point light sampling shows hiccups in certain frames (probably related to the hash function used)
+    * Next:
+      * Spatial resampling
+      * Better sampling function
+      * Stratified sampling
