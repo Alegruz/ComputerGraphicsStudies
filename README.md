@@ -58,11 +58,19 @@ Target platforms (sorted by priority):
 * **[2025.09.13]**: fixed some D3D12 warnings
 * **[2025.09.14]**: added descriptor heap class for managing descriptor heaps; refactored related resource allocation logic. First raytracing scene rendering.
 * **[2025.09.15]**: fixed raytracing. **first raytraced image of cornell box!**
+  * ![2025.09.15](/Docs/2025_09_15.png)
+  * [Video demonstration on YouTube](https://youtu.be/LAAVhncfGXU?si=BirIZVkdHsCbQXmf)
 * **[2025.09.16]**: skipped
 * **[2025.09.17]**: added parallelogram area lights and point lights
+  * ![2025.09.17](/Docs/2025_09_17.png)
+  * [Video demonstration on YouTube](https://youtu.be/OKA5jCA3Jk8?si=HgZrp6UfRgSOrpID)
 * **[2025.09.18]**: implemented monte carlo integration and multiple importance sampling of point lights and hemisphere sampling. **first global illumination image of cornell box!**
 * **[2025.09.19]**: added parallelogram area light sampling into multiple importance sampling.
+  * ![2025.09.19](/Docs/2025_09_19.png)
+  * [Video demonstration on YouTube](https://youtu.be/7dzZOfVoNV8?si=yqgsiyu-zKcmHnZ7)
 * **[2025.09.20]**: Implemented RIS (Resampled Importance Sampling) for parallelogram area light and point lights. Fixed some bugs in MIS.
+  * ![2025.09.20](/Docs/2025_09_20.png)
+  * [Video demonstration on YouTube](https://youtu.be/OTc1I7WVSt0?si=H8-nFEEiRDQ9RRfz)
 * **[2025.09.21]**: Added reservoir and temporal resampling.
   * ![2025.09.21](/Docs/2025_09_21.png)
   * [Video demonstration on YouTube](https://youtu.be/T5tYhoAHzLU?si=QjRvoQsYwbGVvsPR)
