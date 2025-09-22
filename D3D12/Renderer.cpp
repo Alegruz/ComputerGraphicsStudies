@@ -874,7 +874,7 @@ namespace cgs
                 },
                 .PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
                 .NumRenderTargets = 1,
-                .RTVFormats = { DXGI_FORMAT_R8G8B8A8_UNORM },
+                .RTVFormats = { DXGI_FORMAT_R8G8B8A8_UNORM_SRGB },
                 .DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT,
                 .SampleDesc = { 1, 0 },
                 .NodeMask = 0,
@@ -2716,7 +2716,6 @@ namespace cgs
                 }
             }
 
-#if 1
             ID3D12DescriptorHeap* heaps[] = { gCbvSrvUavHeap->GetHeap().Get(), };
             graphicsCommandList.SetDescriptorHeaps(CGS_ARRAYSIZE(heaps), heaps);
             
@@ -2752,7 +2751,6 @@ namespace cgs
                 gRaytracingPointLightReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                 gRaytracingIndirectLightReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             }
-#endif
                     
             // Kick off acceleration structure construction.
             graphicsCommandList.Close();
@@ -3294,7 +3292,7 @@ namespace cgs
 
         const D3D12_RENDER_TARGET_VIEW_DESC colorBufferViewDesc =
         {
-            .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+            .Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
             .ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D,
             .Texture2D = { .MipSlice = 0 },
         };
@@ -3753,6 +3751,7 @@ namespace cgs
 
         ID3D12DescriptorHeap* heaps[] = { gCbvSrvUavHeap->GetHeap().Get(), };
         graphicsCommandList.SetDescriptorHeaps(CGS_ARRAYSIZE(heaps), heaps);
+
         graphicsCommandList.SetComputeRootDescriptorTable(0, gRaytracingOutputs[renderWork.FrameIndex]->GetGpuDescriptor());
         const D3D12_DISPATCH_RAYS_DESC dispatchDesc = 
         {
