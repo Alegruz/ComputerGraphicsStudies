@@ -81,4 +81,8 @@ Target platforms (sorted by priority):
     * Next:
       * Spatial resampling
       * Better sampling function
-      * Stratified sampling
+    * Stratified sampling
+* **[2025.09.22]**: Fixed some issues.
+  * Fixes:
+    * Reservoir weight accumulation is per-frame, not across frames. This fixes the bias issue where the first few samples dominate the reservoir.
+    * Final integrand used suboptimal pdf for MIS/RIS weighting, not the desired pdf.
