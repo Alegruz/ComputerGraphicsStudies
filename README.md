@@ -77,6 +77,7 @@ Target platforms (sorted by priority):
     * Problems:
       * Noise patterns are visible
       * Point light sampling shows hiccups in certain frames (probably related to the hash function used)
+      * If we keep accumulating the weights in a reservoir, this means that the comparison canonical sample < (current weight / weighted sum) will be biased towards the first few samples. This means that the reservoir will be dominated by the first few samples, which is not what we want.
     * Next:
       * Spatial resampling
       * Better sampling function
