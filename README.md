@@ -77,12 +77,14 @@ Target platforms (sorted by priority):
     * Problems:
       * Noise patterns are visible
       * Point light sampling shows hiccups in certain frames (probably related to the hash function used)
-      * If we keep accumulating the weights in a reservoir, this means that the comparison canonical sample < (current weight / weighted sum) will be biased towards the first few samples. This means that the reservoir will be dominated by the first few samples, which is not what we want.
+      * If we keep accumulating the weights in a reservoir, this means that the comparison canonical sample < (current weight / weighted sum) will be biased towards the first few samples. This means that the reservoir will be dominated by the first few samples, which is not what we want. -> **fixed on 2025.09.22**
     * Next:
       * Spatial resampling
       * Better sampling function
     * Stratified sampling
 * **[2025.09.22]**: Fixed some issues.
+  * ![2025.09.22](/Docs/2025_09_22.png)
+  * [Video demonstration on YouTube](https://youtu.be/0al30gyh4E8)
   * Fixes:
     * Reservoir weight accumulation is per-frame, not across frames. This fixes the bias issue where the first few samples dominate the reservoir.
     * Final integrand used suboptimal pdf for MIS/RIS weighting, not the desired pdf.

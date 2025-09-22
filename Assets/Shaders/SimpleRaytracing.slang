@@ -155,7 +155,7 @@ IsEmissive(const uint index)
     return isEmissive;
 }
 
-#if 0
+#if 1
 struct RayPayload
 {
     float4 Color;
