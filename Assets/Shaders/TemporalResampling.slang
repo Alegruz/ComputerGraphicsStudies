@@ -1,7 +1,6 @@
 // shaders.slang
 
-#define FLT_MAX         (3.402823466e+38)
-#define PI              (3.1415926535897f)
+#include "Common.slang"
 
 struct SceneConstantBuffer
 {
@@ -333,11 +332,6 @@ PowerHeuristic(const uint samplesCountA, const float pdfA, const uint samplesCou
     return (a * a) / (a * a + b * b + c * c);
 }
 
-#define PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT (1)
-#define POINT_LIGHT_SAMPLES_COUNT (1)
-#define HEMISPHERE_SAMPLES_COUNT (1)
-#define RESAMPLE_COUNT (16)
-
 void
 UpdateParallelogramAreaLightReservoir(const float weight, const float desiredPdf, const float3 parallelogramAreaLightPosition, const float3 triangleNormal, const uint2 pixel, const uint bufferIndexByPixel, const uint samplesCount)
 {
@@ -425,6 +419,7 @@ void RayGenMain()
 
     const float3 brdf = CalculateLambertianDiffuseBrdf(primitiveIndex);
     float3 parallelogramAreaLightMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
+#if PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT > 0
     {
         {
             const float desiredPdf = gPrevParallelogramAreaLightReservoir[bufferIndexByPixel].Pdf;
@@ -473,9 +468,11 @@ void RayGenMain()
             }
         }
     }
+#endif
     neeMonteCarloEstimate += parallelogramAreaLightMonteCarloEstimate;
 
     float3 pointLightMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
+#if POINT_LIGHT_SAMPLES_COUNT > 0
     {
         {
             const float desiredPdf = gPrevPointLightReservoir[bufferIndexByPixel].Pdf;
@@ -519,9 +516,12 @@ void RayGenMain()
             pointLightMonteCarloEstimate = integrand * brdf;
         }
     }
+#endif
     neeMonteCarloEstimate += pointLightMonteCarloEstimate;
 
     float3 indirectIlluminationMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
+// #if HEMISPHERE_SAMPLES_COUNT > 0
+#if 0
     {
         {
             const float desiredPdf = gPrevIndirectLightReservoir[bufferIndexByPixel].Pdf;
@@ -566,6 +566,7 @@ void RayGenMain()
         const float3 integrand = incomingRadiance * misWeight * weight;
         indirectIlluminationMonteCarloEstimate = integrand * brdf;
     }
+#endif
 
     monteCarloEstimate += neeMonteCarloEstimate;
     monteCarloEstimate += indirectIlluminationMonteCarloEstimate;

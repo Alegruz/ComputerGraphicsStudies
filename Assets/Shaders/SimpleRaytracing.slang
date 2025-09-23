@@ -1,7 +1,6 @@
 // shaders.slang
 
-#define FLT_MAX         (3.402823466e+38)
-#define PI              (3.1415926535897f)
+#include "Common.slang"
 
 struct SceneConstantBuffer
 {
@@ -332,11 +331,6 @@ PowerHeuristic(const uint samplesCountA, const float pdfA, const uint samplesCou
     const float c = samplesCountC * pdfC;
     return (a * a) / (a * a + b * b + c * c);
 }
-
-#define PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT (1)
-#define POINT_LIGHT_SAMPLES_COUNT (1)
-#define HEMISPHERE_SAMPLES_COUNT (1)
-#define RESAMPLE_COUNT (16)
 
 void
 UpdateParallelogramAreaLightReservoir(const float weight, const float desiredPdf, const float3 parallelogramAreaLightPosition, const float3 triangleNormal, const uint2 pixel, const uint sampleIndex, const uint proposalIndex, const uint bufferIndexByPixel)

@@ -3030,6 +3030,21 @@ namespace cgs
                     gUploadBuffers[i]->GetResource().Get(), 0,
                     sizeof(IndirectLightReservoir) * cgs::gWidth * cgs::gHeight
                 );
+                graphicsCommandList.CopyBufferRegion(
+                    gRaytracingPrevParallelogramAreaLightSampleReservoirs[i]->GetResource().Get(), 0,
+                    gUploadBuffers[i]->GetResource().Get(), 0,
+                    sizeof(ParallelogramAreaLightReservoir) * cgs::gWidth * cgs::gHeight
+                );
+                graphicsCommandList.CopyBufferRegion(
+                    gRaytracingPrevPointLightReservoirs[i]->GetResource().Get(), 0,
+                    gUploadBuffers[i]->GetResource().Get(), 0,
+                    sizeof(PointLightReservoir) * cgs::gWidth * cgs::gHeight
+                );
+                graphicsCommandList.CopyBufferRegion(
+                    gRaytracingPrevIndirectLightReservoirs[i]->GetResource().Get(), 0,
+                    gUploadBuffers[i]->GetResource().Get(), 0,
+                    sizeof(IndirectLightReservoir) * cgs::gWidth * cgs::gHeight
+                );
             }
 
             for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
@@ -3918,25 +3933,6 @@ namespace cgs
         }
         graphicsCommandList.SetComputeRootSignature(gRisPipeline->GetGlobalRootSignature().Get());
 
-
-        gRaytracingPrevParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
-        gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
-        gRaytracingPrevPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
-        gRaytracingPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
-        gRaytracingPrevIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
-        gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
-
-        graphicsCommandList.CopyResource(gRaytracingPrevParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->GetResource().Get(), gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->GetResource().Get());
-        graphicsCommandList.CopyResource(gRaytracingPrevPointLightReservoirs[renderWork.FrameIndex]->GetResource().Get(), gRaytracingPointLightReservoirs[renderWork.FrameIndex]->GetResource().Get());
-        graphicsCommandList.CopyResource(gRaytracingPrevIndirectLightReservoirs[renderWork.FrameIndex]->GetResource().Get(), gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->GetResource().Get());
-
-        gRaytracingPrevParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        gRaytracingPrevPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        gRaytracingPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        gRaytracingPrevIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
         // Bind the heaps, acceleration structure and dispatch rays.
         ID3D12DescriptorHeap* heaps[] = { gCbvSrvUavHeap->GetHeap().Get(), };
         graphicsCommandList.SetDescriptorHeaps(CGS_ARRAYSIZE(heaps), heaps);
@@ -4050,6 +4046,25 @@ namespace cgs
         graphicsCommandList.CopyResource(sceneRenderTarget.ColorBuffer.GetResource().Get(), gRaytracingOutputs[renderWork.FrameIndex]->GetResource().Get());
 
         gRaytracingOutputs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+        const uint32 nextFrameIndex = (renderWork.FrameIndex + 1) % BACK_BUFFERS_COUNT;
+        gRaytracingPrevParallelogramAreaLightSampleReservoirs[nextFrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+        gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        gRaytracingPrevPointLightReservoirs[nextFrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+        gRaytracingPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        gRaytracingPrevIndirectLightReservoirs[nextFrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+        gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
+
+        graphicsCommandList.CopyResource(gRaytracingPrevParallelogramAreaLightSampleReservoirs[nextFrameIndex]->GetResource().Get(), gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->GetResource().Get());
+        graphicsCommandList.CopyResource(gRaytracingPrevPointLightReservoirs[nextFrameIndex]->GetResource().Get(), gRaytracingPointLightReservoirs[renderWork.FrameIndex]->GetResource().Get());
+        graphicsCommandList.CopyResource(gRaytracingPrevIndirectLightReservoirs[nextFrameIndex]->GetResource().Get(), gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->GetResource().Get());
+
+        gRaytracingPrevParallelogramAreaLightSampleReservoirs[nextFrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingPrevPointLightReservoirs[nextFrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingPrevIndirectLightReservoirs[nextFrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     }
 
     void waitForFrame(const uint32 frameIndex) noexcept
