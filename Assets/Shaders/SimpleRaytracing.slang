@@ -34,17 +34,22 @@ struct PointLightInfo
 struct ParallelogramAreaLightReservoir
 {
     float3 ParallelogramAreaLightPositionSample;
-    float3 ParallelogramAreaLightNormalSample;
     float Pdf;
+    float3 ParallelogramAreaLightNormalSample;
     float WeightSum;
+
+    float3 Weight;
     uint SamplesCount;
 };
 
 struct PointLightReservoir
 {
+    float3 Weight;
     uint LightIndexSample;
-    float Pdf;
+
     float WeightSum;
+    float Pdf;
+
     uint SamplesCount;
 };
 
@@ -52,15 +57,22 @@ struct IndirectLightReservoir
 {
     float3 Direction;
     float Pdf;
+
+    float3 Weight;
     float WeightSum;
+    
     uint SamplesCount;
 };
 
 uniform RaytracingAccelerationStructure gScene;
 uniform RWTexture2D gRenderTarget;
+uniform RWTexture2D<float4> gGBuffers;
 uniform RWStructuredBuffer<ParallelogramAreaLightReservoir> gParallelogramAreaLightReservoir;
 uniform RWStructuredBuffer<PointLightReservoir> gPointLightReservoir;
 uniform RWStructuredBuffer<IndirectLightReservoir> gIndirectLightReservoir;
+uniform RWStructuredBuffer<ParallelogramAreaLightReservoir> gPrevParallelogramAreaLightReservoir;
+uniform RWStructuredBuffer<PointLightReservoir> gPrevPointLightReservoir;
+uniform RWStructuredBuffer<IndirectLightReservoir> gPrevIndirectLightReservoir;
 uniform ByteAddressBuffer gIndices;
 uniform StructuredBuffer<VertexPN> gVertices;
 uniform StructuredBuffer<float3> gColors;
@@ -608,10 +620,18 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                     const float pdfInSolidAngle = (distanceSquared / cosAtLight) * pdf;
                     const float hemisphereCosineWeightedPdf = cosAtSurface / PI;
                     const float misWeight = PowerHeuristic(PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, pdfInSolidAngle, POINT_LIGHT_SAMPLES_COUNT, 0.0f, HEMISPHERE_SAMPLES_COUNT, hemisphereCosineWeightedPdf);
+                    if (payload.Depth == BounceDepth)
+                    {
+                        gParallelogramAreaLightReservoir[bufferIndexByPixel].Weight = weight;
+                    }
                     const float3 integrand = incomingRadiance * geometryTerm * misWeight * weight;
 
                     monteCarloIntegrandSum += integrand;
                 }
+            }
+            else if (payload.Depth == BounceDepth)
+            {
+                gParallelogramAreaLightReservoir[bufferIndexByPixel].Weight = float3(0.0f, 0.0f, 0.0f);
             }
         }
         parallelogramAreaLightMonteCarloEstimate = (monteCarloIntegrandSum * brdf) / PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT;
@@ -674,9 +694,17 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                 float parallelogramAreaLightPdf = 0.0f;
                 float hemisphereSamplePdf = 0.0f;
                 const float misWeight = PowerHeuristic(POINT_LIGHT_SAMPLES_COUNT, pdf, HEMISPHERE_SAMPLES_COUNT, hemisphereSamplePdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
+                if (payload.Depth == BounceDepth)
+                {
+                    gPointLightReservoir[bufferIndexByPixel].Weight = weight;
+                }
                 const float3 integrand = incomingRadiance * geometryTerm * misWeight * weight;
 
                 monteCarloIntegrandSum += integrand;
+            }
+            else if (payload.Depth == BounceDepth)
+            {
+                gPointLightReservoir[bufferIndexByPixel].Weight = float3(0.0f, 0.0f, 0.0f);
             }
         }
         pointLightMonteCarloEstimate = (monteCarloIntegrandSum * brdf) / POINT_LIGHT_SAMPLES_COUNT;
@@ -725,7 +753,12 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                 const float parallelogramArea = length(cross(e1, e2));
                 parallelogramAreaLightPdf = 1.0f / parallelogramArea;
             }
+            
             const float misWeight = PowerHeuristic(HEMISPHERE_SAMPLES_COUNT, pdf, POINT_LIGHT_SAMPLES_COUNT, pointLightPdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
+            if (payload.Depth == BounceDepth)
+            {
+                gIndirectLightReservoir[bufferIndexByPixel].Weight = weight;
+            }
             const float3 integrand = incomingRadiance * misWeight * weight;
             monteCarloIntegrandSum += integrand;
         }
@@ -762,23 +795,23 @@ void RayGenMain()
     TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
 
     // Write the raytraced color to the output texture.
-    float3 sceneLinearColor = payload.Color.rgb;
+    // float3 sceneLinearColor = payload.Color.rgb;
 
     // 1) fireflies/NaNs guard (optional but wise for path tracing)
-    sceneLinearColor = max(sceneLinearColor, float3(0.0, 0.0, 0.0)); // avoid NaN and negative values
-    sceneLinearColor = min(sceneLinearColor, float3(1e6, 1e6, 1e6)); // avoid INF
+    // sceneLinearColor = max(sceneLinearColor, float3(0.0, 0.0, 0.0)); // avoid NaN and negative values
+    // sceneLinearColor = min(sceneLinearColor, float3(1e6, 1e6, 1e6)); // avoid INF
 
     // 2) exposure (tweak per scene/camera)
-    sceneLinearColor = ApplyExposure(sceneLinearColor, /*exposureEV*/ 0.0);
+    // sceneLinearColor = ApplyExposure(sceneLinearColor, /*exposureEV*/ 0.0);
 
     // 3) tonemap (choose one)
-    const float3 tonemapped = TonemapACES(sceneLinearColor);
+    // const float3 tonemapped = TonemapACES(sceneLinearColor);
 
     // 4) sRGB encode for UNORM output
-    const float3 srgb = LinearToSRGB(tonemapped);
+    // const float3 srgb = LinearToSRGB(tonemapped);
 
     // 5) write
-    gRenderTarget[DispatchRaysIndex().xy] = float4(saturate(srgb), payload.Color.a);
+    // gRenderTarget[DispatchRaysIndex().xy] = float4(saturate(srgb), payload.Color.a);
 }
 
 
@@ -788,6 +821,11 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
     const float3 hitPosition = HitWorldPosition();
 
     const float3 triangleNormal = GetWorldNormal(PrimitiveIndex(), attr.barycentrics);
+
+    if(payload.Depth == BounceDepth)
+    {
+        gGBuffers[DispatchRaysIndex().xy] = float4(attr.barycentrics, PrimitiveIndex(), 1.0f);
+    }
 
     const float4 color = ComputeRenderingEquation(payload, hitPosition, triangleNormal);
 

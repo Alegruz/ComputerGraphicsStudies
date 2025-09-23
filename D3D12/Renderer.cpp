@@ -58,17 +58,22 @@ namespace cgs
     struct ParallelogramAreaLightReservoir final
     {
         float3 ParallelogramAreaLightPositionSample;
-        float3 ParallelogramAreaLightNormalSample;
         float Pdf;
+        float3 ParallelogramAreaLightNormalSample;
         float WeightSum;
+
+        float3 Weight;
         uint32 SamplesCount;
     };
 
     struct PointLightReservoir final
     {
+        float3 Weight;
         uint32 LightIndexSample;
-        float Pdf;
+
         float WeightSum;
+        float Pdf;
+
         uint32 SamplesCount;
     };
 
@@ -76,7 +81,10 @@ namespace cgs
     {
         float3 Direction;
         float Pdf;
+
+        float3 Weight;
         float WeightSum;
+
         uint32 SamplesCount;
     };
 
@@ -444,12 +452,18 @@ namespace cgs
         D3DPtr<ID3D12Resource> mHitGroupShaderTable;
     };
     
-    static std::unique_ptr<RaytracingPipeline> gGBufferPipeline;
+    static std::unique_ptr<RaytracingPipeline> gRisPipeline;
     static std::unique_ptr<RaytracingPipeline> gTemporalResamplingPipeline;
     static std::vector<std::unique_ptr<Texture>> gRaytracingOutputs(BACK_BUFFERS_COUNT);
+    static std::vector<std::unique_ptr<Texture>> gRaytracingGBuffers(BACK_BUFFERS_COUNT);
     static std::vector<std::unique_ptr<RenderResource>> gRaytracingParallelogramAreaLightSampleReservoirs(BACK_BUFFERS_COUNT);
     static std::vector<std::unique_ptr<RenderResource>> gRaytracingPointLightReservoirs(BACK_BUFFERS_COUNT);
     static std::vector<std::unique_ptr<RenderResource>> gRaytracingIndirectLightReservoirs(BACK_BUFFERS_COUNT);
+    
+    static std::vector<std::unique_ptr<RenderResource>> gRaytracingPrevParallelogramAreaLightSampleReservoirs(BACK_BUFFERS_COUNT);
+    static std::vector<std::unique_ptr<RenderResource>> gRaytracingPrevPointLightReservoirs(BACK_BUFFERS_COUNT);
+    static std::vector<std::unique_ptr<RenderResource>> gRaytracingPrevIndirectLightReservoirs(BACK_BUFFERS_COUNT);
+
     static std::vector<std::unique_ptr<RenderResource>> gUploadBuffers(BACK_BUFFERS_COUNT);
     static D3DPtr<ID3D12Resource> gAccelerationStructure;
     static std::vector<D3DPtr<ID3D12Resource>> gBottomLevelAccelerationStructures;
@@ -1417,13 +1431,14 @@ namespace cgs
         break;
         case eRenderMethod::RAYTRACING:
         {
-#if 1
             static constexpr D3D12_DESCRIPTOR_RANGE DESCRIPTOR_RANGE[]
             {
                 // UAVs
                 {
                     .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-                    .NumDescriptors = 4,    // u0: output texture, u1: parallelogram area light sample reservoir, u2: point light reservoir
+                    .NumDescriptors = 8,    // u0: output texture, u1: gbuffers, 
+                                            // u2: parallelogram area light sample reservoir, u3: point light reservoir, u4: indirect light reservoir, 
+                                            // u5: previous parallelogram area light reservoir, u6: previous point light reservoir, u7: previous indirect light reservoir
                     .BaseShaderRegister = 0,
                     .RegisterSpace = 0,
                     .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
@@ -1448,7 +1463,7 @@ namespace cgs
 
             CreateRaytracingPipelineInfo createRaytracingPipelineInfo = 
             {
-                .OutPipeline = gGBufferPipeline,
+                .OutPipeline = gRisPipeline,
 
                 .CompilerOptions = compilerOptions,
                 .ShaderAbsoluteParentPath = shaderAbsoluteParentPath,
@@ -1525,161 +1540,21 @@ namespace cgs
                 },
             };
             createRaytracingPipeline(createRaytracingPipelineInfo);
-#else
-            std::vector<slang::TargetDesc> targetDescs = 
-            {
-                slang::TargetDesc
-                {
-                    .format = SlangCompileTarget::SLANG_DXIL,
-                    .profile = gSlangGlobalSession->findProfile("sm_6_7"),
-                    .flags = 0,
-                },
-                slang::TargetDesc
-                {
-                    .format = SlangCompileTarget::SLANG_DXIL_ASM,
-                    .profile = gSlangGlobalSession->findProfile("sm_6_7"),
-                    .flags = 0,
-                },
-            };
-
-            slang::SessionDesc sessionDesc = 
-            {
-                .targets = targetDescs.data(),
-                .targetCount = static_cast<uint32_t>(targetDescs.size()),
-                .compilerOptionEntries = compilerOptions.data(),
-                .compilerOptionEntryCount = static_cast<uint32_t>(compilerOptions.size()),
-            };
-
-
-            Slang::ComPtr<slang::ISession> session;
-            gSlangGlobalSession->createSession(sessionDesc, session.writeRef());
-            const std::filesystem::path shaderAbsoluteParentPath = std::filesystem::current_path() / "Assets/Shaders";
-            const std::filesystem::path shaderAbsPath = shaderAbsoluteParentPath / "SimpleRaytracing.slang";
-
-            slang::IModule* module = nullptr;
-            {
-                Slang::ComPtr<slang::IBlob> diagnosticBlob;
-                module = session->loadModule(shaderAbsPath.string().c_str(), diagnosticBlob.writeRef());
-                if (diagnosticBlob)
-                {
-                    OutputDebugStringA(reinterpret_cast<const char*>(diagnosticBlob->getBufferPointer()));
-                    OutputDebugStringA("\n");
-                    DebugBreak();
-                    return false;
-                }
-                
-                if(module == nullptr)
-                {
-                    assert(false && "Failed to load shader module");
-                    return false;
-                }
-            }
             
-            std::vector<slang::IComponentType*> componentTypes =
+            CreateRaytracingPipelineInfo createTemporalResamplingRaytracingPipelineInfo = 
             {
-                module,
-            };
-            Slang::ComPtr<slang::IEntryPoint> rayGenEntryPoint;
-            module->findEntryPointByName("RayGenMain", rayGenEntryPoint.writeRef());
-            componentTypes.push_back(rayGenEntryPoint);
-            Slang::ComPtr<slang::IEntryPoint> closestHitEntryPoint;
-            module->findEntryPointByName("ClosestHitMain", closestHitEntryPoint.writeRef());
-            componentTypes.push_back(closestHitEntryPoint);
-            Slang::ComPtr<slang::IEntryPoint> missEntryPoint;
-            module->findEntryPointByName("MissMain", missEntryPoint.writeRef());
-            componentTypes.push_back(missEntryPoint);
-            
-            Slang::ComPtr<slang::IComponentType> program;
-            {
-                Slang::ComPtr<slang::IBlob> diagnosticBlob;
-                session->createCompositeComponentType(componentTypes.data(), componentTypes.size(), program.writeRef(), diagnosticBlob.writeRef());
-                if (diagnosticBlob)
-                {
-                    OutputDebugStringA(reinterpret_cast<const char*>(diagnosticBlob->getBufferPointer()));
-                    OutputDebugStringA("\n");
-                    DebugBreak();
-                    return false;
-                }
+                .OutPipeline = gTemporalResamplingPipeline,
 
-                if(program == nullptr)
-                {
-                    assert(false && "Failed to create composite component type");
-                    return false;
-                }
-            }
-
-            Slang::ComPtr<slang::IComponentType> linkedProgram;
-            {
-            const std::vector<slang::IComponentType*> components =
-            {
-                program.get(),
-            };
-                Slang::ComPtr<slang::IBlob> diagnosticBlob;
-                session->createCompositeComponentType(components.data(), components.size(), linkedProgram.writeRef(), diagnosticBlob.writeRef());
-                if (diagnosticBlob)
-                {
-                    OutputDebugStringA(reinterpret_cast<const char*>(diagnosticBlob->getBufferPointer()));
-                    OutputDebugStringA("\n");
-                    DebugBreak();
-                    return false;
-                }
-
-                if(linkedProgram == nullptr)
-                {
-                    assert(false && "Failed to create composite component type");
-                    return false;
-                }
-            }
-
-            gRayGenShader = compileShader(program, shaderAbsPath, ShaderType::RAY_GEN, 0);
-            if(gRayGenShader == nullptr)
-            {
-                assert(false && "Failed to compile ray generation shader");
-                return false;
-            }
-            gClosestHitShader = compileShader(program, shaderAbsPath, ShaderType::CLOSEST_HIT, 1);
-            if(gClosestHitShader == nullptr)
-            {
-                assert(false && "Failed to compile closest hit shader");
-                return false;
-            }
-            gMissShader = compileShader(program, shaderAbsPath, ShaderType::MISS, 2);
-            if(gMissShader == nullptr)
-            {
-                assert(false && "Failed to compile miss shader");
-                return false;
-            }
-
-            // Global root signature
-            {
-                static constexpr D3D12_DESCRIPTOR_RANGE DESCRIPTOR_RANGE[]
-                {
-                    // UAVs
-                    {
-                        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-                        .NumDescriptors = 4,    // u0: output texture, u1: parallelogram area light sample reservoir, u2: point light reservoir
-                        .BaseShaderRegister = 0,
-                        .RegisterSpace = 0,
-                        .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-                    },
-                    // Geometry Information
-                    {
-                        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-                        .NumDescriptors = 4,
-                        .BaseShaderRegister = 1,    // t0: AS, t1: index buffer, t2: vertex buffer, t3: color buffer, t4: is emissives buffer
-                        .RegisterSpace = 0,
-                        .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-                    },
-                    // Emissive Information
-                    {
-                        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-                        .NumDescriptors = 2,
-                        .BaseShaderRegister = 5,    // t5: parallelogram area light info buffer, t6: point light info buffer
-                        .RegisterSpace = 0,
-                        .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-                    },
-                };
-                static constexpr D3D12_ROOT_PARAMETER ROOT_PARAMETERS[] = 
+                .CompilerOptions = compilerOptions,
+                .ShaderAbsoluteParentPath = shaderAbsoluteParentPath,
+                .ShaderName = "TemporalResampling.slang",
+                .RayGenEntryPointName = "RayGenMain",
+                .ClosestHitEntryPointName = "ClosestHitMain",
+                .MissEntryPointName = "MissMain",
+                .HitGroupName = L"HitGroup",
+                .PayloadSizeInBytes = sizeof(GBufferRayPayload),
+                .AttributeSizeInBytes = sizeof(float) * 2,  // BuiltInTriangleIntersectionAttributes
+                .RootParameters = 
                 {
                     // UAVs
                     {
@@ -1742,204 +1617,9 @@ namespace cgs
                         },
                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
                     },
-                };
-
-                static constexpr D3D12_ROOT_SIGNATURE_DESC ROOT_SIGNATURE_DESC =
-                {
-                    .NumParameters = CGS_ARRAYSIZE(ROOT_PARAMETERS),
-                    .pParameters = ROOT_PARAMETERS,
-                    .NumStaticSamplers = 0,
-                    .pStaticSamplers = nullptr,
-                    .Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE,
-                };
-
-                D3DPtr<ID3DBlob> signature;
-                D3DPtr<ID3DBlob> error;
-                hr = D3D12SerializeRootSignature(&ROOT_SIGNATURE_DESC, D3D_ROOT_SIGNATURE_VERSION_1, signature.GetAddressOf(), error.GetAddressOf());
-                if (FAILED(hr))
-                {
-                    if (error != nullptr)
-                    {
-                        OutputDebugStringA(reinterpret_cast<const char*>(error->GetBufferPointer()));
-                        OutputDebugStringA("\n");
-                    }
-                    DebugBreak();
-                    return false;
-                }
-
-                hr = gDevice->CreateRootSignature(1, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(gRaytracingGlobalRootSignature.GetAddressOf()));
-                if(FAILED(hr))
-                {
-                    assert(false && "Failed to create root signature");
-                    return false;
-                }
-            } // Global root signature
-
-            // Local root signature
-            {
-                static constexpr D3D12_ROOT_SIGNATURE_DESC ROOT_SIGNATURE_DESC =
-                {
-                    .NumParameters = 0,
-                    .pParameters = nullptr,
-                    .NumStaticSamplers = 0,
-                    .pStaticSamplers = nullptr,
-                    .Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE,
-                };
-
-                D3DPtr<ID3DBlob> signature;
-                D3DPtr<ID3DBlob> error;
-                hr = D3D12SerializeRootSignature(&ROOT_SIGNATURE_DESC, D3D_ROOT_SIGNATURE_VERSION_1, signature.GetAddressOf(), error.GetAddressOf());
-                if (FAILED(hr))
-                {
-                    if (error != nullptr)
-                    {
-                        OutputDebugStringA(reinterpret_cast<const char*>(error->GetBufferPointer()));
-                        OutputDebugStringA("\n");
-                    }
-                    DebugBreak();
-                    return false;
-                }
-
-                hr = gDevice->CreateRootSignature(1, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(gRaytracingLocalRootSignature.GetAddressOf()));
-                if(FAILED(hr))
-                {
-                    assert(false && "Failed to create root signature");
-                    return false;
-                }
-            } // Local root signature
-
-            // DXIL
-            std::vector<D3D12_EXPORT_DESC> exportDescs =
-            {
-                {
-                    .Name = L"RayGenMain",
-                    .ExportToRename = nullptr,
-                    .Flags = D3D12_EXPORT_FLAG_NONE,
-                },
-                {
-                    .Name = L"ClosestHitMain",
-                    .ExportToRename = nullptr,
-                    .Flags = D3D12_EXPORT_FLAG_NONE,
-                },
-                {
-                    .Name = L"MissMain",
-                    .ExportToRename = nullptr,
-                    .Flags = D3D12_EXPORT_FLAG_NONE,
                 },
             };
-            const std::vector<D3D12_DXIL_LIBRARY_DESC> libraries = 
-            {
-                {
-                    .DXILLibrary = 
-                    {
-                        .pShaderBytecode = gRayGenShader->getBufferPointer(),
-                        .BytecodeLength = gRayGenShader->getBufferSize(),
-                    },
-                    .NumExports = 1,
-                    .pExports = &exportDescs[0],
-                },
-                {
-                    .DXILLibrary = 
-                    {
-                        .pShaderBytecode = gClosestHitShader->getBufferPointer(),
-                        .BytecodeLength = gClosestHitShader->getBufferSize(),
-                    },
-                    .NumExports = 1,
-                    .pExports = &exportDescs[1],
-                },
-                {
-                    .DXILLibrary = 
-                    {
-                        .pShaderBytecode = gMissShader->getBufferPointer(),
-                        .BytecodeLength = gMissShader->getBufferSize(),
-                    },
-                    .NumExports = 1,
-                    .pExports = &exportDescs[2],
-                },
-            };
-
-            // Triangle hit group
-            const D3D12_HIT_GROUP_DESC hitGroupDesc =
-            {
-                .HitGroupExport = L"HitGroup",
-                .Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
-                .ClosestHitShaderImport = L"ClosestHitMain",
-            };
-
-            // Shader config
-            const D3D12_RAYTRACING_SHADER_CONFIG raytracingShaderConfig =
-            {
-                .MaxPayloadSizeInBytes = 4 * sizeof(float) + sizeof(float) + 2 * sizeof(uint32),     // float4 color, float rayt, uint32 primitive index, uint32 depth
-                .MaxAttributeSizeInBytes = 2 * sizeof(float),   // float2 barycentrics
-            };
-
-            // Local config
-            D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION localRootSignatureAssociation =
-            {
-                .pSubobjectToAssociate = nullptr,
-                .NumExports = 1,
-                .pExports = &exportDescs[0].Name,
-            };
-
-            const D3D12_RAYTRACING_PIPELINE_CONFIG pipelineConfig =
-            {
-                .MaxTraceRecursionDepth = 5,
-            };
-
-            std::vector<D3D12_STATE_SUBOBJECT> subObjects = 
-            {
-                {
-                    .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY,
-                    .pDesc = &libraries[0],
-                },
-                {
-                    .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY,
-                    .pDesc = &libraries[1],
-                },
-                {
-                    .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY,
-                    .pDesc = &libraries[2],
-                },
-                {
-                    .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP,
-                    .pDesc = &hitGroupDesc,
-                },
-                {
-                    .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG,
-                    .pDesc = &raytracingShaderConfig,
-                },
-                {
-                    .Type = D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE,
-                    .pDesc = gRaytracingLocalRootSignature.GetAddressOf(),
-                },
-                {
-                    .Type = D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION,
-                    .pDesc = &localRootSignatureAssociation,
-                },
-                {
-                    .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE,
-                    .pDesc = gRaytracingGlobalRootSignature.GetAddressOf(),
-                },
-                {
-                    .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG,
-                    .pDesc = &pipelineConfig,
-                },
-            };
-            localRootSignatureAssociation.pSubobjectToAssociate = &subObjects[5];
-
-            const D3D12_STATE_OBJECT_DESC stateObjectDesc =
-            {
-                .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
-                .NumSubobjects = static_cast<uint32>(subObjects.size()),
-                .pSubobjects = subObjects.data(),
-            };
-            hr = gDevice->CreateStateObject(&stateObjectDesc, IID_PPV_ARGS(gRaytracingStateObject.GetAddressOf()));
-            if(FAILED(hr))
-            {
-                assert(false && "Failed to create raytracing pipeline state object");
-                return false;
-            }
-#endif
+            createRaytracingPipeline(createTemporalResamplingRaytracingPipelineInfo);
         }
         break;
         default:
@@ -1965,10 +1645,14 @@ namespace cgs
             gCameraBuffers[i].reset();
             gSceneConstantBuffers[i].reset();
         }
+        gRaytracingGBuffers.clear();
         gRaytracingOutputs.clear();
         gRaytracingParallelogramAreaLightSampleReservoirs.clear();
         gRaytracingPointLightReservoirs.clear();
         gRaytracingIndirectLightReservoirs.clear();
+        gRaytracingPrevParallelogramAreaLightSampleReservoirs.clear();
+        gRaytracingPrevPointLightReservoirs.clear();
+        gRaytracingPrevIndirectLightReservoirs.clear();
 
         for(D3DPtr<ID3D12Resource>& bottomLevelAccelerationStructure : gBottomLevelAccelerationStructures)
         {
@@ -1979,7 +1663,7 @@ namespace cgs
         {
             DestroyD3D12Object(topLevelAccelerationStructure);
         }
-        gGBufferPipeline.reset();
+        gRisPipeline.reset();
         gTemporalResamplingPipeline.reset();
 
         DestroyD3D12Object(gRasterizationPipelineState);
@@ -2635,7 +2319,7 @@ namespace cgs
         
         std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> sceneConstantBufferCpuDescriptors(BACK_BUFFERS_COUNT);
         std::vector<D3D12_GPU_DESCRIPTOR_HANDLE> sceneConstantBufferGpuDescriptors(BACK_BUFFERS_COUNT);
-        result = gCbvSrvUavHeap->AllocateDynamicDescriptors(sceneConstantBufferCpuDescriptors, sceneConstantBufferGpuDescriptors, 4);
+        result = gCbvSrvUavHeap->AllocateDynamicDescriptors(sceneConstantBufferCpuDescriptors, sceneConstantBufferGpuDescriptors, 8);
         if(result == false)
         {
             assert(false && "Failed to allocate dynamic descriptor for scene constant buffer");
@@ -4043,7 +3727,9 @@ namespace cgs
         if(createInfo.RenderMethod == eRenderMethod::RAYTRACING)
         {       
             // Create the output resource. The dimensions and format should match the swap-chain.
-            createBackBufferSizeUavTextures(gRaytracingOutputs, DXGI_FORMAT_R8G8B8A8_UNORM, TEXT("RaytracingOutput"), 0);
+            uint32 descriptorIndex = 0;
+            createBackBufferSizeUavTextures(gRaytracingOutputs, DXGI_FORMAT_R8G8B8A8_UNORM, TEXT("RaytracingOutput"), descriptorIndex++);
+            createBackBufferSizeUavTextures(gRaytracingGBuffers, DXGI_FORMAT_R32G32B32A32_FLOAT, TEXT("RaytracingGBuffer"), descriptorIndex++);
 
             const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
             {
@@ -4106,9 +3792,12 @@ namespace cgs
                 gUploadBuffers[i] = std::make_unique<RenderResource>(std::move(uploadBufferCreateInfo));
             }
 
-            createBackBufferSizeUavBuffers<ParallelogramAreaLightReservoir>(gRaytracingParallelogramAreaLightSampleReservoirs, TEXT("RaytracingParallelogramAreaLightReservoir"), 1);
-            createBackBufferSizeUavBuffers<PointLightReservoir>(gRaytracingPointLightReservoirs, TEXT("RaytracingPointLightReservoir"), 2);
-            createBackBufferSizeUavBuffers<IndirectLightReservoir>(gRaytracingIndirectLightReservoirs, TEXT("RaytracingIndirectLightReservoir"), 3);
+            createBackBufferSizeUavBuffers<ParallelogramAreaLightReservoir>(gRaytracingParallelogramAreaLightSampleReservoirs, TEXT("RaytracingParallelogramAreaLightReservoir"), descriptorIndex++);
+            createBackBufferSizeUavBuffers<PointLightReservoir>(gRaytracingPointLightReservoirs, TEXT("RaytracingPointLightReservoir"), descriptorIndex++);
+            createBackBufferSizeUavBuffers<IndirectLightReservoir>(gRaytracingIndirectLightReservoirs, TEXT("RaytracingIndirectLightReservoir"), descriptorIndex++);
+            createBackBufferSizeUavBuffers<ParallelogramAreaLightReservoir>(gRaytracingPrevParallelogramAreaLightSampleReservoirs, TEXT("RaytracingPrevParallelogramAreaLightReservoir"), descriptorIndex++);
+            createBackBufferSizeUavBuffers<PointLightReservoir>(gRaytracingPrevPointLightReservoirs, TEXT("RaytracingPrevPointLightReservoir"), descriptorIndex++);
+            createBackBufferSizeUavBuffers<IndirectLightReservoir>(gRaytracingPrevIndirectLightReservoirs, TEXT("RaytracingPrevIndirectLightReservoir"), descriptorIndex++);
         }
 
         gGlobalRenderContext.RenderDeviceType = eRenderDeviceType::D3D12;
@@ -4222,46 +3911,40 @@ namespace cgs
         }
         gPointLightInfosBuffer->Map(static_cast<uint32>(sizeof(PointLightInfo) * pointLightInfosCount), gPointLightInfos.data());
             
-        if(gGBufferPipeline == nullptr)
+        if(gRisPipeline == nullptr)
         {
             assert(false && "GBuffer pipeline is null");
             return;
         }
-        graphicsCommandList.SetComputeRootSignature(gGBufferPipeline->GetGlobalRootSignature().Get());
+        graphicsCommandList.SetComputeRootSignature(gRisPipeline->GetGlobalRootSignature().Get());
+
+
+        gRaytracingPrevParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+        gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        gRaytracingPrevPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+        gRaytracingPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        gRaytracingPrevIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+        gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
+
+        graphicsCommandList.CopyResource(gRaytracingPrevParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->GetResource().Get(), gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->GetResource().Get());
+        graphicsCommandList.CopyResource(gRaytracingPrevPointLightReservoirs[renderWork.FrameIndex]->GetResource().Get(), gRaytracingPointLightReservoirs[renderWork.FrameIndex]->GetResource().Get());
+        graphicsCommandList.CopyResource(gRaytracingPrevIndirectLightReservoirs[renderWork.FrameIndex]->GetResource().Get(), gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->GetResource().Get());
+
+        gRaytracingPrevParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingPrevPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingPrevIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
         // Bind the heaps, acceleration structure and dispatch rays.
-
         ID3D12DescriptorHeap* heaps[] = { gCbvSrvUavHeap->GetHeap().Get(), };
         graphicsCommandList.SetDescriptorHeaps(CGS_ARRAYSIZE(heaps), heaps);
 
         graphicsCommandList.SetComputeRootDescriptorTable(0, gRaytracingOutputs[renderWork.FrameIndex]->GetGpuDescriptor());
-        const D3D12_DISPATCH_RAYS_DESC dispatchDesc = 
-        {
-            .RayGenerationShaderRecord =
-            {
-                .StartAddress = gGBufferPipeline->GetRayGenShaderTable()->GetGPUVirtualAddress(),
-                .SizeInBytes = gGBufferPipeline->GetRayGenShaderTable()->GetDesc().Width,
-            },
-            .MissShaderTable = 
-            {
-                .StartAddress = gGBufferPipeline->GetMissShaderTable()->GetGPUVirtualAddress(),
-                .SizeInBytes = gGBufferPipeline->GetMissShaderTable()->GetDesc().Width,
-                .StrideInBytes = gGBufferPipeline->GetMissShaderTable()->GetDesc().Width,
-            },
-            .HitGroupTable = 
-            {
-                .StartAddress = gGBufferPipeline->GetHitGroupShaderTable()->GetGPUVirtualAddress(),
-                .SizeInBytes = gGBufferPipeline->GetHitGroupShaderTable()->GetDesc().Width,
-                .StrideInBytes = gGBufferPipeline->GetHitGroupShaderTable()->GetDesc().Width,
-            },
-            .Width = sceneRenderTarget.ColorBuffer.GetWidth(),
-            .Height = sceneRenderTarget.ColorBuffer.GetHeight(),
-            .Depth = 1,
-        };
-        graphicsCommandList.SetPipelineState1(gGBufferPipeline->GetStateObject().Get());
-        
         graphicsCommandList.SetComputeRootConstantBufferView(2, gSceneConstantBuffers[renderWork.FrameIndex]->GetGPUVirtualAddress());
         graphicsCommandList.SetComputeRootDescriptorTable(4, gParallelogramAreaLightInfosBuffer->GetGpuDescriptor());
+        
         struct PushConstant final
         {
             uint32 FrameIndex = 0;
@@ -4274,8 +3957,34 @@ namespace cgs
         };
         graphicsCommandList.SetComputeRoot32BitConstants(5, sizeof(PushConstant) / sizeof(uint32), &pushConstant, 0);
 
-        const uint32 geometriesCount = static_cast<uint32>(renderWork.Geometries.size());
-        for(uint32 i = 0; i < geometriesCount; ++i)
+        {
+            const D3D12_DISPATCH_RAYS_DESC dispatchDesc = 
+            {
+                .RayGenerationShaderRecord =
+                {
+                    .StartAddress = gRisPipeline->GetRayGenShaderTable()->GetGPUVirtualAddress(),
+                    .SizeInBytes = gRisPipeline->GetRayGenShaderTable()->GetDesc().Width,
+                },
+                .MissShaderTable = 
+                {
+                    .StartAddress = gRisPipeline->GetMissShaderTable()->GetGPUVirtualAddress(),
+                    .SizeInBytes = gRisPipeline->GetMissShaderTable()->GetDesc().Width,
+                    .StrideInBytes = gRisPipeline->GetMissShaderTable()->GetDesc().Width,
+                },
+                .HitGroupTable = 
+                {
+                    .StartAddress = gRisPipeline->GetHitGroupShaderTable()->GetGPUVirtualAddress(),
+                    .SizeInBytes = gRisPipeline->GetHitGroupShaderTable()->GetDesc().Width,
+                    .StrideInBytes = gRisPipeline->GetHitGroupShaderTable()->GetDesc().Width,
+                },
+                .Width = sceneRenderTarget.ColorBuffer.GetWidth(),
+                .Height = sceneRenderTarget.ColorBuffer.GetHeight(),
+                .Depth = 1,
+            };
+            graphicsCommandList.SetPipelineState1(gRisPipeline->GetStateObject().Get());
+
+            const uint32 geometriesCount = static_cast<uint32>(renderWork.Geometries.size());
+            for(uint32 i = 0; i < geometriesCount; ++i)
         {
             const std::unique_ptr<Geometry>& geometry = renderWork.Geometries[i];
             if(geometry == nullptr)
@@ -4290,7 +3999,51 @@ namespace cgs
             graphicsCommandList.SetComputeRootDescriptorTable(3, indexBuffer.GetGpuDescriptor());
             graphicsCommandList.DispatchRays(&dispatchDesc);
         }
+        }
 
+        {
+            const D3D12_DISPATCH_RAYS_DESC dispatchDesc = 
+            {
+                .RayGenerationShaderRecord =
+                {
+                    .StartAddress = gTemporalResamplingPipeline->GetRayGenShaderTable()->GetGPUVirtualAddress(),
+                    .SizeInBytes = gTemporalResamplingPipeline->GetRayGenShaderTable()->GetDesc().Width,
+                },
+                .MissShaderTable = 
+                {
+                    .StartAddress = gTemporalResamplingPipeline->GetMissShaderTable()->GetGPUVirtualAddress(),
+                    .SizeInBytes = gTemporalResamplingPipeline->GetMissShaderTable()->GetDesc().Width,
+                    .StrideInBytes = gTemporalResamplingPipeline->GetMissShaderTable()->GetDesc().Width,
+                },
+                .HitGroupTable = 
+                {
+                    .StartAddress = gTemporalResamplingPipeline->GetHitGroupShaderTable()->GetGPUVirtualAddress(),
+                    .SizeInBytes = gTemporalResamplingPipeline->GetHitGroupShaderTable()->GetDesc().Width,
+                    .StrideInBytes = gTemporalResamplingPipeline->GetHitGroupShaderTable()->GetDesc().Width,
+                },
+                .Width = sceneRenderTarget.ColorBuffer.GetWidth(),
+                .Height = sceneRenderTarget.ColorBuffer.GetHeight(),
+                .Depth = 1,
+            };
+            graphicsCommandList.SetPipelineState1(gTemporalResamplingPipeline->GetStateObject().Get());
+
+            const uint32 geometriesCount = static_cast<uint32>(renderWork.Geometries.size());
+            for(uint32 i = 0; i < geometriesCount; ++i)
+            {
+                const std::unique_ptr<Geometry>& geometry = renderWork.Geometries[i];
+                if(geometry == nullptr)
+                {
+                    assert(false && "Geometry is null");
+                    continue;
+                }
+
+                graphicsCommandList.SetComputeRootShaderResourceView(1, gTopLevelAccelerationStructures[i]->GetGPUVirtualAddress());
+
+                IndexBuffer& indexBuffer = geometry->GetIndexBuffer();
+                graphicsCommandList.SetComputeRootDescriptorTable(3, indexBuffer.GetGpuDescriptor());
+                graphicsCommandList.DispatchRays(&dispatchDesc);
+            }
+        }
         sceneRenderTarget.ColorBuffer.Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
         gRaytracingOutputs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
 
