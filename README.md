@@ -88,3 +88,6 @@ Target platforms (sorted by priority):
   * Fixes:
     * Reservoir weight accumulation is per-frame, not across frames. This fixes the bias issue where the first few samples dominate the reservoir.
     * Final integrand used suboptimal pdf for MIS/RIS weighting, not the desired pdf.
+* **[2025.09.23]**: Fixed a bug where reservoirs were updated for bounced rays. Added spatial resampling draft.
+  * Problems:
+    * Spatial resampling causes spilling artifacts.

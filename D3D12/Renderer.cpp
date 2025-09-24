@@ -454,8 +454,10 @@ namespace cgs
     
     static std::unique_ptr<RaytracingPipeline> gRisPipeline;
     static std::unique_ptr<RaytracingPipeline> gTemporalResamplingPipeline;
+    static std::unique_ptr<RaytracingPipeline> gSpatialResamplingPipeline;
     static std::vector<std::unique_ptr<Texture>> gRaytracingOutputs(BACK_BUFFERS_COUNT);
     static std::vector<std::unique_ptr<Texture>> gRaytracingGBuffers(BACK_BUFFERS_COUNT);
+    
     static std::vector<std::unique_ptr<RenderResource>> gRaytracingParallelogramAreaLightSampleReservoirs(BACK_BUFFERS_COUNT);
     static std::vector<std::unique_ptr<RenderResource>> gRaytracingPointLightReservoirs(BACK_BUFFERS_COUNT);
     static std::vector<std::unique_ptr<RenderResource>> gRaytracingIndirectLightReservoirs(BACK_BUFFERS_COUNT);
@@ -1620,6 +1622,86 @@ namespace cgs
                 },
             };
             createRaytracingPipeline(createTemporalResamplingRaytracingPipelineInfo);
+            
+            CreateRaytracingPipelineInfo createSpatialResamplingRaytracingPipelineInfo = 
+            {
+                .OutPipeline = gSpatialResamplingPipeline,
+
+                .CompilerOptions = compilerOptions,
+                .ShaderAbsoluteParentPath = shaderAbsoluteParentPath,
+                .ShaderName = "SpatialResampling.slang",
+                .RayGenEntryPointName = "RayGenMain",
+                .ClosestHitEntryPointName = "ClosestHitMain",
+                .MissEntryPointName = "MissMain",
+                .HitGroupName = L"HitGroup",
+                .PayloadSizeInBytes = sizeof(GBufferRayPayload),
+                .AttributeSizeInBytes = sizeof(float) * 2,  // BuiltInTriangleIntersectionAttributes
+                .RootParameters = 
+                {
+                    // UAVs
+                    {
+                        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+                        .DescriptorTable = 
+                        {
+                            .NumDescriptorRanges = 1,
+                            .pDescriptorRanges = &DESCRIPTOR_RANGE[0],
+                        },
+                        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+                    }, 
+                    // Acceleration structure
+                    {
+                        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+                        .Descriptor = 
+                        {
+                            .ShaderRegister = 0,
+                            .RegisterSpace = 0,
+                        },
+                        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+                    },
+                    // Scene constant buffer
+                    {
+                        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+                        .Descriptor = 
+                        {
+                            .ShaderRegister = 0,
+                            .RegisterSpace = 0,
+                        },
+                        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+                    },
+                    // Geometry information
+                    {
+                        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+                        .DescriptorTable = 
+                        {
+                            .NumDescriptorRanges = 1,
+                            .pDescriptorRanges = &DESCRIPTOR_RANGE[1],
+                        },
+                        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+                    },
+                    // Emissive information
+                    {
+                        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+                        .DescriptorTable = 
+                        {
+                            .NumDescriptorRanges = 1,
+                            .pDescriptorRanges = &DESCRIPTOR_RANGE[2],
+                        },
+                        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+                    },
+                    // Push Constants
+                    {
+                        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
+                        .Constants = 
+                        {
+                            .ShaderRegister = 1,
+                            .RegisterSpace = 0,
+                            .Num32BitValues = 2,
+                        },
+                        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+                    },
+                },
+            };
+            createRaytracingPipeline(createSpatialResamplingRaytracingPipelineInfo);
         }
         break;
         default:
@@ -1665,6 +1747,7 @@ namespace cgs
         }
         gRisPipeline.reset();
         gTemporalResamplingPipeline.reset();
+        gSpatialResamplingPipeline.reset();
 
         DestroyD3D12Object(gRasterizationPipelineState);
         DestroyD3D12Object(gRasterizationRootSignature);
@@ -4022,6 +4105,51 @@ namespace cgs
                 .Depth = 1,
             };
             graphicsCommandList.SetPipelineState1(gTemporalResamplingPipeline->GetStateObject().Get());
+
+            const uint32 geometriesCount = static_cast<uint32>(renderWork.Geometries.size());
+            for(uint32 i = 0; i < geometriesCount; ++i)
+            {
+                const std::unique_ptr<Geometry>& geometry = renderWork.Geometries[i];
+                if(geometry == nullptr)
+                {
+                    assert(false && "Geometry is null");
+                    continue;
+                }
+
+                graphicsCommandList.SetComputeRootShaderResourceView(1, gTopLevelAccelerationStructures[i]->GetGPUVirtualAddress());
+
+                IndexBuffer& indexBuffer = geometry->GetIndexBuffer();
+                graphicsCommandList.SetComputeRootDescriptorTable(3, indexBuffer.GetGpuDescriptor());
+                graphicsCommandList.DispatchRays(&dispatchDesc);
+            }
+        }
+        
+
+        {
+            const D3D12_DISPATCH_RAYS_DESC dispatchDesc = 
+            {
+                .RayGenerationShaderRecord =
+                {
+                    .StartAddress = gSpatialResamplingPipeline->GetRayGenShaderTable()->GetGPUVirtualAddress(),
+                    .SizeInBytes = gSpatialResamplingPipeline->GetRayGenShaderTable()->GetDesc().Width,
+                },
+                .MissShaderTable = 
+                {
+                    .StartAddress = gSpatialResamplingPipeline->GetMissShaderTable()->GetGPUVirtualAddress(),
+                    .SizeInBytes = gSpatialResamplingPipeline->GetMissShaderTable()->GetDesc().Width,
+                    .StrideInBytes = gSpatialResamplingPipeline->GetMissShaderTable()->GetDesc().Width,
+                },
+                .HitGroupTable = 
+                {
+                    .StartAddress = gSpatialResamplingPipeline->GetHitGroupShaderTable()->GetGPUVirtualAddress(),
+                    .SizeInBytes = gSpatialResamplingPipeline->GetHitGroupShaderTable()->GetDesc().Width,
+                    .StrideInBytes = gSpatialResamplingPipeline->GetHitGroupShaderTable()->GetDesc().Width,
+                },
+                .Width = sceneRenderTarget.ColorBuffer.GetWidth(),
+                .Height = sceneRenderTarget.ColorBuffer.GetHeight(),
+                .Depth = 1,
+            };
+            graphicsCommandList.SetPipelineState1(gSpatialResamplingPipeline->GetStateObject().Get());
 
             const uint32 geometriesCount = static_cast<uint32>(renderWork.Geometries.size());
             for(uint32 i = 0; i < geometriesCount; ++i)

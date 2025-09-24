@@ -587,10 +587,6 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
         float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
         float weightsSum = 0.0f;
         uint samplesCount = 0;
-        if (payload.Depth == BounceDepth)
-        {
-            InitializeParallelogramAreaLightReservoir(bufferIndexByPixel);
-        }
         for (uint sampleIndex = 0; sampleIndex < PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT; ++sampleIndex)
         {
             float3 samplePosition = float3(0.0f);
@@ -668,10 +664,6 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
         float desiredPdf = 0.0f;
         float weightsSum = 0.0f;
         uint samplesCount = 0;
-        if (payload.Depth == BounceDepth)
-        {
-            InitializePointLightReservoir(bufferIndexByPixel);
-        }
         for (uint sampleIndex = 0; sampleIndex < POINT_LIGHT_SAMPLES_COUNT; ++sampleIndex)
         {
             uint selectedProposalIndex = 0;
@@ -747,10 +739,6 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
         // Note: For other BRDFs, the BRDF would need to be evaluated per sample.
         const float3 brdf = CalculateLambertianDiffuseBrdf(PrimitiveIndex());
         float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
-        if (payload.Depth == BounceDepth)
-        {
-            InitializeIndirectLightReservoir(bufferIndexByPixel);
-        }
         float weightsSum = 0.0f;
         uint samplesCount = 0;
         if(payload.Depth == BounceDepth)
@@ -821,11 +809,17 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
 [shader("raygeneration")]
 void RayGenMain()
 {
+    const uint2 pixel = DispatchRaysIndex().xy;
+    const uint bufferIndexByPixel = pixel.y * DispatchRaysDimensions().x + pixel.x;
+    InitializeParallelogramAreaLightReservoir(bufferIndexByPixel);
+    InitializePointLightReservoir(bufferIndexByPixel);
+    InitializeIndirectLightReservoir(bufferIndexByPixel);
+
     float3 rayDir;
     float3 origin;
-    
+
     // Generate a ray for a camera pixel corresponding to an index from the dispatched 2D grid.
-    GenerateCameraRay(DispatchRaysIndex().xy, origin, rayDir);
+    GenerateCameraRay(pixel, origin, rayDir);
 
     // Trace the ray.
     // Set the ray's extents.
@@ -886,4 +880,8 @@ void MissMain(inout RayPayload payload)
     payload.Color = background;
     payload.RayT = FLT_MAX;
     payload.PrimitiveIndex = 0xFFFFFFFF;
+    if(payload.Depth == BounceDepth)
+    {
+        gGBuffers[DispatchRaysIndex().xy] = float4(0.0f, 0.0f, -1.0f, 1.0f);
+    }
 }
