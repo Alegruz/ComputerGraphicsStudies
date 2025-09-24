@@ -166,7 +166,7 @@ IsEmissive(const uint index)
     return isEmissive;
 }
 
-#if 1
+#if 0
 struct RayPayload
 {
     float4 Color;
@@ -591,6 +591,11 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             const float distanceSquared = dot(hitPositionToPointLightPosition, hitPositionToPointLightPosition);
             const float distance = sqrt(distanceSquared);
             const float3 worldSampleDir = normalize(parallelogramAreaLightPosition - hitPosition);
+
+            if (dot(worldSampleDir, normal) <= 0.0f)
+            {
+                continue;
+            }
 
             // Trace a ray in the sampled direction.
             RayDesc ray;

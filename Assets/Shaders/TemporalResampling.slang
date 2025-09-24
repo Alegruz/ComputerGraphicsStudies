@@ -166,7 +166,7 @@ IsEmissive(const uint index)
     return isEmissive;
 }
 
-#if 1
+#if 0
 struct RayPayload
 {
     float4 Color;
@@ -520,8 +520,7 @@ void RayGenMain()
     neeMonteCarloEstimate += pointLightMonteCarloEstimate;
 
     float3 indirectIlluminationMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
-// #if HEMISPHERE_SAMPLES_COUNT > 0
-#if 0
+#if HEMISPHERE_SAMPLES_COUNT > 0
     {
         {
             const float desiredPdf = gPrevIndirectLightReservoir[bufferIndexByPixel].Pdf;
@@ -588,14 +587,21 @@ void RayGenMain()
     const float3 srgb = LinearToSRGB(tonemapped);
 
     // 5) write
-    gRenderTarget[DispatchRaysIndex().xy] = float4(saturate(srgb), 1.0f);
+    const float4 finalColor = float4(srgb, 1.0f);
+    gRenderTarget[pixel] = finalColor;
 }
 
 
 [shader("closesthit")]
 void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    payload.Color = float4(gColors[PrimitiveIndex()], 1.0f);
+    float3 color = gColors[PrimitiveIndex()];
+    if (IsEmissive(PrimitiveIndex()) == 1)
+    {
+        const float tempEmissiveStrength = 40.0f;
+        color *= tempEmissiveStrength;
+    }
+    payload.Color = float4(color, 1.0f);
     payload.RayT = RayTCurrent();
     payload.PrimitiveIndex = PrimitiveIndex();
 }
