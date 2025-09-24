@@ -166,7 +166,7 @@ IsEmissive(const uint index)
     return isEmissive;
 }
 
-#if 0
+#if 1
 struct RayPayload
 {
     float4 Color;
@@ -333,29 +333,32 @@ PowerHeuristic(const uint samplesCountA, const float pdfA, const uint samplesCou
 }
 
 void
-UpdateParallelogramAreaLightReservoir(const float weight, const float desiredPdf, const float3 parallelogramAreaLightPosition, const float3 triangleNormal, const uint2 pixel, const uint sampleIndex, const uint proposalIndex, const uint bufferIndexByPixel)
-{
-    float weightsSum = gParallelogramAreaLightReservoir[bufferIndexByPixel].WeightSum + weight;
-    gParallelogramAreaLightReservoir[bufferIndexByPixel].WeightSum = weightsSum;
-    gParallelogramAreaLightReservoir[bufferIndexByPixel].SamplesCount = gParallelogramAreaLightReservoir[bufferIndexByPixel].SamplesCount + 1;
-    const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
-    const float probability = weight / weightsSum;
-    if (canonicalSample < probability)
-    {
-        gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightPositionSample = parallelogramAreaLightPosition;
-        gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightNormalSample = triangleNormal;
-        gParallelogramAreaLightReservoir[bufferIndexByPixel].Pdf = desiredPdf;
-    }
-}
-
-float3
-RisParallelogramAreaLight(const uint2 pixel, const uint sampleIndex, const float3 hitPosition, const float3 normal, const uint bufferIndexByPixel)
+InitializeParallelogramAreaLightReservoir(const uint bufferIndexByPixel)
 {
     gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightPositionSample = float3(0.0f);
     gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightNormalSample = float3(0.0f);
     gParallelogramAreaLightReservoir[bufferIndexByPixel].WeightSum = 0.0f;
-    gParallelogramAreaLightReservoir[bufferIndexByPixel].SamplesCount = 0;
+    gParallelogramAreaLightReservoir[bufferIndexByPixel].SamplesCount = 0;  
+}
 
+void
+UpdateParallelogramAreaLightReservoir(out float3 outPosition, out float3 outNormal, inout float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const float weight, const float desiredPdf, const float3 parallelogramAreaLightPosition, const float3 triangleNormal, const uint2 pixel, const uint sampleIndex, const uint proposalIndex, const uint bufferIndexByPixel)
+{
+    outWeightsSum += weight;
+    outSamplesCount += 1;
+    const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+    const float probability = weight / outWeightsSum;
+    if (canonicalSample < probability)
+    {
+        outPosition = parallelogramAreaLightPosition;
+        outNormal = triangleNormal;
+        outDesiredPdf = desiredPdf;
+    }
+}
+
+float3
+RisParallelogramAreaLight(out float3 outPosition, out float3 outNormal, out float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const uint2 pixel, const uint sampleIndex, const float3 hitPosition, const float3 normal, const uint bufferIndexByPixel)
+{
     const uint parallelogramLightIndex = 0;
     const ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[parallelogramLightIndex];
     const uint basePrimitiveIndex = lightInfo.PrimitiveIndices[0];
@@ -440,35 +443,37 @@ RisParallelogramAreaLight(const uint2 pixel, const uint sampleIndex, const float
         const float pdf = 1.0f / parallelogramArea;
         const float weight = desiredPdf / pdf;
 
-        UpdateParallelogramAreaLightReservoir(weight, desiredPdf, parallelogramAreaLightPosition, triangleNormal, pixel, sampleIndex, proposalIndex, bufferIndexByPixel);
+        UpdateParallelogramAreaLightReservoir(outPosition, outNormal, outDesiredPdf, outWeightsSum, outSamplesCount, weight, desiredPdf, parallelogramAreaLightPosition, triangleNormal, pixel, sampleIndex, proposalIndex, bufferIndexByPixel);
     }
-    const float pdf = gParallelogramAreaLightReservoir[bufferIndexByPixel].Pdf;
 
-    return gParallelogramAreaLightReservoir[bufferIndexByPixel].WeightSum / (pdf * RESAMPLE_COUNT);
+    return outWeightsSum / (outDesiredPdf * RESAMPLE_COUNT);
 }
 
 void
-UpdatePointLightReservoir(const float weight, const float desiredPdf, const uint2 pixel, const uint sampleIndex, const uint proposalIndex, const uint bufferIndexByPixel)
-{
-    float weightsSum = gPointLightReservoir[bufferIndexByPixel].WeightSum + weight;
-    gPointLightReservoir[bufferIndexByPixel].WeightSum = weightsSum;
-    gPointLightReservoir[bufferIndexByPixel].SamplesCount = gPointLightReservoir[bufferIndexByPixel].SamplesCount + 1;
-    const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
-    const float probability = weight / weightsSum;
-    if (canonicalSample < probability)
-    {
-        gPointLightReservoir[bufferIndexByPixel].LightIndexSample = proposalIndex;
-        gPointLightReservoir[bufferIndexByPixel].Pdf = desiredPdf;
-    }
-}
-
-float3
-RisPointLight(const uint2 pixel, const uint sampleIndex, const float3 hitPosition, const float3 normal, const uint bufferIndexByPixel)
+InitializePointLightReservoir(const uint bufferIndexByPixel)
 {
     gPointLightReservoir[bufferIndexByPixel].LightIndexSample = 0;
     gPointLightReservoir[bufferIndexByPixel].WeightSum = 0.0f;
     gPointLightReservoir[bufferIndexByPixel].SamplesCount = 0;
+}
 
+void
+UpdatePointLightReservoir(out uint outLightIndexSample, out float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const float weight, const float desiredPdf, const uint2 pixel, const uint sampleIndex, const uint proposalIndex, const uint bufferIndexByPixel)
+{
+    outWeightsSum += weight;
+    outSamplesCount += 1;
+    const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+    const float probability = weight / outWeightsSum;
+    if (canonicalSample < probability)
+    {
+        outLightIndexSample = proposalIndex;
+        outDesiredPdf = desiredPdf;
+    }
+}
+
+float3
+RisPointLight(out uint outLightIndexSample, out float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const uint2 pixel, const uint sampleIndex, const float3 hitPosition, const float3 normal, const uint bufferIndexByPixel)
+{
     for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
     {
         // generate x_i ~ p
@@ -489,35 +494,37 @@ RisPointLight(const uint2 pixel, const uint sampleIndex, const float3 hitPositio
         const float pdf = (1.0f / gSceneConstantBuffer.PointLightInfosCount);
         const float weight = desiredPdf / pdf;
 
-        UpdatePointLightReservoir(weight, desiredPdf, pixel, sampleIndex, proposalIndex, bufferIndexByPixel);
+        UpdatePointLightReservoir(outLightIndexSample, outDesiredPdf, outWeightsSum, outSamplesCount, weight, desiredPdf, pixel, sampleIndex, proposalIndex, bufferIndexByPixel);
     }
-    const float pdf = gPointLightReservoir[bufferIndexByPixel].Pdf;
 
-    return gPointLightReservoir[bufferIndexByPixel].WeightSum / (pdf * RESAMPLE_COUNT);
+    return outWeightsSum / (outDesiredPdf * RESAMPLE_COUNT);
 }
 
 void
-UpdateIndirectLightReservoir(const float weight, const float desiredPdf, const float3 worldSampleDir, const uint2 pixel, const uint sampleIndex, const uint proposalIndex, const uint bufferIndexByPixel)
-{
-    const float weightsSum = gIndirectLightReservoir[bufferIndexByPixel].WeightSum + weight;
-    gIndirectLightReservoir[bufferIndexByPixel].WeightSum = weightsSum;
-    gIndirectLightReservoir[bufferIndexByPixel].SamplesCount = gIndirectLightReservoir[bufferIndexByPixel].SamplesCount + 1;
-    const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
-    const float probability = weight / weightsSum;
-    if (canonicalSample < probability)
-    {
-        gIndirectLightReservoir[bufferIndexByPixel].Direction = worldSampleDir;
-        gIndirectLightReservoir[bufferIndexByPixel].Pdf = desiredPdf;
-    }
-}
-
-float3
-RisIndirectLight(const uint2 pixel, const uint sampleIndex, const float3 hitPosition, const float3 normal, const uint bufferIndexByPixel)
+InitializeIndirectLightReservoir(const uint bufferIndexByPixel)
 {
     gIndirectLightReservoir[bufferIndexByPixel].Direction = float3(0.0f);
     gIndirectLightReservoir[bufferIndexByPixel].WeightSum = 0.0f;
     gIndirectLightReservoir[bufferIndexByPixel].SamplesCount = 0;
+}
 
+void
+UpdateIndirectLightReservoir(out float3 outDirection, out float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const float weight, const float desiredPdf, const float3 worldSampleDir, const uint2 pixel, const uint sampleIndex, const uint proposalIndex, const uint bufferIndexByPixel)
+{
+    outWeightsSum += weight;
+    outSamplesCount += 1;
+    const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+    const float probability = weight / outWeightsSum;
+    if (canonicalSample < probability)
+    {
+        outDirection = worldSampleDir;
+        outDesiredPdf = desiredPdf;
+    }
+}
+
+float3
+RisIndirectLight(out float3 outDirection, out float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const uint2 pixel, const uint sampleIndex, const float3 hitPosition, const float3 normal, const uint bufferIndexByPixel)
+{
     for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
     {
         // 1. Generate a sample: Cosine-weighted hemisphere sampling
@@ -546,11 +553,10 @@ RisIndirectLight(const uint2 pixel, const uint sampleIndex, const float3 hitPosi
         const float pdf = dot(worldSampleDir, normal) / PI;
         const float weight = desiredPdf / pdf;
 
-        UpdateIndirectLightReservoir(weight, desiredPdf, worldSampleDir, pixel, sampleIndex, proposalIndex, bufferIndexByPixel);
+        UpdateIndirectLightReservoir(outDirection, outDesiredPdf, outWeightsSum, outSamplesCount, weight, desiredPdf, worldSampleDir, pixel, sampleIndex, proposalIndex, bufferIndexByPixel);
     }
-    const float pdf = gIndirectLightReservoir[bufferIndexByPixel].Pdf;
 
-    return gIndirectLightReservoir[bufferIndexByPixel].WeightSum / (pdf * RESAMPLE_COUNT);
+    return outWeightsSum / (outDesiredPdf * RESAMPLE_COUNT);
 }
 
 float4 
@@ -579,23 +585,32 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
     {
         const float3 brdf = CalculateLambertianDiffuseBrdf(PrimitiveIndex());
         float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
+        float weightsSum = 0.0f;
+        uint samplesCount = 0;
+        if (payload.Depth == BounceDepth)
+        {
+            InitializeParallelogramAreaLightReservoir(bufferIndexByPixel);
+        }
         for (uint sampleIndex = 0; sampleIndex < PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT; ++sampleIndex)
         {
-            const float3 weight = RisParallelogramAreaLight(pixel, sampleIndex, hitPosition, normal, bufferIndexByPixel);
-            const float3 selectedProposalPosition = gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightPositionSample;
-            const float3 selectedProposalNormal = gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightNormalSample;
-            const float pdf = gParallelogramAreaLightReservoir[bufferIndexByPixel].Pdf;
+            float3 samplePosition = float3(0.0f);
+            float3 sampleNormal = float3(0.0f);
+            float desiredPdf = 0.0f;
 
-            const float3 parallelogramAreaLightPosition = selectedProposalPosition;
+            const float3 weight = RisParallelogramAreaLight(samplePosition, sampleNormal, desiredPdf, weightsSum, samplesCount, pixel, sampleIndex, hitPosition, normal, bufferIndexByPixel);
+            if(payload.Depth == BounceDepth)
+            {
+                gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightPositionSample = samplePosition;
+                gParallelogramAreaLightReservoir[bufferIndexByPixel].Pdf = desiredPdf;
+                gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightNormalSample = sampleNormal;
+                gParallelogramAreaLightReservoir[bufferIndexByPixel].Weight = weight;
+            }
+
+            const float3 parallelogramAreaLightPosition = samplePosition;
             const float3 hitPositionToPointLightPosition = parallelogramAreaLightPosition - hitPosition;
             const float distanceSquared = dot(hitPositionToPointLightPosition, hitPositionToPointLightPosition);
             const float distance = sqrt(distanceSquared);
             const float3 worldSampleDir = normalize(parallelogramAreaLightPosition - hitPosition);
-
-            if (dot(worldSampleDir, normal) <= 0.0f)
-            {
-                continue;
-            }
 
             // Trace a ray in the sampled direction.
             RayDesc ray;
@@ -611,18 +626,14 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             {
                 const float3 incomingRadiance = newPayload.Color.rgb;
                 const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
-                const float cosAtLight = max(0.0f, dot(-worldSampleDir, selectedProposalNormal));
+                const float cosAtLight = max(0.0f, dot(-worldSampleDir, sampleNormal));
                 const float geometryTerm = cosAtSurface * cosAtLight / distanceSquared;
                 
                 if (cosAtLight > 0.0f)
                 {
-                    const float pdfInSolidAngle = (distanceSquared / cosAtLight) * pdf;
+                    const float pdfInSolidAngle = (distanceSquared / cosAtLight) * desiredPdf;
                     const float hemisphereCosineWeightedPdf = cosAtSurface / PI;
                     const float misWeight = PowerHeuristic(PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, pdfInSolidAngle, POINT_LIGHT_SAMPLES_COUNT, 0.0f, HEMISPHERE_SAMPLES_COUNT, hemisphereCosineWeightedPdf);
-                    if (payload.Depth == BounceDepth)
-                    {
-                        gParallelogramAreaLightReservoir[bufferIndexByPixel].Weight = weight;
-                    }
                     const float3 integrand = incomingRadiance * geometryTerm * misWeight * weight;
 
                     monteCarloIntegrandSum += integrand;
@@ -632,6 +643,11 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             {
                 gParallelogramAreaLightReservoir[bufferIndexByPixel].Weight = float3(0.0f, 0.0f, 0.0f);
             }
+        }
+        if (payload.Depth == BounceDepth)
+        {
+            gParallelogramAreaLightReservoir[bufferIndexByPixel].WeightSum = weightsSum;
+            gParallelogramAreaLightReservoir[bufferIndexByPixel].SamplesCount = samplesCount;
         }
         parallelogramAreaLightMonteCarloEstimate = (monteCarloIntegrandSum * brdf) / PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT;
     }
@@ -649,22 +665,32 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
         const float3 brdf = CalculateLambertianDiffuseBrdf(PrimitiveIndex());
         float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
         float3 weight = float3(0.0f, 0.0f, 0.0f);
-        float pdf = 0.0f;
+        float desiredPdf = 0.0f;
+        float weightsSum = 0.0f;
+        uint samplesCount = 0;
+        if (payload.Depth == BounceDepth)
+        {
+            InitializePointLightReservoir(bufferIndexByPixel);
+        }
         for (uint sampleIndex = 0; sampleIndex < POINT_LIGHT_SAMPLES_COUNT; ++sampleIndex)
         {
             uint selectedProposalIndex = 0;
             if (RESAMPLE_COUNT <= gSceneConstantBuffer.PointLightInfosCount)
             {
-                weight = RisPointLight(pixel, sampleIndex, hitPosition, normal, bufferIndexByPixel);
-                selectedProposalIndex = gPointLightReservoir[bufferIndexByPixel].LightIndexSample;
-                pdf = gPointLightReservoir[bufferIndexByPixel].Pdf;
+                weight = RisPointLight(selectedProposalIndex, desiredPdf, weightsSum, samplesCount, pixel, sampleIndex, hitPosition, normal, bufferIndexByPixel);
+                if (payload.Depth == BounceDepth)
+                {
+                    gPointLightReservoir[bufferIndexByPixel].Weight = weight;
+                    gPointLightReservoir[bufferIndexByPixel].LightIndexSample = selectedProposalIndex;
+                    gPointLightReservoir[bufferIndexByPixel].Pdf = desiredPdf;
+                }
             }
             else
             {
                 // Algorithm 2: Uniformly sample a point light
                 selectedProposalIndex = RandomInt(pixel, FrameIndex + sampleIndex, 4, gSceneConstantBuffer.PointLightInfosCount);
                 weight = gSceneConstantBuffer.PointLightInfosCount;
-                pdf = 1.0f / gSceneConstantBuffer.PointLightInfosCount;
+                desiredPdf = 1.0f / gSceneConstantBuffer.PointLightInfosCount;
             }
 
             const float3 pointLightPosition = gPointLightInfos[selectedProposalIndex].Positions;
@@ -692,11 +718,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                 // These are 0 because no parallelogram area light sampling nor hemisphere sampling can sample point lights
                 float parallelogramAreaLightPdf = 0.0f;
                 float hemisphereSamplePdf = 0.0f;
-                const float misWeight = PowerHeuristic(POINT_LIGHT_SAMPLES_COUNT, pdf, HEMISPHERE_SAMPLES_COUNT, hemisphereSamplePdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
-                if (payload.Depth == BounceDepth)
-                {
-                    gPointLightReservoir[bufferIndexByPixel].Weight = weight;
-                }
+                const float misWeight = PowerHeuristic(POINT_LIGHT_SAMPLES_COUNT, desiredPdf, HEMISPHERE_SAMPLES_COUNT, hemisphereSamplePdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
                 const float3 integrand = incomingRadiance * geometryTerm * misWeight * weight;
 
                 monteCarloIntegrandSum += integrand;
@@ -705,6 +727,11 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             {
                 gPointLightReservoir[bufferIndexByPixel].Weight = float3(0.0f, 0.0f, 0.0f);
             }
+        }
+        if (payload.Depth == BounceDepth)
+        {
+            gPointLightReservoir[bufferIndexByPixel].WeightSum = weightsSum;
+            gPointLightReservoir[bufferIndexByPixel].SamplesCount = samplesCount;
         }
         pointLightMonteCarloEstimate = (monteCarloIntegrandSum * brdf) / POINT_LIGHT_SAMPLES_COUNT;
     }
@@ -720,11 +747,28 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
         // Note: For other BRDFs, the BRDF would need to be evaluated per sample.
         const float3 brdf = CalculateLambertianDiffuseBrdf(PrimitiveIndex());
         float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
+        if (payload.Depth == BounceDepth)
+        {
+            InitializeIndirectLightReservoir(bufferIndexByPixel);
+        }
+        float weightsSum = 0.0f;
+        uint samplesCount = 0;
+        if(payload.Depth == BounceDepth)
+        {
+            weightsSum = gIndirectLightReservoir[bufferIndexByPixel].WeightSum;
+            samplesCount = gIndirectLightReservoir[bufferIndexByPixel].SamplesCount;
+        }
         for (uint sampleIndex = 0; sampleIndex < HEMISPHERE_SAMPLES_COUNT; ++sampleIndex)
         {
-            const float3 weight = RisIndirectLight(pixel, sampleIndex, hitPosition, normal, bufferIndexByPixel);
-            const float3 worldSampleDir = gIndirectLightReservoir[bufferIndexByPixel].Direction;
-            const float pdf = gIndirectLightReservoir[bufferIndexByPixel].Pdf;
+            float3 worldSampleDir = float3(0.0f);
+            float desiredPdf = 0.0f;
+            const float3 weight = RisIndirectLight(worldSampleDir, desiredPdf, weightsSum, samplesCount, pixel, sampleIndex, hitPosition, normal, bufferIndexByPixel);
+            if(payload.Depth == BounceDepth)
+            {
+                gIndirectLightReservoir[bufferIndexByPixel].Direction = worldSampleDir;
+                gIndirectLightReservoir[bufferIndexByPixel].Pdf = desiredPdf;
+                gIndirectLightReservoir[bufferIndexByPixel].Weight = weight;
+            }
 
             // Trace a ray in the sampled direction.
             RayDesc ray;
@@ -752,14 +796,16 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
                 const float parallelogramArea = length(cross(e1, e2));
                 parallelogramAreaLightPdf = 1.0f / parallelogramArea;
             }
-            
-            const float misWeight = PowerHeuristic(HEMISPHERE_SAMPLES_COUNT, pdf, POINT_LIGHT_SAMPLES_COUNT, pointLightPdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
-            if (payload.Depth == BounceDepth)
-            {
-                gIndirectLightReservoir[bufferIndexByPixel].Weight = weight;
-            }
+
+            const float misWeight = PowerHeuristic(HEMISPHERE_SAMPLES_COUNT, desiredPdf, POINT_LIGHT_SAMPLES_COUNT, pointLightPdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
             const float3 integrand = incomingRadiance * misWeight * weight;
             monteCarloIntegrandSum += integrand;
+        }
+
+        if (payload.Depth == BounceDepth)
+        {
+            gIndirectLightReservoir[bufferIndexByPixel].WeightSum = weightsSum;
+            gIndirectLightReservoir[bufferIndexByPixel].SamplesCount = samplesCount;
         }
         indirectIlluminationMonteCarloEstimate = (monteCarloIntegrandSum * brdf) / HEMISPHERE_SAMPLES_COUNT;
     }

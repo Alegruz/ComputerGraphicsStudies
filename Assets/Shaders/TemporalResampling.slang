@@ -166,7 +166,7 @@ IsEmissive(const uint index)
     return isEmissive;
 }
 
-#if 0
+#if 1
 struct RayPayload
 {
     float4 Color;
@@ -413,6 +413,13 @@ void RayGenMain()
     const float3 position = InterpolateByBarycentric(vertexPositions, barycentrics);
     const float3 normal = InterpolateByBarycentric(vertexNormals, barycentrics);
 
+    float3 emissiveColor = float3(0.0f, 0.0f, 0.0f);
+    if (IsEmissive(primitiveIndex) == 1)
+    {
+        const float tempEmissiveStrength = 40.0f;
+        emissiveColor = gColors[primitiveIndex] * tempEmissiveStrength;
+    }
+
     float3 monteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
 
     float3 neeMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
@@ -420,6 +427,7 @@ void RayGenMain()
     const float3 brdf = CalculateLambertianDiffuseBrdf(primitiveIndex);
     float3 parallelogramAreaLightMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
 #if PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT > 0
+    if(IsEmissive(primitiveIndex) == 0)
     {
         {
             const float desiredPdf = gPrevParallelogramAreaLightReservoir[bufferIndexByPixel].Pdf;
@@ -571,7 +579,7 @@ void RayGenMain()
     monteCarloEstimate += indirectIlluminationMonteCarloEstimate;
 
     // Write the raytraced color to the output texture.
-    float3 sceneLinearColor = monteCarloEstimate.rgb;
+    float3 sceneLinearColor = monteCarloEstimate.rgb + emissiveColor.rgb;
 
     // 1) fireflies/NaNs guard (optional but wise for path tracing)
     sceneLinearColor = max(sceneLinearColor, float3(0.0, 0.0, 0.0)); // avoid NaN and negative values
