@@ -3276,7 +3276,7 @@ namespace cgs
     }
 
     bool
-    createBackBufferSizeUavTextures(std::vector<std::unique_ptr<Texture>>& inoutTextures, const DXGI_FORMAT format, const std::wstring& name, const uint32 index) noexcept
+    createBackBufferSizeUavTextures(std::vector<std::unique_ptr<Texture>>& inoutTextures, const DXGI_FORMAT format, const std::string& name, const uint32 index) noexcept
     {
         HRESULT hr = S_OK;
         if(inoutTextures.size() < BACK_BUFFERS_COUNT)
@@ -3323,8 +3323,7 @@ namespace cgs
                 assert(false && "Failed to create raytracing output resource");
                 return false;
             }
-            const std::wstring resourceName = name + L"[" + std::to_wstring(i) + L"]";
-            createInfo.ParentCreateInfo.Data->SetName(resourceName.c_str());
+            createInfo.ParentCreateInfo.Name = name + "[" + std::to_string(i) + "]";
         }
 
         std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> cpuDescriptorHandles(BACK_BUFFERS_COUNT);
@@ -3350,7 +3349,7 @@ namespace cgs
 
     template<typename T>
     bool
-    createBackBufferSizeUavBuffers(std::vector<std::unique_ptr<RenderResource>>& inoutBuffers, const std::wstring& name, const uint32 index) noexcept
+    createBackBufferSizeUavBuffers(std::vector<std::unique_ptr<RenderResource>>& inoutBuffers, const std::string& name, const uint32 index) noexcept
     {
         HRESULT hr = S_OK;
         if(inoutBuffers.size() < BACK_BUFFERS_COUNT)
@@ -3397,8 +3396,7 @@ namespace cgs
                 assert(false && "Failed to create raytracing output resource");
                 return false;
             }
-            const std::wstring resourceName = name + L"[" + std::to_wstring(i) + L"]";
-            createInfo.Data->SetName(resourceName.c_str());
+            createInfo.Name = name + "[" + std::to_string(i) + "]";
         }
 
         std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> cpuDescriptorHandles(BACK_BUFFERS_COUNT);
@@ -3826,8 +3824,8 @@ namespace cgs
         {       
             // Create the output resource. The dimensions and format should match the swap-chain.
             uint32 descriptorIndex = 0;
-            createBackBufferSizeUavTextures(gRaytracingOutputs, DXGI_FORMAT_R8G8B8A8_UNORM, TEXT("RaytracingOutput"), descriptorIndex++);
-            createBackBufferSizeUavTextures(gRaytracingGBuffers, DXGI_FORMAT_R32G32B32A32_FLOAT, TEXT("RaytracingGBuffer"), descriptorIndex++);
+            createBackBufferSizeUavTextures(gRaytracingOutputs, DXGI_FORMAT_R8G8B8A8_UNORM, "RaytracingOutput", descriptorIndex++);
+            createBackBufferSizeUavTextures(gRaytracingGBuffers, DXGI_FORMAT_R32G32B32A32_FLOAT, "RaytracingGBuffer", descriptorIndex++);
 
             const D3D12_HEAP_PROPERTIES bufferHeapProperties = 
             {
@@ -3890,12 +3888,12 @@ namespace cgs
                 gUploadBuffers[i] = std::make_unique<RenderResource>(std::move(uploadBufferCreateInfo));
             }
 
-            createBackBufferSizeUavBuffers<ParallelogramAreaLightReservoir>(gRaytracingParallelogramAreaLightSampleReservoirs, TEXT("RaytracingParallelogramAreaLightReservoir"), descriptorIndex++);
-            createBackBufferSizeUavBuffers<PointLightReservoir>(gRaytracingPointLightReservoirs, TEXT("RaytracingPointLightReservoir"), descriptorIndex++);
-            createBackBufferSizeUavBuffers<IndirectLightReservoir>(gRaytracingIndirectLightReservoirs, TEXT("RaytracingIndirectLightReservoir"), descriptorIndex++);
-            createBackBufferSizeUavBuffers<ParallelogramAreaLightReservoir>(gRaytracingPrevParallelogramAreaLightSampleReservoirs, TEXT("RaytracingPrevParallelogramAreaLightReservoir"), descriptorIndex++);
-            createBackBufferSizeUavBuffers<PointLightReservoir>(gRaytracingPrevPointLightReservoirs, TEXT("RaytracingPrevPointLightReservoir"), descriptorIndex++);
-            createBackBufferSizeUavBuffers<IndirectLightReservoir>(gRaytracingPrevIndirectLightReservoirs, TEXT("RaytracingPrevIndirectLightReservoir"), descriptorIndex++);
+            createBackBufferSizeUavBuffers<ParallelogramAreaLightReservoir>(gRaytracingParallelogramAreaLightSampleReservoirs, "RaytracingParallelogramAreaLightReservoir", descriptorIndex++);
+            createBackBufferSizeUavBuffers<PointLightReservoir>(gRaytracingPointLightReservoirs, "RaytracingPointLightReservoir", descriptorIndex++);
+            createBackBufferSizeUavBuffers<IndirectLightReservoir>(gRaytracingIndirectLightReservoirs, "RaytracingIndirectLightReservoir", descriptorIndex++);
+            createBackBufferSizeUavBuffers<ParallelogramAreaLightReservoir>(gRaytracingPrevParallelogramAreaLightSampleReservoirs, "RaytracingPrevParallelogramAreaLightReservoir", descriptorIndex++);
+            createBackBufferSizeUavBuffers<PointLightReservoir>(gRaytracingPrevPointLightReservoirs, "RaytracingPrevPointLightReservoir", descriptorIndex++);
+            createBackBufferSizeUavBuffers<IndirectLightReservoir>(gRaytracingPrevIndirectLightReservoirs, "RaytracingPrevIndirectLightReservoir", descriptorIndex++);
         }
 
         gGlobalRenderContext.RenderDeviceType = eRenderDeviceType::D3D12;

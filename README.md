@@ -91,3 +91,5 @@ Target platforms (sorted by priority):
 * **[2025.09.23]**: Fixed a bug where reservoirs were updated for bounced rays. Added spatial resampling draft.
   * Problems:
     * Spatial resampling causes spilling artifacts.
+* **[2025.09.24]**: Fixed reservoir update where each reservoirs must be updated per pixel.
+* **[2025.09.25]**: Fixed GPU resources debug name issue.
