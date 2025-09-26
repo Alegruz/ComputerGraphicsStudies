@@ -93,3 +93,8 @@ Target platforms (sorted by priority):
     * Spatial resampling causes spilling artifacts.
 * **[2025.09.24]**: Fixed reservoir update where each reservoirs must be updated per pixel.
 * **[2025.09.25]**: Fixed GPU resources debug name issue.
+* **[2025.09.26]**: Fixing spatial resampling artifacts.
+  * ![2025.09.26](/Docs/2025_09_26.png)
+  * ![2025.09.26_parallelogram_area_light](/Docs/2025_09_26_parallelogram_area_light.png)
+  * ![2025.09.26_point_light](/Docs/2025_09_26_point_light.png)
+  * ![2025.09.26_indirect_light](/Docs/2025_09_26_indirect_light.png)

@@ -384,7 +384,35 @@ void RayGenMain()
     const uint bufferIndexByPixel = pixel.y * screenSize.x + pixel.x;
 
     const float4 gBufferData = gGBuffers[pixel];
+    const float2 barycentrics = gBufferData.xy;
     const uint primitiveIndex = (uint)gBufferData.z;
+
+    // Get the base index of the triangle's first 16 bit index.
+    const uint indexSizeInBytes = 2;
+    const uint indicesPerTriangle = 3;
+    const uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
+    const uint baseIndex = primitiveIndex * triangleIndexStride;
+
+    // Load up 3 16 bit indices for the triangle.
+    const uint3 indices = Load3x16BitIndices(baseIndex);
+
+    const float3 vertexPositions[3] =
+        {
+            gVertices[indices[0]].Position,
+            gVertices[indices[1]].Position,
+            gVertices[indices[2]].Position
+        };
+
+    // Retrieve corresponding vertex normals for the triangle vertices.
+    const float3 vertexNormals[3] =
+        {
+            gVertices[indices[0]].Normal,
+            gVertices[indices[1]].Normal,
+            gVertices[indices[2]].Normal
+        };
+
+    const float3 position = InterpolateByBarycentric(vertexPositions, barycentrics);
+    const float3 normal = InterpolateByBarycentric(vertexNormals, barycentrics);
     
 #if PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT > 0
     if(IsEmissive(primitiveIndex) == 0)
@@ -396,7 +424,23 @@ void RayGenMain()
             UpdateParallelogramAreaLightReservoir(reservoir, gParallelogramAreaLightReservoir[bufferIndexByPixel], pixel, bufferIndexByPixel);
             UpdateParallelogramAreaLightReservoir(reservoir, gPrevParallelogramAreaLightReservoir[bufferIndexByPixel], pixel, bufferIndexByPixel);
 
-            reservoir.Weight = reservoir.WeightSum / (reservoir.Pdf * reservoir.SamplesCount);
+            ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[0];
+            const float3 incomingRadiance = lightInfo.Color.rgb * 40.0f;
+
+            const float3 parallelogramAreaLightPosition = reservoir.ParallelogramAreaLightPositionSample;
+            const float3 hitPositionToParallelogramAreaLightPosition = parallelogramAreaLightPosition - position;
+            const float distanceSquared = dot(hitPositionToParallelogramAreaLightPosition, hitPositionToParallelogramAreaLightPosition);
+            const float distance = sqrt(distanceSquared);
+            const float3 worldSampleDir = normalize(parallelogramAreaLightPosition - position);
+            const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
+            const float3 triangleNormal = reservoir.ParallelogramAreaLightNormalSample;
+            const float cosAtLight = max(0.0f, dot(-worldSampleDir, triangleNormal));
+            const float geometryTerm = cosAtSurface * cosAtLight / distanceSquared;
+            const float desiredPdf = ConvertColorToLuminance(incomingRadiance * geometryTerm);
+            reservoir.Pdf = desiredPdf;
+
+            const float dividend = reservoir.Pdf * reservoir.SamplesCount;
+            reservoir.Weight = dividend == 0.0f ? 0.0f : reservoir.WeightSum / dividend;
             gPrevParallelogramAreaLightReservoir[bufferIndexByPixel] = reservoir;
         }
     }
@@ -411,7 +455,22 @@ void RayGenMain()
             UpdatePointLightReservoir(reservoir, gPointLightReservoir[bufferIndexByPixel], pixel, bufferIndexByPixel);
             UpdatePointLightReservoir(reservoir, gPrevPointLightReservoir[bufferIndexByPixel], pixel, bufferIndexByPixel);
 
-            reservoir.Weight = reservoir.WeightSum / (reservoir.Pdf * reservoir.SamplesCount);
+            const uint pointLightIndex = reservoir.LightIndexSample;
+            const float pointLightStrength = 1000.0f;
+            const float3 incomingRadiance = gPointLightInfos[pointLightIndex].Color * pointLightStrength;
+
+            const float3 pointLightPosition = gPointLightInfos[pointLightIndex].Positions;
+            const float3 hitPositionToPointLightPosition = pointLightPosition - position;
+            const float distanceSquared = dot(hitPositionToPointLightPosition, hitPositionToPointLightPosition);
+            const float3 worldSampleDir = normalize(pointLightPosition - position);
+
+            const float geometryTerm = dot(worldSampleDir, normal) / distanceSquared;
+            const float3 integrand = incomingRadiance * geometryTerm;
+            const float desiredPdf = ConvertColorToLuminance(integrand);
+            reservoir.Pdf = desiredPdf;
+
+            const float dividend = reservoir.Pdf * reservoir.SamplesCount;
+            reservoir.Weight = dividend == 0.0f ? 0.0f : reservoir.WeightSum / dividend;
             gPrevPointLightReservoir[bufferIndexByPixel] = reservoir;
         }
     }
@@ -426,7 +485,14 @@ void RayGenMain()
             UpdateIndirectLightReservoir(reservoir, gIndirectLightReservoir[bufferIndexByPixel], pixel, bufferIndexByPixel);
             UpdateIndirectLightReservoir(reservoir, gPrevIndirectLightReservoir[bufferIndexByPixel], pixel, bufferIndexByPixel);
 
-            reservoir.Weight = reservoir.WeightSum / (reservoir.Pdf * reservoir.SamplesCount);
+            const float3 worldSampleDir = reservoir.Direction;
+
+            const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
+            const float desiredPdf = cosAtSurface;
+            reservoir.Pdf = desiredPdf;
+
+            const float dividend = reservoir.Pdf * reservoir.SamplesCount;
+            reservoir.Weight = dividend == 0.0f ? 0.0f : reservoir.WeightSum / dividend;
             gPrevIndirectLightReservoir[bufferIndexByPixel] = reservoir;
         }
     }

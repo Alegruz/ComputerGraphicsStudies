@@ -433,10 +433,13 @@ void RayGenMain()
     if (IsEmissive(primitiveIndex) == 0)
     {
         // Spatial
+#if SPATIAL_NEIGHBORS_COUNT > 0
         for (uint resampleIndex = 0; resampleIndex < SPATIAL_NEIGHBORS_COUNT; ++resampleIndex)
         {
             const int spatialNeighborX = (int)RandomInt(pixel, FrameIndex + resampleIndex * 7, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
             const int spatialNeighborY = (int)RandomInt(pixel, FrameIndex + resampleIndex * 11, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
+            // const int spatialNeighborX = 1;           
+            // const int spatialNeighborY = 0;
 
             const uint2 spatialNeighborPixel = (uint2)clamp((int2)pixel + int2(spatialNeighborX, spatialNeighborY), int2(0, 0), int2(screenSize) - int2(1, 1));
             const uint spatialNeighborBufferIndex = spatialNeighborPixel.y * screenSize.x + spatialNeighborPixel.x;
@@ -453,15 +456,39 @@ void RayGenMain()
                 continue;
             }
 
+            const float3 selectedProposalPosition = gPrevParallelogramAreaLightReservoir[spatialNeighborBufferIndex].ParallelogramAreaLightPositionSample;
+            float3 parallelogramAreaLightPosition = selectedProposalPosition;
+            float3 worldSampleDir = normalize(parallelogramAreaLightPosition - position);
+            if(dot(worldSampleDir, normal) <= 0.0f)
+            {
+                continue;
+            }
+
             ParallelogramAreaLightReservoir reservoir = (ParallelogramAreaLightReservoir)0;
 
             UpdateParallelogramAreaLightReservoir(reservoir, gParallelogramAreaLightReservoir[bufferIndexByPixel], pixel, bufferIndexByPixel);
             UpdateParallelogramAreaLightReservoir(reservoir, gPrevParallelogramAreaLightReservoir[spatialNeighborBufferIndex], pixel, bufferIndexByPixel);
 
-            reservoir.Weight = reservoir.WeightSum / (reservoir.Pdf * reservoir.SamplesCount);
-            gParallelogramAreaLightReservoir[bufferIndexByPixel] = reservoir;
+            ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[0];
+            const float3 incomingRadiance = lightInfo.Color.rgb * 40.0f;
 
+            parallelogramAreaLightPosition = reservoir.ParallelogramAreaLightPositionSample;
+            const float3 hitPositionToParallelogramAreaLightPosition = parallelogramAreaLightPosition - position;
+            const float distanceSquared = dot(hitPositionToParallelogramAreaLightPosition, hitPositionToParallelogramAreaLightPosition);
+            const float distance = sqrt(distanceSquared);
+            worldSampleDir = normalize(parallelogramAreaLightPosition - position);
+            const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
+            const float3 triangleNormal = reservoir.ParallelogramAreaLightNormalSample;
+            const float cosAtLight = max(0.0f, dot(-worldSampleDir, triangleNormal));
+            const float geometryTerm = cosAtSurface * cosAtLight / distanceSquared;
+            const float desiredPdf = ConvertColorToLuminance(incomingRadiance * geometryTerm);
+            reservoir.Pdf = desiredPdf;
+
+            const float dividend = reservoir.Pdf * reservoir.SamplesCount;
+            reservoir.Weight = dividend == 0.0f ? 0.0f : reservoir.WeightSum / dividend;
+            gParallelogramAreaLightReservoir[bufferIndexByPixel] = reservoir;
         }
+#endif // SPATIAL_NEIGHBORS_COUNT > 0
 
         const float3 selectedProposalPosition = gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightPositionSample;
         const float3 selectedProposalNormal = gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightNormalSample;
@@ -510,7 +537,8 @@ void RayGenMain()
     float3 pointLightMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
 #if POINT_LIGHT_SAMPLES_COUNT > 0
     {
-        // Spatial
+    // Spatial
+#if SPATIAL_NEIGHBORS_COUNT > 0
         for (uint resampleIndex = 0; resampleIndex < SPATIAL_NEIGHBORS_COUNT; ++resampleIndex)
         {
             const int spatialNeighborX = (int)RandomInt(pixel, FrameIndex + resampleIndex * 7, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
@@ -536,9 +564,25 @@ void RayGenMain()
             UpdatePointLightReservoir(reservoir, gPointLightReservoir[bufferIndexByPixel], pixel, bufferIndexByPixel);
             UpdatePointLightReservoir(reservoir, gPrevPointLightReservoir[spatialNeighborBufferIndex], pixel, bufferIndexByPixel);
 
-            reservoir.Weight = reservoir.WeightSum / (reservoir.Pdf * reservoir.SamplesCount);
+            const uint pointLightIndex = reservoir.LightIndexSample;
+            const float pointLightStrength = 1000.0f;
+            const float3 incomingRadiance = gPointLightInfos[pointLightIndex].Color * pointLightStrength;
+
+            const float3 pointLightPosition = gPointLightInfos[pointLightIndex].Positions;
+            const float3 hitPositionToPointLightPosition = pointLightPosition - position;
+            const float distanceSquared = dot(hitPositionToPointLightPosition, hitPositionToPointLightPosition);
+            const float3 worldSampleDir = normalize(pointLightPosition - position);
+
+            const float geometryTerm = dot(worldSampleDir, normal) / distanceSquared;
+            const float3 integrand = incomingRadiance * geometryTerm;
+            const float desiredPdf = ConvertColorToLuminance(integrand);
+            reservoir.Pdf = desiredPdf;
+
+            const float dividend = reservoir.Pdf * reservoir.SamplesCount;
+            reservoir.Weight = dividend == 0.0f ? 0.0f : reservoir.WeightSum / dividend;
             gPointLightReservoir[bufferIndexByPixel] = reservoir;
         }
+#endif  // SPATIAL_NEIGHBORS_COUNT > 0
 
         const uint selectedProposalIndex = gPointLightReservoir[bufferIndexByPixel].LightIndexSample;
         const float pdf = gPointLightReservoir[bufferIndexByPixel].Pdf;
@@ -584,6 +628,7 @@ void RayGenMain()
 #if HEMISPHERE_SAMPLES_COUNT > 0
     {
         // Spatial
+#if SPATIAL_NEIGHBORS_COUNT > 0
         for (uint resampleIndex = 0; resampleIndex < SPATIAL_NEIGHBORS_COUNT; ++resampleIndex)
         {
             const int spatialNeighborX = (int)RandomInt(pixel, FrameIndex + resampleIndex * 7, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
@@ -610,9 +655,17 @@ void RayGenMain()
             UpdateIndirectLightReservoir(reservoir, gIndirectLightReservoir[bufferIndexByPixel], pixel, bufferIndexByPixel);
             UpdateIndirectLightReservoir(reservoir, gPrevIndirectLightReservoir[spatialNeighborBufferIndex], pixel, bufferIndexByPixel);
 
-            reservoir.Weight = reservoir.WeightSum / (reservoir.Pdf * reservoir.SamplesCount);
+            const float3 worldSampleDir = reservoir.Direction;
+
+            const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
+            const float desiredPdf = cosAtSurface;
+            reservoir.Pdf = desiredPdf;
+
+            const float dividend = reservoir.Pdf * reservoir.SamplesCount;
+            reservoir.Weight = dividend == 0.0f ? 0.0f : reservoir.WeightSum / dividend;
             gIndirectLightReservoir[bufferIndexByPixel] = reservoir;
         }
+#endif // SPATIAL_NEIGHBORS_COUNT > 0
 
         const float3 weight = gIndirectLightReservoir[bufferIndexByPixel].Weight;
         const float3 worldSampleDir = gIndirectLightReservoir[bufferIndexByPixel].Direction;
