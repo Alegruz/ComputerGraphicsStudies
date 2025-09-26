@@ -388,9 +388,9 @@ void RayGenMain()
     const float4 gBufferData = gGBuffers[pixel];
     const float2 barycentrics = gBufferData.xy;
     const uint primitiveIndex = (uint)gBufferData.z;
-    
+
     float3 sceneLinearColor = float3(0.0f, 0.0f, 0.0f);
-    if (primitiveIndex >= 0.0f)
+    if (gBufferData.z >= 0.0f)
     {
         // Get the base index of the triangle's first 16 bit index.
         const uint indexSizeInBytes = 2;

@@ -387,6 +387,11 @@ void RayGenMain()
     const float2 barycentrics = gBufferData.xy;
     const uint primitiveIndex = (uint)gBufferData.z;
 
+    if (gBufferData.z < 0.0f)
+    {
+        return;
+    }
+
     // Get the base index of the triangle's first 16 bit index.
     const uint indexSizeInBytes = 2;
     const uint indicesPerTriangle = 3;
