@@ -98,3 +98,7 @@ Target platforms (sorted by priority):
   * ![2025.09.26_parallelogram_area_light](/Docs/2025_09_26_parallelogram_area_light.png)
   * ![2025.09.26_point_light](/Docs/2025_09_26_point_light.png)
   * ![2025.09.26_indirect_light](/Docs/2025_09_26_indirect_light.png)
+* **[2025.09.27]**: skipped
+* **[2025.09.28]**: validating algorithms.
+  * Problems:
+    * Spatial resampling still cause problems such as spilling artifacts and sudden whitening of the scene.
