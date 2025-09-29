@@ -102,3 +102,6 @@ Target platforms (sorted by priority):
 * **[2025.09.28]**: validating algorithms.
   * Problems:
     * Spatial resampling still cause problems such as spilling artifacts and sudden whitening of the scene.
+* **[2025.09.29]**: Debugging.
+  * Debugging Results:
+    * The issue is not just spatial resampling. When I enable only temporal resampling, the results seems fine. If I enable only spatial resampling, the results has some issues, but it doesn't seem as bad as when both temporal and spatial resampling are enabled. This means that the issue is probably in the interaction between temporal and spatial resampling.
