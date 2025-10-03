@@ -99,7 +99,6 @@ namespace cgs
                                 const uint32 subRenderThreadIndex = tileIndex % subRenderThreadsCount;
                                 finalTileIndicesPerThread[subRenderThreadIndex] = tileIndex;
 
-#if 1
                                 hasSubmittedJob = true;
                                 std::lock_guard<std::mutex> lock(gSubRenderThreads[subRenderThreadIndex].RenderWorksMutex);
                                 gSubRenderThreads[subRenderThreadIndex].SubRenderWorks.push(
@@ -118,23 +117,6 @@ namespace cgs
                                         .WorkIndex = tileIndex,
                                     }
                                     );
-#else
-                                SubRenderWork subRenderWork
-                                {
-                                    .ParentRenderWork = renderWork,
-                                    .CurrentGeometry = *geometry,
-                                    .EmissiveGeometry = emissiveGeometry,
-                                    .V0 = v0,
-                                    .V1 = v1,
-                                    .V2 = v2,
-                                    .MinX = minX,
-                                    .MaxX = maxX,
-                                    .MinY = minY,
-                                    .MaxY = maxY,
-                                    .WorkIndex = tileIndex,
-                                };
-                                SubRasterize(subRenderWork);
-#endif
                             }
                         }
                     }
