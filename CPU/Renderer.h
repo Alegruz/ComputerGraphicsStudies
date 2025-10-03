@@ -426,6 +426,9 @@ namespace cgs
     Rasterize(CpuRenderWork& renderWork) noexcept;
 
     void
+    Raytrace(CpuRenderWork& renderWork) noexcept;
+
+    void
     SubRasterize(SubRenderWork& work) noexcept;
 }   // namespace cgs
 #endif  // defined(CGS_GRAPHICS_API_CPU)

@@ -407,6 +407,12 @@ namespace cgs
     }
 
     void
+    Raytrace(CpuRenderWork&) noexcept
+    {
+        assert(false && "Not yet implemented");
+    }
+
+    void
     Render(const float deltaTime, uint64& inoutWorkIndex, RenderThreadInfo& inoutRenderThreadInfo, const std::vector<std::unique_ptr<Geometry>>& geometries) noexcept
     {
         const uint32 currentFrameIndexToRender = static_cast<uint32>(inoutWorkIndex % 3);
@@ -504,7 +510,9 @@ namespace cgs
                 }
                 else
                 {
-                    assert(false && "Unsupported render method in RenderThreadMain");
+                    renderThreadInfo.CurrentWorkIndex.store(renderWork.WorkIndex);
+                    Raytrace(cpuRenderWork);
+                    renderThreadInfo.LastCompleteWorkIndex.store(renderWork.WorkIndex);
                 }
             }
             else
