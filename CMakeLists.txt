@@ -185,10 +185,15 @@ elseif(CGS_LINUX)
     target_compile_definitions(ComputerGraphicsStudies PRIVATE CGS_LINUX)
 endif()
 
-
-add_custom_command(TARGET ComputerGraphicsStudies POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:ComputerGraphicsStudies>" "${CMAKE_CURRENT_LIST_DIR}/${CMAKE_PROJECT_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
+# Copy the built executable into the repo root after every build
+set(_dst "${CMAKE_SOURCE_DIR}/${CMAKE_PROJECT_NAME}${CMAKE_EXECUTABLE_SUFFIX}")
+message(STATUS "dst: ${_dst}")
+add_custom_command(
+    TARGET ComputerGraphicsStudies POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:ComputerGraphicsStudies>" "${_dst}"
 )
+
+message(STATUS "COPY DIR ${CMAKE_CURRENT_LIST_DIR}/${CMAKE_PROJECT_NAME}${CMAKE_EXECUTABLE_SUFFIX}")
 if(CGS_WINDOWS)
     # Copy all DLLs from build directory to output directory
     file(GLOB DLL_FILES "${CMAKE_BINARY_DIR}/*.dll")

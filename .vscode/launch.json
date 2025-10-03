@@ -26,21 +26,25 @@
         {
             "type": "cppdbg",
             "request": "launch",
-            "name": "Debug LauncherApp (clang-Debug)",
+            "name": "Debug ComputerGraphicsStudies (UNIX-rasterization)",
             "program": "${workspaceFolder}/ComputerGraphicsStudies",
             "cwd": "${workspaceFolder}",
             "stopAtEntry": true,
             "args": [
-                "-v"
+                "-r", "rasterization"
             ]
         },
         {
             "type": "cppdbg",
             "request": "launch",
-            "name": "Debug LauncherApp (clang-Release)",
+            "name": "Debug ComputerGraphicsStudies (UNIX-raytracing)",
             "program": "${workspaceFolder}/ComputerGraphicsStudies",
             "cwd": "${workspaceFolder}",
             "stopAtEntry": true,
-        }
+            "args": [
+                "-r",
+                "raytracing"
+            ]
+        },
     ]
 }
