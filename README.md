@@ -202,3 +202,7 @@ Target platforms (sorted by priority):
 * **[2025.09.29]**: Debugging.
   * Debugging Results:
     * The issue is not just spatial resampling. When I enable only temporal resampling, the results seems fine. If I enable only spatial resampling, the results has some issues, but it doesn't seem as bad as when both temporal and spatial resampling are enabled. This means that the issue is probably in the interaction between temporal and spatial resampling.
+* **[2025.09.30]**: Travel break.
+* **[2025.10.01]**: Travel break.
+* **[2025.10.02]**: Travel break.
+* **[2025.10.03]**: Code cleanup on UNIX build.
