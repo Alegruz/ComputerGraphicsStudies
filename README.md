@@ -1,7 +1,104 @@
 # 🛠️ ComputerGraphicsStudies [WIP]
 
-![status](https://img.shields.io/badge/status-WIP-orange)
+![status](https://img.shields.io/badge/status-Active-success)
 ![focus](https://img.shields.io/badge/focus-RealTimeGlobalIllumination-blue)
+![platform](https://img.shields.io/badge/platform-Windows%20|%20Linux-lightgrey)
+![api](https://img.shields.io/badge/API-Direct3D12-green)
+
+## 🎯 Overview
+
+This project implements **ReSTIR (Resampled Importance Sampling)** and **ReSTIR GI** in a custom-built Vulkan/D3D12 renderer.  
+It aims to achieve **real-time multi-bounce global illumination** with *spatial and temporal resampling, reservoir sampling, and importance-driven light sampling* — all implemented from first principles.
+
+---
+
+## 🖼️ Visual Demo
+
+<table>
+<tr>
+<td><img src="/Docs/2025_09_21.png" width="380"/></td>
+<td><img src="/Docs/2025_09_26_indirect_light.png" width="380"/></td>
+</tr>
+<tr><td align="center">Temporal + Spatial Reuse</td><td align="center">3-Bounce Indirect Illumination</td></tr>
+</table>
+
+▶️ [YouTube Demo – Temporal Reuse (Sept 21, 2025)](https://youtu.be/T5tYhoAHzLU?si=QjRvoQsYwbGVvsPR)  
+▶️ [YouTube Demo – Indirect Light (Sept 26, 2025)](https://youtu.be/OTc1I7WVSt0?si=H8-nFEEiRDQ9RRfz)
+
+---
+
+
+## ⚙️ Performance
+
+| Configuration | GPU | Resolution | GI Bounces | Avg FPS |
+|----------------|-----|-------------|-------------|----------|
+| ReSTIR GI (Temporal + Spatial) | RTX 3060 Laptop | 1920×1080 | 3 | ~60 FPS |
+| ReSTIR (Temporal Only) | RTX 3060 Laptop | 1920×1080 | 3 | ~72 FPS |
+
+---
+
+## 🔬 Techniques Implemented
+
+- **Reservoir Sampling** (weighted random selection)
+- **Resampled Importance Sampling (RIS)**
+- **ReSTIR / ReSTIR GI** (temporal + spatial reuse)
+- **Multiple Importance Sampling (MIS)**
+- **Monte Carlo Integration**
+- **Parallelogram Area Light Sampling**
+- **Stratified Sampling (in progress)**
+- **Möller–Trumbore Intersection**
+- **PDF Stabilization**
+- **Denoising Pipeline (planned)**
+- **BSDF Evaluation (Lambertian, Emissive, in progress)**
+
+---
+
+## 📚 Write-Up
+
+A detailed technical write-up covering:
+- Mathematical derivation of ReSTIR
+- Reservoir update & bias correction
+- Implementation details in Vulkan & D3D12
+- Debugging process and validation images
+
+> 📝 *The write-up will be published soon on my personal site and linked here.*
+
+---
+
+## 🧩 Project Structure
+
+* /Assets
+  * shader files
+* /Common
+  * Common implementation shared across platforms
+* /Core
+  * Core subsystem such as math
+* /CPU
+  * CPU render device implementation
+* /D3D12
+  * Direct3D 12 render device implementation
+* /Docs
+  * Images
+* /Linux
+  * Linux application implementation
+* /Win32
+  * Win32 application implementation
+
+---
+
+## 🗂️ Repository Info
+
+- **License:** MIT  
+- **Language:** C++20 / Slang  
+- **Status:** Active Development  
+- **Platforms:** Windows, Linux  
+- **APIs:** Vulkan, Direct3D 12  
+- **Status:** Active Development  
+- **Platforms:** Windows, Linux  
+- **APIs:** Vulkan, Direct3D 12  
+- **Build System:** CMake (cross-platform)  
+
+---
 
 ## Development philosophy of the `develop` branch
 
