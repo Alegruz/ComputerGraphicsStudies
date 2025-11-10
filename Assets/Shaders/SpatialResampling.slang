@@ -102,7 +102,7 @@ void RayGenMain()
             const float3 selectedProposalPosition = gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightPositionSample;
             const float3 selectedProposalNormal = gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightNormalSample;
             const float pdf = gParallelogramAreaLightReservoir[bufferIndexByPixel].Pdf;
-            const float3 weight = gParallelogramAreaLightReservoir[bufferIndexByPixel].Weight;
+            const float weight = gParallelogramAreaLightReservoir[bufferIndexByPixel].Weight;
 
             const float3 parallelogramAreaLightPosition = selectedProposalPosition;
             const float3 hitPositionToPointLightPosition = parallelogramAreaLightPosition - position;
@@ -178,7 +178,7 @@ void RayGenMain()
 
             const uint selectedProposalIndex = gPointLightReservoir[bufferIndexByPixel].LightIndexSample;
             const float pdf = gPointLightReservoir[bufferIndexByPixel].Pdf;
-            const float3 weight = gPointLightReservoir[bufferIndexByPixel].Weight;
+            const float weight = gPointLightReservoir[bufferIndexByPixel].Weight;
             const float3 pointLightPosition = gPointLightInfos[selectedProposalIndex].Positions;
             const float3 hitPositionToPointLightPosition = pointLightPosition - position;
             const float distanceSquared = dot(hitPositionToPointLightPosition, hitPositionToPointLightPosition);
@@ -250,7 +250,7 @@ void RayGenMain()
             }
 #endif // SPATIAL_NEIGHBORS_COUNT > 0
 
-            const float3 weight = gIndirectLightReservoir[bufferIndexByPixel].Weight;
+            const float weight = gIndirectLightReservoir[bufferIndexByPixel].Weight;
             const float3 worldSampleDir = gIndirectLightReservoir[bufferIndexByPixel].Direction;
             const float pdf = gIndirectLightReservoir[bufferIndexByPixel].Pdf;
 
@@ -298,8 +298,8 @@ void RayGenMain()
     }
 
     // 1) fireflies/NaNs guard (optional but wise for path tracing)
-    sceneLinearColor = max(sceneLinearColor, float3(0.0, 0.0, 0.0)); // avoid NaN and negative values
-    sceneLinearColor = min(sceneLinearColor, float3(1e6, 1e6, 1e6)); // avoid INF
+    // sceneLinearColor = max(sceneLinearColor, float3(0.0, 0.0, 0.0)); // avoid NaN and negative values
+    // sceneLinearColor = min(sceneLinearColor, float3(1e6, 1e6, 1e6)); // avoid INF
 
     // 2) exposure (tweak per scene/camera)
     sceneLinearColor = ApplyExposure(sceneLinearColor, /*exposureEV*/ 0.0);

@@ -22,7 +22,7 @@ UpdateParallelogramAreaLightReservoir(out float3 outPosition, out float3 outNorm
     }
 }
 
-float3
+float
 RisParallelogramAreaLight(out float3 outPosition, out float3 outNormal, out float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const uint2 pixel, const uint sampleIndex, const float3 hitPosition, const float3 normal, const uint bufferIndexByPixel)
 {
     const uint parallelogramLightIndex = 0;
@@ -135,7 +135,7 @@ UpdatePointLightReservoir(out uint outLightIndexSample, out float outDesiredPdf,
     }
 }
 
-float3
+float
 RisPointLight(out uint outLightIndexSample, out float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const uint2 pixel, const uint sampleIndex, const float3 hitPosition, const float3 normal, const uint bufferIndexByPixel)
 {
     for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
@@ -178,7 +178,7 @@ UpdateIndirectLightReservoir(out float3 outDirection, out float outDesiredPdf, i
     }
 }
 
-float3
+float
 RisIndirectLight(out float3 outDirection, out float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const uint2 pixel, const uint sampleIndex, const float3 hitPosition, const float3 normal, const uint bufferIndexByPixel)
 {
     for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
@@ -249,7 +249,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             float3 sampleNormal = float3(0.0f);
             float desiredPdf = 0.0f;
 
-            const float3 weight = RisParallelogramAreaLight(samplePosition, sampleNormal, desiredPdf, weightsSum, samplesCount, pixel, sampleIndex, hitPosition, normal, bufferIndexByPixel);
+            const float weight = RisParallelogramAreaLight(samplePosition, sampleNormal, desiredPdf, weightsSum, samplesCount, pixel, sampleIndex, hitPosition, normal, bufferIndexByPixel);
             if(payload.Depth == BounceDepth)
             {
                 gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightPositionSample = samplePosition;
@@ -310,7 +310,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             }
             else if (payload.Depth == BounceDepth)
             {
-                gParallelogramAreaLightReservoir[bufferIndexByPixel].Weight = float3(0.0f, 0.0f, 0.0f);
+                gParallelogramAreaLightReservoir[bufferIndexByPixel].Weight = 0.0f;
             }
         }
         if (payload.Depth == BounceDepth)
@@ -333,7 +333,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
         // Note: For other BRDFs, the BRDF would need to be evaluated per sample.
         const float3 brdf = CalculateLambertianDiffuseBrdf(PrimitiveIndex());
         float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
-        float3 weight = float3(0.0f, 0.0f, 0.0f);
+        float weight = 0.0f;
         float desiredPdf = 0.0f;
         float weightsSum = 0.0f;
         uint samplesCount = 0;
@@ -391,7 +391,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             }
             else if (payload.Depth == BounceDepth)
             {
-                gPointLightReservoir[bufferIndexByPixel].Weight = float3(0.0f, 0.0f, 0.0f);
+                gPointLightReservoir[bufferIndexByPixel].Weight = 0.0f;
             }
         }
         if (payload.Depth == BounceDepth)
@@ -424,7 +424,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
         {
             float3 worldSampleDir = float3(0.0f);
             float desiredPdf = 0.0f;
-            const float3 weight = RisIndirectLight(worldSampleDir, desiredPdf, weightsSum, samplesCount, pixel, sampleIndex, hitPosition, normal, bufferIndexByPixel);
+            const float weight = RisIndirectLight(worldSampleDir, desiredPdf, weightsSum, samplesCount, pixel, sampleIndex, hitPosition, normal, bufferIndexByPixel);
             if(payload.Depth == BounceDepth)
             {
                 gIndirectLightReservoir[bufferIndexByPixel].Direction = worldSampleDir;
@@ -464,7 +464,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             }
             else if (payload.Depth == BounceDepth)
             {
-                gIndirectLightReservoir[bufferIndexByPixel].Weight = float3(0.0f, 0.0f, 0.0f);
+                gIndirectLightReservoir[bufferIndexByPixel].Weight = 0.0f;
             }
         }
 

@@ -62,13 +62,13 @@ namespace cgs
         float3 ParallelogramAreaLightNormalSample;
         float WeightSum;
 
-        float3 Weight;
+        float Weight;
         uint32 SamplesCount;
     };
 
     struct PointLightReservoir final
     {
-        float3 Weight;
+        float Weight;
         uint32 LightIndexSample;
 
         float WeightSum;
@@ -82,7 +82,7 @@ namespace cgs
         float3 Direction;
         float Pdf;
 
-        float3 Weight;
+        float Weight;
         float WeightSum;
 
         uint32 SamplesCount;

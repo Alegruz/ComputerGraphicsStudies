@@ -2,7 +2,7 @@
 #define PI              (3.1415926535897f)
 
 #define PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT (1)
-#define POINT_LIGHT_SAMPLES_COUNT (1)
+#define POINT_LIGHT_SAMPLES_COUNT (0)
 #define HEMISPHERE_SAMPLES_COUNT (0)
 #define RESAMPLE_COUNT (8)
 #define SPATIAL_NEIGHBORHOOD_RADIUS_RATE (1.0f / 128.0f)
@@ -43,13 +43,13 @@ struct ParallelogramAreaLightReservoir
     float3 ParallelogramAreaLightNormalSample;
     float WeightSum;
 
-    float3 Weight;
+    float Weight;
     uint SamplesCount;
 };
 
 struct PointLightReservoir
 {
-    float3 Weight;
+    float Weight;
     uint LightIndexSample;
 
     float WeightSum;
@@ -63,7 +63,7 @@ struct IndirectLightReservoir
     float3 Direction;
     float Pdf;
 
-    float3 Weight;
+    float Weight;
     float WeightSum;
 
     uint SamplesCount;
@@ -363,7 +363,7 @@ InitializeIndirectLightReservoir(out IndirectLightReservoir reservoir)
 void
 UpdateParallelogramAreaLightReservoir(inout ParallelogramAreaLightReservoir inoutReservoir, const ParallelogramAreaLightReservoir reservoir, const uint2 pixel, const uint bufferIndexByPixel)
 {
-    const float weight = ConvertColorToLuminance(reservoir.Weight * reservoir.Pdf) * reservoir.SamplesCount;
+    const float weight = reservoir.Weight * reservoir.Pdf * reservoir.SamplesCount;
     inoutReservoir.WeightSum += weight;
     inoutReservoir.SamplesCount += reservoir.SamplesCount;
     const float canonicalSample = CanonicalSample(pixel, FrameIndex + reservoir.SamplesCount * bufferIndexByPixel * 17, 4);
@@ -379,7 +379,7 @@ UpdateParallelogramAreaLightReservoir(inout ParallelogramAreaLightReservoir inou
 void
 UpdatePointLightReservoir(inout PointLightReservoir inoutReservoir, const PointLightReservoir reservoir, const uint2 pixel, const uint bufferIndexByPixel)
 {
-    const float weight = ConvertColorToLuminance(reservoir.Weight * reservoir.Pdf) * reservoir.SamplesCount;
+    const float weight = reservoir.Weight * reservoir.Pdf * reservoir.SamplesCount;
     inoutReservoir.WeightSum += weight;
     inoutReservoir.SamplesCount += reservoir.SamplesCount;
     const float canonicalSample = CanonicalSample(pixel, FrameIndex + reservoir.SamplesCount * bufferIndexByPixel * 23, 4);
@@ -394,7 +394,7 @@ UpdatePointLightReservoir(inout PointLightReservoir inoutReservoir, const PointL
 void
 UpdateIndirectLightReservoir(inout IndirectLightReservoir inoutReservoir, const IndirectLightReservoir reservoir, const uint2 pixel, const uint bufferIndexByPixel)
 {
-    const float weight = ConvertColorToLuminance(reservoir.Weight * reservoir.Pdf) * reservoir.SamplesCount;
+    const float weight = reservoir.Weight * reservoir.Pdf * reservoir.SamplesCount;
     inoutReservoir.WeightSum += weight;
     inoutReservoir.SamplesCount += reservoir.SamplesCount;
     const float canonicalSample = CanonicalSample(pixel, FrameIndex + reservoir.SamplesCount * 17, 4);
@@ -434,11 +434,9 @@ CombineParallelogramAreaLightReservoirs(inout ParallelogramAreaLightReservoir in
     ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[0];
     const float3 incomingRadiance = lightInfo.Color.rgb * 40.0f;
 
-    const float otherPdf = otherReservoir.Pdf;
     otherReservoir.Pdf = ParallelogramAreaLightDesiredPdf(lightInfo, otherReservoir, position, normal);
 
-    UpdateParallelogramAreaLightReservoir(inoutReservoir, gPrevParallelogramAreaLightReservoir[bufferIndexByPixel1], pixel1, bufferIndexByPixel1);
-    otherReservoir.Pdf = otherPdf;
+    UpdateParallelogramAreaLightReservoir(inoutReservoir, otherReservoir, pixel1, bufferIndexByPixel1);
 
     inoutReservoir.Pdf = ParallelogramAreaLightDesiredPdf(lightInfo, inoutReservoir, position, normal);
     const float dividend = inoutReservoir.Pdf * inoutReservoir.SamplesCount;
@@ -473,11 +471,9 @@ CombinePointLightReservoirs(inout PointLightReservoir inoutReservoir, const uint
     PointLightInfo lightInfo = gPointLightInfos[0];
     const float3 incomingRadiance = lightInfo.Color.rgb * 40.0f;
 
-    const float otherPdf = otherReservoir.Pdf;
     otherReservoir.Pdf = PointLightDesiredPdf(lightInfo, otherReservoir, position, normal);
 
-    UpdatePointLightReservoir(inoutReservoir, gPrevPointLightReservoir[bufferIndexByPixel1], pixel1, bufferIndexByPixel1);
-    otherReservoir.Pdf = otherPdf;
+    UpdatePointLightReservoir(inoutReservoir, otherReservoir, pixel1, bufferIndexByPixel1);
 
     inoutReservoir.Pdf = PointLightDesiredPdf(lightInfo, inoutReservoir, position, normal);
     const float dividend = inoutReservoir.Pdf * inoutReservoir.SamplesCount;
@@ -501,11 +497,9 @@ CombineIndirectLightReservoirs(inout IndirectLightReservoir inoutReservoir, cons
     UpdateIndirectLightReservoir(inoutReservoir, gIndirectLightReservoir[bufferIndexByPixel0], pixel0, bufferIndexByPixel0);
 
     IndirectLightReservoir otherReservoir = gPrevIndirectLightReservoir[bufferIndexByPixel1];
-    const float otherPdf = otherReservoir.Pdf;
     otherReservoir.Pdf = IndirectLightDesiredPdf(otherReservoir, normal);
 
-    UpdateIndirectLightReservoir(inoutReservoir, gPrevIndirectLightReservoir[bufferIndexByPixel1], pixel1, bufferIndexByPixel1);
-    otherReservoir.Pdf = otherPdf;
+    UpdateIndirectLightReservoir(inoutReservoir, otherReservoir, pixel1, bufferIndexByPixel1);
 
     inoutReservoir.Pdf = IndirectLightDesiredPdf(inoutReservoir, normal);
     const float dividend = inoutReservoir.Pdf * inoutReservoir.SamplesCount;

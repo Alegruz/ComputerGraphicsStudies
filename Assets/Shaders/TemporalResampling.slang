@@ -48,11 +48,12 @@ void RayGenMain()
     {
         // Temporal reuse
         {
-            ParallelogramAreaLightReservoir reservoir = (ParallelogramAreaLightReservoir)0;
+            // ParallelogramAreaLightReservoir reservoir = (ParallelogramAreaLightReservoir)0;
 
-            CombineParallelogramAreaLightReservoirs(reservoir, pixel, pixel, bufferIndexByPixel, bufferIndexByPixel, position, normal);
-            
-            gPrevParallelogramAreaLightReservoir[bufferIndexByPixel] = reservoir;
+            // CombineParallelogramAreaLightReservoirs(reservoir, pixel, pixel, bufferIndexByPixel, bufferIndexByPixel, position, normal);
+
+            // gPrevParallelogramAreaLightReservoir[bufferIndexByPixel] = reservoir;
+            gPrevParallelogramAreaLightReservoir[bufferIndexByPixel] = gParallelogramAreaLightReservoir[bufferIndexByPixel];
         }
     }
 #endif
@@ -61,11 +62,13 @@ void RayGenMain()
     {
         // Temporal
         {
-            PointLightReservoir reservoir = (PointLightReservoir)0;
+            // PointLightReservoir reservoir = (PointLightReservoir)0;
 
-            CombinePointLightReservoirs(reservoir, pixel, pixel, bufferIndexByPixel, bufferIndexByPixel, position, normal);
+            // CombinePointLightReservoirs(reservoir, pixel, pixel, bufferIndexByPixel, bufferIndexByPixel, position, normal);
             
-            gPrevPointLightReservoir[bufferIndexByPixel] = reservoir;
+            // gPrevPointLightReservoir[bufferIndexByPixel] = reservoir;
+
+            gPrevPointLightReservoir[bufferIndexByPixel] = gPointLightReservoir[bufferIndexByPixel];
         }
     }
 #endif
@@ -74,11 +77,13 @@ void RayGenMain()
     {
         // Temporal
         {
-            IndirectLightReservoir reservoir = (IndirectLightReservoir)0;
+            // IndirectLightReservoir reservoir = (IndirectLightReservoir)0;
 
-            CombineIndirectLightReservoirs(reservoir, pixel, pixel, bufferIndexByPixel, bufferIndexByPixel, position, normal);
+            // CombineIndirectLightReservoirs(reservoir, pixel, pixel, bufferIndexByPixel, bufferIndexByPixel, position, normal);
             
-            gPrevIndirectLightReservoir[bufferIndexByPixel] = reservoir;
+            // gPrevIndirectLightReservoir[bufferIndexByPixel] = reservoir;
+
+            gPrevIndirectLightReservoir[bufferIndexByPixel] = gIndirectLightReservoir[bufferIndexByPixel];
         }
     }
 #endif
