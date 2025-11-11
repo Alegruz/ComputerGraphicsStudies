@@ -10,7 +10,11 @@ UpdateParallelogramAreaLightReservoir(out float3 outPosition, out float3 outNorm
     outWeightsSum += weight;
     // M ← M + 1
     outSamplesCount += 1;
+#if SAMPLE_USING_FRAME_INDEX
     const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+    const float canonicalSample = CanonicalSample(pixel, sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+#endif // NOT SAMPLE_USING_FRAME_INDEX
     const float probability = weight / outWeightsSum;
     // if rand() < (w_i / w_sum) then
     if (canonicalSample < probability)
@@ -51,8 +55,13 @@ RisParallelogramAreaLight(out float3 outPosition, out float3 outNormal, out floa
     {
         //  generate x_i ~ p
         const float2 uniformSample = float2(
+#if SAMPLE_USING_FRAME_INDEX
             CanonicalSample(pixel, FrameIndex + sampleIndex * 2 + proposalIndex * 17, 0),
             CanonicalSample(pixel, FrameIndex + sampleIndex * 2 + 1 + proposalIndex * 23, 1));
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+            CanonicalSample(pixel, sampleIndex * 2 + proposalIndex * 17, 0),
+            CanonicalSample(pixel, sampleIndex * 2 + 1 + proposalIndex * 23, 1));
+#endif // NOT SAMPLE_USING_FRAME_INDEX
 
         const float3 parallelogramAreaLightPosition = SampleParallelogram(p0, e1, e2, uniformSample);
         uint primitiveIndex = 0;
@@ -126,7 +135,11 @@ UpdatePointLightReservoir(out uint outLightIndexSample, out float outDesiredPdf,
 {
     outWeightsSum += weight;
     outSamplesCount += 1;
+#if SAMPLE_USING_FRAME_INDEX
     const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+    const float canonicalSample = CanonicalSample(pixel, sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+#endif // NOT SAMPLE_USING_FRAME_INDEX
     const float probability = weight / outWeightsSum;
     if (canonicalSample < probability)
     {
@@ -141,7 +154,11 @@ RisPointLight(out uint outLightIndexSample, out float outDesiredPdf, inout float
     for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
     {
         // generate x_i ~ p
+#if SAMPLE_USING_FRAME_INDEX
         const uint pointLightIndex = RandomInt(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4, gSceneConstantBuffer.PointLightInfosCount);
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+        const uint pointLightIndex = RandomInt(pixel, sampleIndex * RESAMPLE_COUNT + proposalIndex, 4, gSceneConstantBuffer.PointLightInfosCount);
+#endif // NOT SAMPLE_USING_FRAME_INDEX
 
         const float3 pointLightPosition = gPointLightInfos[pointLightIndex].Positions;
         const float3 hitPositionToPointLightPosition = pointLightPosition - hitPosition;
@@ -169,7 +186,11 @@ UpdateIndirectLightReservoir(out float3 outDirection, out float outDesiredPdf, i
 {
     outWeightsSum += weight;
     outSamplesCount += 1;
+#if SAMPLE_USING_FRAME_INDEX
     const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+    const float canonicalSample = CanonicalSample(pixel, sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+#endif // NOT SAMPLE_USING_FRAME_INDEX
     const float probability = weight / outWeightsSum;
     if (canonicalSample < probability)
     {
@@ -185,8 +206,13 @@ RisIndirectLight(out float3 outDirection, out float outDesiredPdf, inout float o
     {
         // 1. Generate a sample: Cosine-weighted hemisphere sampling
         const float2 uniformSample = float2(
+#if SAMPLE_USING_FRAME_INDEX
             CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex * 17, 0),
             CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex * 23, 1));
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+            CanonicalSample(pixel, sampleIndex * RESAMPLE_COUNT + proposalIndex * 17, 0),
+            CanonicalSample(pixel, sampleIndex * RESAMPLE_COUNT + proposalIndex * 23, 1));
+#endif // NOT SAMPLE_USING_FRAME_INDEX
         const float3 localSampleDir = SampleHemisphereCosineWeighted(uniformSample);
 
         // Create an orthonormal basis (T, B, N) around the shading normal.
@@ -353,7 +379,11 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             else
             {
                 // Algorithm 2: Uniformly sample a point light
+#if SAMPLE_USING_FRAME_INDEX
                 selectedProposalIndex = RandomInt(pixel, FrameIndex + sampleIndex, 4, gSceneConstantBuffer.PointLightInfosCount);
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+                selectedProposalIndex = RandomInt(pixel, sampleIndex, 4, gSceneConstantBuffer.PointLightInfosCount);
+#endif // NOT SAMPLE_USING_FRAME_INDEX
                 weight = gSceneConstantBuffer.PointLightInfosCount;
                 desiredPdf = 1.0f / gSceneConstantBuffer.PointLightInfosCount;
             }

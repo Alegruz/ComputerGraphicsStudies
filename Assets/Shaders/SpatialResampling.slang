@@ -63,11 +63,23 @@ void RayGenMain()
 #if SPATIAL_NEIGHBORS_COUNT > 0
             for (uint resampleIndex = 0; resampleIndex < SPATIAL_NEIGHBORS_COUNT; ++resampleIndex)
             {
+#if DEBUG_SPATIAL_RESAMPLING_NEIGHBORS
+#if DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_METHOD == DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_SAME_PIXEL
+                const int spatialNeighborX = 0;
+                const int spatialNeighborY = 0;
+#elif DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_METHOD == DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_PIXEL_BELOW
+                const int spatialNeighborX = 0;
+                const int spatialNeighborY = -1;
+#endif
+#else // NOT DEBUG_SPATIAL_RESAMPLING_NEIGHBORS
+#if SAMPLE_USING_FRAME_INDEX
                 const int spatialNeighborX = (int)RandomInt(pixel, FrameIndex + resampleIndex * 7, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
                 const int spatialNeighborY = (int)RandomInt(pixel, FrameIndex + resampleIndex * 11, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
-                // const int spatialNeighborX = 1;           
-                // const int spatialNeighborY = 0;
-
+#else // NOT SAMPLE_USING_FRAME_INDEX
+                const int spatialNeighborX = (int)RandomInt(pixel, resampleIndex * 7, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
+                const int spatialNeighborY = (int)RandomInt(pixel, resampleIndex * 11, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
+#endif // NOT SAMPLE_USING_FRAME_INDEX
+#endif // NOT DEBUG_SPATIAL_RESAMPLING_NEIGHBORS
                 const uint2 spatialNeighborPixel = (uint2)clamp((int2)pixel + int2(spatialNeighborX, spatialNeighborY), int2(0, 0), int2(screenSize) - int2(1, 1));
                 const uint spatialNeighborBufferIndex = spatialNeighborPixel.y * screenSize.x + spatialNeighborPixel.x;
 
@@ -150,9 +162,23 @@ void RayGenMain()
 #if SPATIAL_NEIGHBORS_COUNT > 0
             for (uint resampleIndex = 0; resampleIndex < SPATIAL_NEIGHBORS_COUNT; ++resampleIndex)
             {
+#if DEBUG_SPATIAL_RESAMPLING_NEIGHBORS
+#if DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_METHOD == DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_SAME_PIXEL
+                const int spatialNeighborX = 0;
+                const int spatialNeighborY = 0;
+#elif DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_METHOD == DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_PIXEL_BELOW
+                const int spatialNeighborX = 0;
+                const int spatialNeighborY = -1;
+#endif
+#else // NOT DEBUG_SPATIAL_RESAMPLING_NEIGHBORS
+#if SAMPLE_USING_FRAME_INDEX
                 const int spatialNeighborX = (int)RandomInt(pixel, FrameIndex + resampleIndex * 7, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
                 const int spatialNeighborY = (int)RandomInt(pixel, FrameIndex + resampleIndex * 11, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
-
+#else   // NOT SAMPLE_USING_FRAME_INDEX
+                const int spatialNeighborX = (int)RandomInt(pixel, resampleIndex * 7, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
+                const int spatialNeighborY = (int)RandomInt(pixel, resampleIndex * 11, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
+#endif  // NOT SAMPLE_USING_FRAME_INDEX
+#endif  // NOT DEBUG_SPATIAL_RESAMPLING_NEIGHBORS
                 const uint2 spatialNeighborPixel = (uint2)clamp((int2)pixel + int2(spatialNeighborX, spatialNeighborY), int2(0, 0), int2(screenSize) - int2(1, 1));
                 const uint spatialNeighborBufferIndex = spatialNeighborPixel.y * screenSize.x + spatialNeighborPixel.x;
 
@@ -223,10 +249,25 @@ void RayGenMain()
 #if SPATIAL_NEIGHBORS_COUNT > 0
             for (uint resampleIndex = 0; resampleIndex < SPATIAL_NEIGHBORS_COUNT; ++resampleIndex)
             {
+#if DEBUG_SPATIAL_RESAMPLING_NEIGHBORS
+#if DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_METHOD == DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_SAME_PIXEL
+                const int spatialNeighborX = 0;
+                const int spatialNeighborY = 0;
+#elif DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_METHOD == DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_PIXEL_BELOW
+                const int spatialNeighborX = 0;
+                const int spatialNeighborY = -1;
+#endif
+#else // NOT DEBUG_SPATIAL_RESAMPLING_NEIGHBORS
+#if SAMPLE_USING_FRAME_INDEX
                 const int spatialNeighborX = (int)RandomInt(pixel, FrameIndex + resampleIndex * 7, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
                 const int spatialNeighborY = (int)RandomInt(pixel, FrameIndex + resampleIndex * 11, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
-
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+                const int spatialNeighborX = (int)RandomInt(pixel, resampleIndex * 7, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
+                const int spatialNeighborY = (int)RandomInt(pixel, resampleIndex * 11, 0, spatialResampleRadius * 2 + 1) - (int)spatialResampleRadius;
+#endif  // NOT SAMPLE_USING_FRAME_INDEX
+#endif // NOT DEBUG_SPATIAL_RESAMPLING_NEIGHBORS
                 const uint2 spatialNeighborPixel = (uint2)clamp((int2)pixel + int2(spatialNeighborX, spatialNeighborY), int2(0, 0), int2(screenSize) - int2(1, 1));
+
                 const uint spatialNeighborBufferIndex = spatialNeighborPixel.y * screenSize.x + spatialNeighborPixel.x;
 
                 const float4 neighborGBufferData = gGBuffers[spatialNeighborPixel];

@@ -48,12 +48,15 @@ void RayGenMain()
     {
         // Temporal reuse
         {
-            // ParallelogramAreaLightReservoir reservoir = (ParallelogramAreaLightReservoir)0;
+#if ENABLE_TEMPORAL_RESAMPLING
+            ParallelogramAreaLightReservoir reservoir = (ParallelogramAreaLightReservoir)0;
 
-            // CombineParallelogramAreaLightReservoirs(reservoir, pixel, pixel, bufferIndexByPixel, bufferIndexByPixel, position, normal);
+            CombineParallelogramAreaLightReservoirs(reservoir, pixel, pixel, bufferIndexByPixel, bufferIndexByPixel, position, normal);
 
-            // gPrevParallelogramAreaLightReservoir[bufferIndexByPixel] = reservoir;
+            gPrevParallelogramAreaLightReservoir[bufferIndexByPixel] = reservoir;
+#else // NOT ENABLE_TEMPORAL_RESAMPLING
             gPrevParallelogramAreaLightReservoir[bufferIndexByPixel] = gParallelogramAreaLightReservoir[bufferIndexByPixel];
+#endif // NOT ENABLE_TEMPORAL_RESAMPLING
         }
     }
 #endif
@@ -62,13 +65,15 @@ void RayGenMain()
     {
         // Temporal
         {
-            // PointLightReservoir reservoir = (PointLightReservoir)0;
+#if ENABLE_TEMPORAL_RESAMPLING
+            PointLightReservoir reservoir = (PointLightReservoir)0;
 
-            // CombinePointLightReservoirs(reservoir, pixel, pixel, bufferIndexByPixel, bufferIndexByPixel, position, normal);
-            
-            // gPrevPointLightReservoir[bufferIndexByPixel] = reservoir;
+            CombinePointLightReservoirs(reservoir, pixel, pixel, bufferIndexByPixel, bufferIndexByPixel, position, normal);
 
+            gPrevPointLightReservoir[bufferIndexByPixel] = reservoir;
+#else  // NOT ENABLE_TEMPORAL_RESAMPLING
             gPrevPointLightReservoir[bufferIndexByPixel] = gPointLightReservoir[bufferIndexByPixel];
+#endif // NOT ENABLE_TEMPORAL_RESAMPLING
         }
     }
 #endif
@@ -77,13 +82,15 @@ void RayGenMain()
     {
         // Temporal
         {
-            // IndirectLightReservoir reservoir = (IndirectLightReservoir)0;
+#if ENABLE_TEMPORAL_RESAMPLING
+            IndirectLightReservoir reservoir = (IndirectLightReservoir)0;
 
-            // CombineIndirectLightReservoirs(reservoir, pixel, pixel, bufferIndexByPixel, bufferIndexByPixel, position, normal);
-            
-            // gPrevIndirectLightReservoir[bufferIndexByPixel] = reservoir;
+            CombineIndirectLightReservoirs(reservoir, pixel, pixel, bufferIndexByPixel, bufferIndexByPixel, position, normal);
 
+            gPrevIndirectLightReservoir[bufferIndexByPixel] = reservoir;
+#else  // NOT ENABLE_TEMPORAL_RESAMPLING
             gPrevIndirectLightReservoir[bufferIndexByPixel] = gIndirectLightReservoir[bufferIndexByPixel];
+#endif // NOT ENABLE_TEMPORAL_RESAMPLING
         }
     }
 #endif

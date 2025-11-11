@@ -208,3 +208,4 @@ Target platforms (sorted by priority):
 * **[2025.10.03]**: Code cleanup on UNIX build.
 * **[2025.10.04 ~ 2025.11.10]**: Break period.
 * **[2025.11.11]**: Resumed development. Refactored light reservoir structures to use single float for weight and adjusted related calculations.
+* **[2025.11.12]**: Debugging instabilities in spatial resampling. Suspecting either barrier issues or random number generation issues.

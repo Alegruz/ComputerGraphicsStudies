@@ -1,12 +1,22 @@
 #define FLT_MAX         (3.402823466e+38)
 #define PI              (3.1415926535897f)
 
+#define ENABLE_TEMPORAL_RESAMPLING (1)
 #define PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT (1)
-#define POINT_LIGHT_SAMPLES_COUNT (0)
-#define HEMISPHERE_SAMPLES_COUNT (0)
+#define POINT_LIGHT_SAMPLES_COUNT (1)
+#define HEMISPHERE_SAMPLES_COUNT (1)
 #define RESAMPLE_COUNT (8)
 #define SPATIAL_NEIGHBORHOOD_RADIUS_RATE (1.0f / 128.0f)
 #define SPATIAL_NEIGHBORS_COUNT (1)
+#define DEBUG_SPATIAL_RESAMPLING_NEIGHBORS (0)
+
+#define DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_SAME_PIXEL (1)
+#define DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_PIXEL_BELOW (2)
+#if DEBUG_SPATIAL_RESAMPLING_NEIGHBORS
+#define DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_METHOD DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_PIXEL_BELOW
+#endif  // DEBUG_SPATIAL_RESAMPLING_NEIGHBORS
+
+#define SAMPLE_USING_FRAME_INDEX (1)
 
 struct SceneConstantBuffer
 {
@@ -366,7 +376,11 @@ UpdateParallelogramAreaLightReservoir(inout ParallelogramAreaLightReservoir inou
     const float weight = reservoir.Weight * reservoir.Pdf * reservoir.SamplesCount;
     inoutReservoir.WeightSum += weight;
     inoutReservoir.SamplesCount += reservoir.SamplesCount;
+#if SAMPLE_USING_FRAME_INDEX
     const float canonicalSample = CanonicalSample(pixel, FrameIndex + reservoir.SamplesCount * bufferIndexByPixel * 17, 4);
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+    const float canonicalSample = CanonicalSample(pixel, reservoir.SamplesCount * bufferIndexByPixel * 17, 4);
+#endif // NOT SAMPLE_USING_FRAME_INDEX
     const float probability = weight / inoutReservoir.WeightSum;
     if (canonicalSample < probability)
     {
@@ -382,7 +396,11 @@ UpdatePointLightReservoir(inout PointLightReservoir inoutReservoir, const PointL
     const float weight = reservoir.Weight * reservoir.Pdf * reservoir.SamplesCount;
     inoutReservoir.WeightSum += weight;
     inoutReservoir.SamplesCount += reservoir.SamplesCount;
+#if SAMPLE_USING_FRAME_INDEX
     const float canonicalSample = CanonicalSample(pixel, FrameIndex + reservoir.SamplesCount * bufferIndexByPixel * 23, 4);
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+    const float canonicalSample = CanonicalSample(pixel, reservoir.SamplesCount * bufferIndexByPixel * 23, 4);
+#endif // NOT SAMPLE_USING_FRAME_INDEX
     const float probability = weight / inoutReservoir.WeightSum;
     if (canonicalSample < probability)
     {
@@ -397,7 +415,11 @@ UpdateIndirectLightReservoir(inout IndirectLightReservoir inoutReservoir, const 
     const float weight = reservoir.Weight * reservoir.Pdf * reservoir.SamplesCount;
     inoutReservoir.WeightSum += weight;
     inoutReservoir.SamplesCount += reservoir.SamplesCount;
+#if SAMPLE_USING_FRAME_INDEX
     const float canonicalSample = CanonicalSample(pixel, FrameIndex + reservoir.SamplesCount * 17, 4);
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+    const float canonicalSample = CanonicalSample(pixel, reservoir.SamplesCount * 17, 4);
+#endif // NOT SAMPLE_USING_FRAME_INDEX
     const float probability = weight / inoutReservoir.WeightSum;
     if (canonicalSample < probability)
     {
