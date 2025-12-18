@@ -388,7 +388,7 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
                 float3 samplePosition = float3(0.0f);
                 float3 sampleNormal = float3(0.0f);
                 float desiredPdf = 0.0f;
-#if PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT > 0
+#if /*PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT > 0*/0
                 samplePosition = gPrevParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightPositionSample;
                 sampleNormal = gPrevParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightNormalSample;
                 desiredPdf = gPrevParallelogramAreaLightReservoir[bufferIndexByPixel].Pdf;
