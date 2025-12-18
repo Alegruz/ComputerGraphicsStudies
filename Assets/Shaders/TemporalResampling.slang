@@ -103,7 +103,7 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
     float3 color = gColors[PrimitiveIndex()];
     if (IsEmissive(PrimitiveIndex()) == 1)
     {
-        const float tempEmissiveStrength = 40.0f;
+        const float tempEmissiveStrength = PARALLELOGRAM_AREA_LIGHT_STRENGTH;
         color *= tempEmissiveStrength;
     }
     payload.Color = float4(color, 1.0f);

@@ -3,11 +3,11 @@
 
 #define ENABLE_TEMPORAL_RESAMPLING (1)
 #define PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT (1)
-#define POINT_LIGHT_SAMPLES_COUNT (1)
+#define POINT_LIGHT_SAMPLES_COUNT (0)
 #define HEMISPHERE_SAMPLES_COUNT (1)
 #define RESAMPLE_COUNT (8)
 #define SPATIAL_NEIGHBORHOOD_RADIUS_RATE (1.0f / 128.0f)
-#define SPATIAL_NEIGHBORS_COUNT (1)
+#define SPATIAL_NEIGHBORS_COUNT (0)
 #define DEBUG_SPATIAL_RESAMPLING_NEIGHBORS (0)
 
 #define DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_SAME_PIXEL (1)
@@ -17,6 +17,9 @@
 #endif  // DEBUG_SPATIAL_RESAMPLING_NEIGHBORS
 
 #define SAMPLE_USING_FRAME_INDEX (1)
+
+#define PARALLELOGRAM_AREA_LIGHT_STRENGTH (10.0f)
+#define POINT_LIGHT_STRENGTH (1000.0f)
 
 struct SceneConstantBuffer
 {
@@ -101,6 +104,7 @@ cbuffer PushConstants
 {
     uint FrameIndex;
     uint BounceDepth;
+    uint RandomSeed;
 };
 
 float
@@ -189,6 +193,7 @@ struct RayPayload
     float RayT;
     uint PrimitiveIndex;
     uint Depth;
+    uint Seed;
 };
 #else
 struct [raypayload] RayPayload
@@ -197,6 +202,7 @@ struct [raypayload] RayPayload
     float RayT : read(closesthit, miss, caller) : write(closesthit, miss, caller);
     uint PrimitiveIndex : read(closesthit, miss, caller) : write(closesthit, miss, caller);
     uint Depth : read(closesthit, miss, caller) : write(closesthit, miss, caller);
+    uint Seed : read(closesthit, miss, caller) : write(closesthit, miss, caller);
 };
 #endif
 
@@ -265,6 +271,27 @@ GenerateCameraRay(uint2 index, out float3 origin, out float3 direction)
     world.xyz /= world.w;
     origin = gSceneConstantBuffer.CameraPosition.xyz;
     direction = normalize(world.xyz - origin);
+}
+
+// [REF]: https://userpages.cs.umbc.edu/olano/papers/GPUTEA.pdf
+void 
+EncryptTea(inout uint value0, inout uint value1)
+{
+#define TEA_DELTA (0x9E3779B9)
+#define TEA_K0 (0xA341316C)
+#define TEA_K1 (0xC8013EA4)
+#define TEA_K2 (0xAD90777D)
+#define TEA_K3 (0x7E95761E)
+#define TEA_NUM_ROUNDS (16)
+
+    uint sum = 0;
+
+    for (uint roundIndex = 0; roundIndex < TEA_NUM_ROUNDS; ++roundIndex)
+    {
+        sum += TEA_DELTA;
+        value0 += ((value1 << 4) + TEA_K0) ^ (value1 + sum) ^ ((value1 >> 5) + TEA_K1);
+        value1 += ((value0 << 4) + TEA_K2) ^ (value0 + sum) ^ ((value0 >> 5) + TEA_K3);
+    }
 }
 
 float 
@@ -390,6 +417,30 @@ UpdateParallelogramAreaLightReservoir(inout ParallelogramAreaLightReservoir inou
     }
 }
 
+// ReSTIR paper algorithm 2: Weighted reservoir sampling.
+void
+UpdateParallelogramAreaLightReservoir(out float3 outPosition, out float3 outNormal, inout float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const float weight, const float desiredPdf, const float3 parallelogramAreaLightPosition, const float3 triangleNormal, const uint2 pixel, const uint sampleIndex, const uint proposalIndex, const uint bufferIndexByPixel)
+{
+    // w_sum ← w_sum + w_i
+    outWeightsSum += weight;
+    // M ← M + 1
+    outSamplesCount += 1;
+#if SAMPLE_USING_FRAME_INDEX
+    const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+    const float canonicalSample = CanonicalSample(pixel, sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+#endif // NOT SAMPLE_USING_FRAME_INDEX
+    const float probability = weight / outWeightsSum;
+    // if rand() < (w_i / w_sum) then
+    if (canonicalSample < probability)
+    {
+        // y ← x_i
+        outPosition = parallelogramAreaLightPosition;
+        outNormal = triangleNormal;
+        outDesiredPdf = desiredPdf;
+    }
+}
+
 void
 UpdatePointLightReservoir(inout PointLightReservoir inoutReservoir, const PointLightReservoir reservoir, const uint2 pixel, const uint bufferIndexByPixel)
 {
@@ -431,7 +482,7 @@ UpdateIndirectLightReservoir(inout IndirectLightReservoir inoutReservoir, const 
 float
 ParallelogramAreaLightDesiredPdf(const ParallelogramAreaLightInfo lightInfo, const ParallelogramAreaLightReservoir otherReservoir, const float3 position, const float3 normal)
 {
-    const float3 incomingRadiance = lightInfo.Color.rgb * 40.0f;
+    const float3 incomingRadiance = lightInfo.Color.rgb * PARALLELOGRAM_AREA_LIGHT_STRENGTH;
 
     const float3 parallelogramAreaLightPosition = otherReservoir.ParallelogramAreaLightPositionSample;
     const float3 hitPositionToParallelogramAreaLightPosition = parallelogramAreaLightPosition - position;
@@ -454,7 +505,7 @@ CombineParallelogramAreaLightReservoirs(inout ParallelogramAreaLightReservoir in
 
     ParallelogramAreaLightReservoir otherReservoir = gPrevParallelogramAreaLightReservoir[bufferIndexByPixel1];
     ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[0];
-    const float3 incomingRadiance = lightInfo.Color.rgb * 40.0f;
+    const float3 incomingRadiance = lightInfo.Color.rgb * PARALLELOGRAM_AREA_LIGHT_STRENGTH;
 
     otherReservoir.Pdf = ParallelogramAreaLightDesiredPdf(lightInfo, otherReservoir, position, normal);
 
@@ -469,8 +520,7 @@ float
 PointLightDesiredPdf(const PointLightInfo lightInfo, const PointLightReservoir otherReservoir, const float3 position, const float3 normal)
 {
     const uint pointLightIndex = otherReservoir.LightIndexSample;
-    const float pointLightStrength = 1000.0f;
-    const float3 incomingRadiance = gPointLightInfos[pointLightIndex].Color * pointLightStrength;
+    const float3 incomingRadiance = gPointLightInfos[pointLightIndex].Color * POINT_LIGHT_STRENGTH;
 
     const float3 pointLightPosition = gPointLightInfos[pointLightIndex].Positions;
     const float3 hitPositionToPointLightPosition = pointLightPosition - position;
@@ -491,7 +541,7 @@ CombinePointLightReservoirs(inout PointLightReservoir inoutReservoir, const uint
 
     PointLightReservoir otherReservoir = gPrevPointLightReservoir[bufferIndexByPixel1];
     PointLightInfo lightInfo = gPointLightInfos[0];
-    const float3 incomingRadiance = lightInfo.Color.rgb * 40.0f;
+    const float3 incomingRadiance = lightInfo.Color.rgb * POINT_LIGHT_STRENGTH;
 
     otherReservoir.Pdf = PointLightDesiredPdf(lightInfo, otherReservoir, position, normal);
 
@@ -526,4 +576,108 @@ CombineIndirectLightReservoirs(inout IndirectLightReservoir inoutReservoir, cons
     inoutReservoir.Pdf = IndirectLightDesiredPdf(inoutReservoir, normal);
     const float dividend = inoutReservoir.Pdf * inoutReservoir.SamplesCount;
     inoutReservoir.Weight = dividend == 0.0f ? 0.0f : inoutReservoir.WeightSum / dividend;
+}
+
+float
+RisParallelogramAreaLight(out float3 outPosition, out float3 outNormal, out float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const uint2 pixel, const uint sampleIndex, const float3 hitPosition, const float3 normal, const uint bufferIndexByPixel)
+{
+    const uint parallelogramLightIndex = 0;
+    const ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[parallelogramLightIndex];
+    const uint basePrimitiveIndex = lightInfo.PrimitiveIndices[0];
+    const uint indexSizeInBytes = 2;
+    const uint indicesPerTriangle = 3;
+    const uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
+    uint baseIndex = basePrimitiveIndex * triangleIndexStride;
+    const uint3 baseIndices = Load3x16BitIndices(baseIndex);
+    const float3 baseV0 = gVertices[baseIndices[0]].Position;
+    const float3 baseV1 = gVertices[baseIndices[1]].Position;
+
+    const uint nextPrimitiveIndex = lightInfo.PrimitiveIndices[1];
+    uint nextIndex = nextPrimitiveIndex * triangleIndexStride;
+    const uint3 nextIndices = Load3x16BitIndices(nextIndex);
+
+    const float3 baseV2 = gVertices[nextIndices[2]].Position;
+    const float3 p0 = baseV0;
+    const float3 e1 = baseV1 - baseV0;
+    const float3 e2 = baseV2 - baseV0;
+    const float parallelogramArea = length(cross(e1, e2));
+    // ReSTIR paper algorithm 3: Streaming RIS using weighted reservoir sampling.
+    //  for i ← 1 to M do
+    for (uint proposalIndex = 0; proposalIndex < RESAMPLE_COUNT; ++proposalIndex)
+    {
+        //  generate x_i ~ p
+        const float2 uniformSample = float2(
+#if SAMPLE_USING_FRAME_INDEX
+            CanonicalSample(pixel, FrameIndex + sampleIndex * 2 + proposalIndex * 17, 0),
+            CanonicalSample(pixel, FrameIndex + sampleIndex * 2 + 1 + proposalIndex * 23, 1));
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+            CanonicalSample(pixel, sampleIndex * 2 + proposalIndex * 17, 0),
+            CanonicalSample(pixel, sampleIndex * 2 + 1 + proposalIndex * 23, 1));
+#endif // NOT SAMPLE_USING_FRAME_INDEX
+
+        const float3 parallelogramAreaLightPosition = SampleParallelogram(p0, e1, e2, uniformSample);
+        uint primitiveIndex = 0;
+        if (uniformSample.x > 0.5f && uniformSample.y > 0.5f)
+        {
+            primitiveIndex = lightInfo.PrimitiveIndices[1];
+        }
+        else
+        {
+            primitiveIndex = lightInfo.PrimitiveIndices[0];
+        }
+        const float3 hitPositionToParallelogramAreaLightPosition = parallelogramAreaLightPosition - hitPosition;
+        const float distanceSquared = dot(hitPositionToParallelogramAreaLightPosition, hitPositionToParallelogramAreaLightPosition);
+        const float distance = sqrt(distanceSquared);
+        const float3 worldSampleDir = normalize(parallelogramAreaLightPosition - hitPosition);
+
+        baseIndex = primitiveIndex * triangleIndexStride;
+        const uint3 indices = Load3x16BitIndices(baseIndex);
+
+        float3 v0 = gVertices[indices[0]].Position;
+        float3 v1 = gVertices[indices[1]].Position;
+        float3 v2 = gVertices[indices[2]].Position;
+
+        // Compute barycentric coordinates of hitPoint with respect to triangle (v0, v1, v2)
+        float3 v0v1 = v1 - v0;
+        float3 v0v2 = v2 - v0;
+        float3 v0p = parallelogramAreaLightPosition - v0;
+        float d00 = dot(v0v1, v0v1);
+        float d01 = dot(v0v1, v0v2);
+        float d11 = dot(v0v2, v0v2);
+        float d20 = dot(v0p, v0v1);
+        float d21 = dot(v0p, v0v2);
+        float denom = d00 * d11 - d01 * d01;
+        float v = (d11 * d20 - d01 * d21) / denom;
+        float w = (d00 * d21 - d01 * d20) / denom;
+        float u = 1.0f - v - w;
+        float2 barycentrics = float2(v, w);
+
+        // Retrieve corresponding vertex normals for the triangle vertices.
+        const float3 vertexNormals[3] =
+            {
+                gVertices[indices[0]].Normal,
+                gVertices[indices[1]].Normal,
+                gVertices[indices[2]].Normal
+            };
+
+        // Compute the triangle's normal.
+        // This is redundant and done for illustration purposes
+        // as all the per-vertex normals are the same and match triangle's normal in this sample.
+        const float3 triangleNormal = InterpolateByBarycentric(vertexNormals, barycentrics);
+
+        const float3 incomingRadiance = lightInfo.Color.rgb * PARALLELOGRAM_AREA_LIGHT_STRENGTH;
+        const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
+        const float cosAtLight = max(0.0f, dot(-worldSampleDir, triangleNormal));
+        const float geometryTerm = cosAtSurface * cosAtLight / distanceSquared;
+        const float desiredPdf = ConvertColorToLuminance(incomingRadiance * geometryTerm);
+        const float pdf = 1.0f / parallelogramArea;
+        // ReSTIR paper equation 5. Weight computation.
+        //  p(z | w) = w(x_z) / Σ_i=1^M w(x_i) with w(x) = p_hat(x) / p(x)
+        const float weight = desiredPdf / pdf;
+
+        //  r.update(x_i, p_hat_q(x_i) / p(x_i))
+        UpdateParallelogramAreaLightReservoir(outPosition, outNormal, outDesiredPdf, outWeightsSum, outSamplesCount, weight, desiredPdf, parallelogramAreaLightPosition, triangleNormal, pixel, sampleIndex, proposalIndex, bufferIndexByPixel);
+    }
+
+    return outWeightsSum / (outDesiredPdf * RESAMPLE_COUNT);
 }

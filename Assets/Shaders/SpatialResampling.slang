@@ -46,7 +46,7 @@ void RayGenMain()
         float3 emissiveColor = float3(0.0f, 0.0f, 0.0f);
         if (IsEmissive(primitiveIndex) == 1)
         {
-            const float tempEmissiveStrength = 40.0f;
+            const float tempEmissiveStrength = PARALLELOGRAM_AREA_LIGHT_STRENGTH;
             emissiveColor = gColors[primitiveIndex] * tempEmissiveStrength;
         }
 
@@ -131,7 +131,7 @@ void RayGenMain()
                 ray.TMin = 0.001;
                 ray.TMax = 10000.0;
 
-                RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, 0, 0 };
+                RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, primitiveIndex, 1 };
                 TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, newPayload);
 
                 if (IsEmissive(newPayload.PrimitiveIndex) == 1)
@@ -145,7 +145,7 @@ void RayGenMain()
                     {
                         const float pdfInSolidAngle = (distanceSquared / cosAtLight) * pdf;
                         const float hemisphereCosineWeightedPdf = cosAtSurface / PI;
-                        const float misWeight = PowerHeuristic(PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, pdfInSolidAngle, POINT_LIGHT_SAMPLES_COUNT, 0.0f, HEMISPHERE_SAMPLES_COUNT, hemisphereCosineWeightedPdf);
+                        const float misWeight = PowerHeuristic(1, pdfInSolidAngle, 1, 0.0f, 1, hemisphereCosineWeightedPdf);
                         const float3 integrand = incomingRadiance * geometryTerm * misWeight * weight;
                         parallelogramAreaLightMonteCarloEstimate = integrand * brdf;
                     }
@@ -220,19 +220,18 @@ void RayGenMain()
                 ray.TMin = 0.001;
                 ray.TMax = 10000.0;
 
-                RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, 0, 0 };
+                RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, primitiveIndex, 1 };
                 TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, newPayload);
 
                 if (newPayload.RayT > distance)
                 {
-                    const float pointLightStrength = 1000.0f;
-                    const float3 incomingRadiance = gPointLightInfos[selectedProposalIndex].Color * pointLightStrength;
+                    const float3 incomingRadiance = gPointLightInfos[selectedProposalIndex].Color * POINT_LIGHT_STRENGTH;
                     const float geometryTerm = dot(worldSampleDir, normal) / distanceSquared;
 
                     // These are 0 because no parallelogram area light sampling nor hemisphere sampling can sample point lights
                     float parallelogramAreaLightPdf = 0.0f;
                     float hemisphereSamplePdf = 0.0f;
-                    const float misWeight = PowerHeuristic(POINT_LIGHT_SAMPLES_COUNT, pdf, HEMISPHERE_SAMPLES_COUNT, hemisphereSamplePdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
+                    const float misWeight = PowerHeuristic(1, pdf, 1, hemisphereSamplePdf, 1, parallelogramAreaLightPdf);
                     const float3 integrand = incomingRadiance * geometryTerm * misWeight * weight;
 
                     pointLightMonteCarloEstimate = integrand * brdf;
@@ -304,7 +303,7 @@ void RayGenMain()
                 ray.TMin = 0.001;
                 ray.TMax = 10000.0;
 
-                RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, 0, 0 };
+                RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, primitiveIndex, 1 };
                 TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, newPayload);
 
                 // 3. Incoming radiance
@@ -324,7 +323,7 @@ void RayGenMain()
                     parallelogramAreaLightPdf = 1.0f / parallelogramArea;
                 }
 
-                const float misWeight = PowerHeuristic(HEMISPHERE_SAMPLES_COUNT, pdf, POINT_LIGHT_SAMPLES_COUNT, pointLightPdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
+                const float misWeight = PowerHeuristic(1, pdf, 1, pointLightPdf, 1, parallelogramAreaLightPdf);
                 const float3 f = brdf * incomingRadiance;
                 indirectIlluminationMonteCarloEstimate = f * misWeight * weight;
             }
@@ -360,13 +359,99 @@ void RayGenMain()
 [shader("closesthit")]
 void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    float3 color = gColors[PrimitiveIndex()];
+    payload.Color = 0;
     if (IsEmissive(PrimitiveIndex()) == 1)
     {
-        const float tempEmissiveStrength = 40.0f;
-        color *= tempEmissiveStrength;
+        payload.Color = float4(gColors[PrimitiveIndex()] * PARALLELOGRAM_AREA_LIGHT_STRENGTH, 1.0f);
     }
-    payload.Color = float4(color, 1.0f);
+    else if (IsEmissive(payload.PrimitiveIndex) != 1)
+    {
+        // NEE
+        if (payload.Depth > 0)
+        {
+            float3 parallelogramAreaLightMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
+            const float3 brdf = CalculateLambertianDiffuseBrdf(PrimitiveIndex());
+            float3 monteCarloIntegrandSum = float3(0.0f, 0.0f, 0.0f);
+            float weightsSum = 0.0f;
+            uint samplesCount = 0;
+            // for (uint sampleIndex = 0; sampleIndex < PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT; ++sampleIndex)
+            {
+                const uint2 pixel = DispatchRaysIndex().xy;
+                const uint bufferIndexByPixel = pixel.y * DispatchRaysDimensions().x + pixel.x;
+
+                const float3 hitPosition = HitWorldPosition();
+                const float3 normal = GetWorldNormal(PrimitiveIndex(), attr.barycentrics);
+
+                // get pixel using hit position and ray origin
+                const float3 origin = gSceneConstantBuffer.CameraPosition.xyz;
+
+                float3 samplePosition = float3(0.0f);
+                float3 sampleNormal = float3(0.0f);
+                float desiredPdf = 0.0f;
+#if PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT > 0
+                samplePosition = gPrevParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightPositionSample;
+                sampleNormal = gPrevParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightNormalSample;
+                desiredPdf = gPrevParallelogramAreaLightReservoir[bufferIndexByPixel].Pdf;
+                const float weight = gPrevParallelogramAreaLightReservoir[bufferIndexByPixel].Weight;
+#else  //   NOT PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT > 0
+                const float weight = RisParallelogramAreaLight(samplePosition, sampleNormal, desiredPdf, weightsSum, samplesCount, pixel, 0, hitPosition, normal, bufferIndexByPixel);
+#endif //   NOT PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT > 0
+
+                const float3 parallelogramAreaLightPosition = samplePosition;
+                const float3 hitPositionToPointLightPosition = parallelogramAreaLightPosition - hitPosition;
+                const float distanceSquared = dot(hitPositionToPointLightPosition, hitPositionToPointLightPosition);
+                const float distance = sqrt(distanceSquared);
+                const float3 worldSampleDir = normalize(parallelogramAreaLightPosition - hitPosition);
+
+                // Trace a ray in the sampled direction.
+                RayDesc ray;
+                ray.Origin = hitPosition;
+                ray.Direction = worldSampleDir;
+                ray.TMin = 0.001;
+                ray.TMax = 10000.0;
+
+                RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, 0, payload.Depth - 1 };
+                TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, newPayload);
+
+                if (IsEmissive(newPayload.PrimitiveIndex) == 1)
+                {
+                    const float3 incomingRadiance = newPayload.Color.rgb;
+                    const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
+                    const float cosAtLight = max(0.0f, dot(-worldSampleDir, sampleNormal));
+                    const float geometryTerm = cosAtSurface * cosAtLight / distanceSquared;
+
+                    if (cosAtLight > 0.0f)
+                    {
+                        const float pdfInSolidAngle = (distanceSquared / cosAtLight) * desiredPdf;
+                        const float hemisphereCosineWeightedPdf = cosAtSurface / PI;
+                        const float misWeight = PowerHeuristic(1, pdfInSolidAngle, 0, 0.0f, 0, hemisphereCosineWeightedPdf);
+                        // ReSTIR paper equation 2. Rendering equation.
+                        //  L = ∫_A f(x) dx. where f(x) = ρ(x) * L_e(x) * G(x) * V(x)
+                        //  ρ(x) = BRDF at x
+                        //  L_e(x) = emissive radiance at x
+                        //  G(x) = geometry term
+                        //  V(x) = visibility term (1 if visible, 0 if not)
+                        const float3 f = brdf * incomingRadiance * geometryTerm;
+                        // ReSTIR paper equation 4. MIS.
+                        //  <L>_mis^(M, N) = Σ_s=1^M (1 / N_s) Σ_i=1^N_s w_s(x_i) * (f(x_i) / p_s(x_i))
+                        //  M = number of strategies (here: 3)
+                        //  N_s = number of samples for strategy s
+                        //  w_s(x_i) = MIS weight for strategy s and sample x_i
+                        //  f(x_i) = integrand evaluated at sample x_i
+                        //  p_s(x_i) = PDF for strategy s and sample x_i
+                        // ReSTIR paper equation 7. multiple RIS.
+                        //  <L>_ris^(N, M) = (1 / N) Σ_i=1^N ((f(y_i) / p_hat(y_i)) * ((1 / M) * Σ_j=1^M w(x_ij)))
+                        // ReSTIR paper algorithm 3: Streaming RIS using weighted reservoir sampling.
+                        //  f_q(r.y) * r.W
+
+                        monteCarloIntegrandSum += f * misWeight * weight;
+                    }
+                }
+            }
+            parallelogramAreaLightMonteCarloEstimate = monteCarloIntegrandSum / 1;
+            payload.Color = float4(parallelogramAreaLightMonteCarloEstimate, 1.0f);
+        }
+    }
     payload.RayT = RayTCurrent();
     payload.PrimitiveIndex = PrimitiveIndex();
 }

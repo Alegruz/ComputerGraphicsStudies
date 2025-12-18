@@ -94,6 +94,7 @@ namespace cgs
         float RayT;
         uint32 PrimitiveIndex;
         uint32 Depth;
+        uint32 RandomSeed;
     };
 
     class DescriptorHeap final
@@ -1528,14 +1529,14 @@ namespace cgs
                         },
                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
                     },
-                    // Push Constants
+                    // PushConstants
                     {
                         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
                         .Constants = 
                         {
                             .ShaderRegister = 1,
                             .RegisterSpace = 0,
-                            .Num32BitValues = 2,
+                            .Num32BitValues = 3,
                         },
                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
                     },
@@ -1608,14 +1609,14 @@ namespace cgs
                         },
                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
                     },
-                    // Push Constants
+                    // PushConstants
                     {
                         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
                         .Constants = 
                         {
                             .ShaderRegister = 1,
                             .RegisterSpace = 0,
-                            .Num32BitValues = 2,
+                            .Num32BitValues = 3,
                         },
                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
                     },
@@ -1688,14 +1689,14 @@ namespace cgs
                         },
                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
                     },
-                    // Push Constants
+                    // PushConstants
                     {
                         .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
                         .Constants = 
                         {
                             .ShaderRegister = 1,
                             .RegisterSpace = 0,
-                            .Num32BitValues = 2,
+                            .Num32BitValues = 3,
                         },
                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
                     },
@@ -4022,17 +4023,19 @@ namespace cgs
         graphicsCommandList.SetComputeRootConstantBufferView(2, gSceneConstantBuffers[renderWork.FrameIndex]->GetGPUVirtualAddress());
         graphicsCommandList.SetComputeRootDescriptorTable(4, gParallelogramAreaLightInfosBuffer->GetGpuDescriptor());
         
-        struct PushConstant final
+        struct PushConstants final
         {
             uint32 FrameIndex = 0;
             uint32 BoundDepth = 0;
+            uint32 RandomSeed = 0;
         };
-        const PushConstant pushConstant = 
+        const PushConstants pushConstant = 
         {
             .FrameIndex = static_cast<uint32>(renderWork.WorkIndex),
             .BoundDepth = 3,
+            .RandomSeed = static_cast<uint32>(std::rand()),
         };
-        graphicsCommandList.SetComputeRoot32BitConstants(5, sizeof(PushConstant) / sizeof(uint32), &pushConstant, 0);
+        graphicsCommandList.SetComputeRoot32BitConstants(5, sizeof(PushConstants) / sizeof(uint32), &pushConstant, 0);
 
         {
             const D3D12_DISPATCH_RAYS_DESC dispatchDesc = 
