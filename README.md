@@ -209,3 +209,7 @@ Target platforms (sorted by priority):
 * **[2025.10.04 ~ 2025.11.10]**: Break period.
 * **[2025.11.11]**: Resumed development. Refactored light reservoir structures to use single float for weight and adjusted related calculations.
 * **[2025.11.12]**: Debugging instabilities in spatial resampling. Suspecting either barrier issues or random number generation issues.
+* **[2026.01.04]**: I realized that when I was evaluating the indirect radiances, I was not taking into account the light contributions in that indirect bounce. I was using the surface's color directly, which bloated the brightness of the indirect light. I fixed this by evaluating the light contributions at each bounce.
+  * Insights:
+    * I think this is one of the reason you would consider implementing a CPU version of the renderer, so that you can easily debug and validate the algorithms step by step. Debugging on PIX on Windows has a lot of stability issues because the rendered results stored into the UAV output texture doesn't match the values actually computed in the shader. I tried to force the renderer to wait for each frames before rendering rather than waiting for their modular frame, but still the debugging had issues which hints that this isn't a synchronization issue.
+    * Also, I think it would be useful to implement a debug view of the rendering contributors like the rays, reservoir samples, etc. so that I can visualize how the algorithm is working step by step.
