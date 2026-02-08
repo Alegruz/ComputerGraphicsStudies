@@ -16,15 +16,16 @@ It aims to achieve **real-time multi-bounce global illumination** with *spatial 
 
 <table>
 <tr>
-<td><img src="/Docs/2025_09_21.png" width="380"/></td>
-<td><img src="/Docs/2025_09_26_indirect_light.png" width="380"/></td>
+<td><img src="/Docs/2026_02_09_pt.png" width="380"/></td>
+<td><img src="/Docs/2026_02_09_temporal.png" width="380"/></td>
+<td><img src="/Docs/2026_02_09_spatial.png" width="380"/></td>
+<td><img src="/Docs/2026_02_09_restir.png" width="380"/></td>
 </tr>
-<tr><td align="center">Temporal + Spatial Reuse</td><td align="center">3-Bounce Indirect Illumination</td></tr>
+<tr><td align="center">Path Traced</td><td align="center">Temporal Reuse</td><td align="center">Spatial Reuse</td><td align="center">Temporal + Spatial Reuse</td></tr>
 </table>
 
-▶️ [YouTube Demo – Temporal Reuse (Sept 21, 2025)](https://youtu.be/T5tYhoAHzLU?si=QjRvoQsYwbGVvsPR)  
-▶️ [YouTube Demo – Indirect Light (Sept 26, 2025)](https://youtu.be/OTc1I7WVSt0?si=H8-nFEEiRDQ9RRfz)
-
+▶️ [YouTube Demo – Temporal Reuse (Feb 9, 2026)](https://youtu.be/U_FRgzaxe7g)
+  
 ---
 
 
@@ -213,3 +214,4 @@ Target platforms (sorted by priority):
   * Insights:
     * I think this is one of the reason you would consider implementing a CPU version of the renderer, so that you can easily debug and validate the algorithms step by step. Debugging on PIX on Windows has a lot of stability issues because the rendered results stored into the UAV output texture doesn't match the values actually computed in the shader. I tried to force the renderer to wait for each frames before rendering rather than waiting for their modular frame, but still the debugging had issues which hints that this isn't a synchronization issue.
     * Also, I think it would be useful to implement a debug view of the rendering contributors like the rays, reservoir samples, etc. so that I can visualize how the algorithm is working step by step.
+* **[2026.02.09]**: Fixed spatiotemporal resampling instability
