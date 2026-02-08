@@ -8,7 +8,8 @@
 #define RESAMPLE_COUNT (8)
 #define SPATIAL_NEIGHBORHOOD_RADIUS_RATE (1.0f / 128.0f)
 #define SPATIAL_NEIGHBORS_COUNT (8)
-#define MAX_HISTORY_SAMPLES (16)
+#define MAX_HISTORY_SAMPLES (1048576u)
+#define TEMPORAL_HISTORY_MAX_MULTIPLIER (20u)
 #define DEBUG_SPATIAL_RESAMPLING_NEIGHBORS (0)
 
 #define DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_SAME_PIXEL (1)
@@ -387,6 +388,77 @@ CalculateLambertianDiffuseBrdf(const uint primitiveIndex)
     return baseColor / PI;
 }
 
+bool
+TryGetSurfaceDataFromGBuffer(const uint2 pixel, out float3 outPosition, out float3 outNormal, out uint outPrimitiveIndex)
+{
+    outPosition = float3(0.0f, 0.0f, 0.0f);
+    outNormal = float3(0.0f, 0.0f, 1.0f);
+    outPrimitiveIndex = 0xFFFFFFFF;
+
+    const float4 gBufferData = gGBuffers[pixel];
+    if (gBufferData.z < 0.0f)
+    {
+        return false;
+    }
+
+    const float2 barycentrics = gBufferData.xy;
+    outPrimitiveIndex = (uint)gBufferData.z;
+
+    const uint indexSizeInBytes = 2;
+    const uint indicesPerTriangle = 3;
+    const uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
+    const uint baseIndex = outPrimitiveIndex * triangleIndexStride;
+    const uint3 indices = Load3x16BitIndices(baseIndex);
+
+    const float3 vertexPositions[3] =
+    {
+        gVertices[indices[0]].Position,
+        gVertices[indices[1]].Position,
+        gVertices[indices[2]].Position
+    };
+
+    const float3 vertexNormals[3] =
+    {
+        gVertices[indices[0]].Normal,
+        gVertices[indices[1]].Normal,
+        gVertices[indices[2]].Normal
+    };
+
+    outPosition = InterpolateByBarycentric(vertexPositions, barycentrics);
+    outNormal = normalize(InterpolateByBarycentric(vertexNormals, barycentrics));
+    return true;
+}
+
+bool
+AreSpatialNeighborsCompatible(const float3 position, const float3 normal, const float3 neighborPosition, const float3 neighborNormal)
+{
+    const float3 cameraPosition = gSceneConstantBuffer.CameraPosition.xyz;
+    const float currentDepth = length(position - cameraPosition);
+    const float neighborDepth = length(neighborPosition - cameraPosition);
+
+    if (!IsFinitePositive(currentDepth) || !IsFinitePositive(neighborDepth))
+    {
+        return false;
+    }
+
+    const float depthThreshold = currentDepth * 0.1f;
+    if (abs(neighborDepth - currentDepth) > depthThreshold)
+    {
+        return false;
+    }
+
+    const float normalCosineThreshold = 0.906307787f; // cos(25 deg)
+    return dot(normalize(normal), normalize(neighborNormal)) >= normalCosineThreshold;
+}
+
+uint
+ClampTemporalHistorySamples(const uint currentSamplesCount, const uint historySamplesCount)
+{
+    const uint current = max(1u, currentSamplesCount);
+    const uint maxHistory = current * TEMPORAL_HISTORY_MAX_MULTIPLIER;
+    return min(historySamplesCount, maxHistory);
+}
+
 float
 PowerHeuristic(const uint samplesCountA, const float pdfA, const uint samplesCountB, const float pdfB, const uint samplesCountC, const float pdfC)
 {
@@ -601,6 +673,7 @@ CombineParallelogramAreaLightReservoirs(inout ParallelogramAreaLightReservoir in
     ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[0];
     const float3 incomingRadiance = lightInfo.Color.rgb * PARALLELOGRAM_AREA_LIGHT_STRENGTH;
 
+    otherReservoir.SamplesCount = ClampTemporalHistorySamples(currentReservoir.SamplesCount, otherReservoir.SamplesCount);
     otherReservoir.Pdf = ParallelogramAreaLightDesiredPdf(lightInfo, otherReservoir, position, normal);
 
     UpdateParallelogramAreaLightReservoir(inoutReservoir, otherReservoir, pixel1, bufferIndexByPixel1);
@@ -641,6 +714,7 @@ CombinePointLightReservoirs(inout PointLightReservoir inoutReservoir, const uint
 
     PointLightReservoir otherReservoir = gPrevPointLightReservoir[bufferIndexByPixel1];
     SanitizePointLightReservoir(otherReservoir);
+    otherReservoir.SamplesCount = ClampTemporalHistorySamples(currentReservoir.SamplesCount, otherReservoir.SamplesCount);
     otherReservoir.Pdf = PointLightDesiredPdf(otherReservoir, position, normal);
     if (IsFinitePositive(otherReservoir.Pdf) && otherReservoir.SamplesCount > 0)
     {
@@ -672,6 +746,7 @@ CombineIndirectLightReservoirs(inout IndirectLightReservoir inoutReservoir, cons
 
     IndirectLightReservoir otherReservoir = gPrevIndirectLightReservoir[bufferIndexByPixel1];
     SanitizeIndirectLightReservoir(otherReservoir);
+    otherReservoir.SamplesCount = ClampTemporalHistorySamples(currentReservoir.SamplesCount, otherReservoir.SamplesCount);
     otherReservoir.Pdf = IndirectLightDesiredPdf(otherReservoir, normal);
 
     UpdateIndirectLightReservoir(inoutReservoir, otherReservoir, pixel1, bufferIndexByPixel1);

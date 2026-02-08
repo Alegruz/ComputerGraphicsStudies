@@ -4139,33 +4139,6 @@ namespace cgs
         }
         emitUavBarrier();
 
-        // Snapshot temporally-resampled reservoirs for spatial reuse.
-        // Spatial pass reads gPrev* as a stable read-only source while writing g*.
-        gRaytracingPrevParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
-        gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
-        gRaytracingPrevPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
-        gRaytracingPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
-        gRaytracingPrevIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
-        gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
-
-        graphicsCommandList.CopyResource(
-            gRaytracingPrevParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->GetResource().Get(),
-            gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->GetResource().Get());
-        graphicsCommandList.CopyResource(
-            gRaytracingPrevPointLightReservoirs[renderWork.FrameIndex]->GetResource().Get(),
-            gRaytracingPointLightReservoirs[renderWork.FrameIndex]->GetResource().Get());
-        graphicsCommandList.CopyResource(
-            gRaytracingPrevIndirectLightReservoirs[renderWork.FrameIndex]->GetResource().Get(),
-            gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->GetResource().Get());
-
-        gRaytracingPrevParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        gRaytracingPrevPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        gRaytracingPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        gRaytracingPrevIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        emitUavBarrier();
-
         {
             const D3D12_DISPATCH_RAYS_DESC dispatchDesc = 
             {

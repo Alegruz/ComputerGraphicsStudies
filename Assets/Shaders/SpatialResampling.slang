@@ -59,7 +59,7 @@ void RayGenMain()
 #if PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT > 0
         if (IsEmissive(primitiveIndex) == 0)
         {
-            ParallelogramAreaLightReservoir combinedReservoir = gParallelogramAreaLightReservoir[bufferIndexByPixel];
+            ParallelogramAreaLightReservoir combinedReservoir = gPrevParallelogramAreaLightReservoir[bufferIndexByPixel];
             SanitizeParallelogramAreaLightReservoir(combinedReservoir);
             // Spatial
 #if SPATIAL_NEIGHBORS_COUNT > 0
@@ -85,8 +85,14 @@ void RayGenMain()
                 const uint2 spatialNeighborPixel = (uint2)clamp((int2)pixel + int2(spatialNeighborX, spatialNeighborY), int2(0, 0), int2(screenSize) - int2(1, 1));
                 const uint spatialNeighborBufferIndex = spatialNeighborPixel.y * screenSize.x + spatialNeighborPixel.x;
 
-                const float4 neighborGBufferData = gGBuffers[spatialNeighborPixel];
-                if (neighborGBufferData.z < 0.0f)
+                float3 neighborPosition;
+                float3 neighborNormal;
+                uint neighborPrimitiveIndex;
+                if (!TryGetSurfaceDataFromGBuffer(spatialNeighborPixel, neighborPosition, neighborNormal, neighborPrimitiveIndex))
+                {
+                    continue;
+                }
+                if (!AreSpatialNeighborsCompatible(position, normal, neighborPosition, neighborNormal))
                 {
                     continue;
                 }
@@ -168,7 +174,7 @@ void RayGenMain()
         float3 pointLightMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
 #if POINT_LIGHT_SAMPLES_COUNT > 0
         {
-        PointLightReservoir combinedReservoir = gPointLightReservoir[bufferIndexByPixel];
+        PointLightReservoir combinedReservoir = gPrevPointLightReservoir[bufferIndexByPixel];
         SanitizePointLightReservoir(combinedReservoir);
         // Spatial
 #if SPATIAL_NEIGHBORS_COUNT > 0
@@ -194,8 +200,14 @@ void RayGenMain()
                 const uint2 spatialNeighborPixel = (uint2)clamp((int2)pixel + int2(spatialNeighborX, spatialNeighborY), int2(0, 0), int2(screenSize) - int2(1, 1));
                 const uint spatialNeighborBufferIndex = spatialNeighborPixel.y * screenSize.x + spatialNeighborPixel.x;
 
-                const float4 neighborGBufferData = gGBuffers[spatialNeighborPixel];
-                if (neighborGBufferData.z < 0.0f)
+                float3 neighborPosition;
+                float3 neighborNormal;
+                uint neighborPrimitiveIndex;
+                if (!TryGetSurfaceDataFromGBuffer(spatialNeighborPixel, neighborPosition, neighborNormal, neighborPrimitiveIndex))
+                {
+                    continue;
+                }
+                if (!AreSpatialNeighborsCompatible(position, normal, neighborPosition, neighborNormal))
                 {
                     continue;
                 }
@@ -262,7 +274,7 @@ void RayGenMain()
         float3 indirectIlluminationMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
 #if HEMISPHERE_SAMPLES_COUNT > 0
         {
-            IndirectLightReservoir combinedReservoir = gIndirectLightReservoir[bufferIndexByPixel];
+            IndirectLightReservoir combinedReservoir = gPrevIndirectLightReservoir[bufferIndexByPixel];
             SanitizeIndirectLightReservoir(combinedReservoir);
             // Spatial
 #if SPATIAL_NEIGHBORS_COUNT > 0
@@ -289,8 +301,14 @@ void RayGenMain()
 
                 const uint spatialNeighborBufferIndex = spatialNeighborPixel.y * screenSize.x + spatialNeighborPixel.x;
 
-                const float4 neighborGBufferData = gGBuffers[spatialNeighborPixel];
-                if (neighborGBufferData.z < 0.0f)
+                float3 neighborPosition;
+                float3 neighborNormal;
+                uint neighborPrimitiveIndex;
+                if (!TryGetSurfaceDataFromGBuffer(spatialNeighborPixel, neighborPosition, neighborNormal, neighborPrimitiveIndex))
+                {
+                    continue;
+                }
+                if (!AreSpatialNeighborsCompatible(position, normal, neighborPosition, neighborNormal))
                 {
                     continue;
                 }
