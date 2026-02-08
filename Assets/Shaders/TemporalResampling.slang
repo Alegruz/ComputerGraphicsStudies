@@ -41,7 +41,7 @@ void RayGenMain()
         };
 
     const float3 position = InterpolateByBarycentric(vertexPositions, barycentrics);
-    const float3 normal = InterpolateByBarycentric(vertexNormals, barycentrics);
+    const float3 normal = normalize(InterpolateByBarycentric(vertexNormals, barycentrics));
     
 #if PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT > 0
     if(IsEmissive(primitiveIndex) == 0)

@@ -2706,7 +2706,7 @@ namespace cgs
                     .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
                     .Buffer = 
                     {
-                        .NumElements = static_cast<uint32>(isEmissives.size() * sizeof(uint8) / 4),
+                        .NumElements = static_cast<uint32>((isEmissives.size() + 3) / 4),
                         .StructureByteStride = 0,
                         .Flags = D3D12_BUFFER_SRV_FLAG_RAW,
                     },
@@ -3044,7 +3044,7 @@ namespace cgs
                         assert(false && "Failed to create scratch resource for AS");
                         return false;
                     }
-                    asBuildInfo.ScratchResource->SetName(TEXT("InstanceDescs"));
+                    asBuildInfo.InstanceDescs->SetName(TEXT("InstanceDescs"));
                     
                     void* mappedData = nullptr;
                     hr = asBuildInfo.InstanceDescs->Map(0, nullptr, &mappedData);
@@ -3095,6 +3095,9 @@ namespace cgs
                 gRaytracingParallelogramAreaLightSampleReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
                 gRaytracingPointLightReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
                 gRaytracingIndirectLightReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+                gRaytracingPrevParallelogramAreaLightSampleReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+                gRaytracingPrevPointLightReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+                gRaytracingPrevIndirectLightReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
             }
 
             for(uint32 i = 0; i < BACK_BUFFERS_COUNT; ++i)
@@ -3136,6 +3139,9 @@ namespace cgs
                 gRaytracingParallelogramAreaLightSampleReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                 gRaytracingPointLightReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                 gRaytracingIndirectLightReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                gRaytracingPrevParallelogramAreaLightSampleReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                gRaytracingPrevPointLightReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                gRaytracingPrevIndirectLightReservoirs[i]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             }
                     
             // Kick off acceleration structure construction.
@@ -4037,6 +4043,44 @@ namespace cgs
         };
         graphicsCommandList.SetComputeRoot32BitConstants(5, sizeof(PushConstants) / sizeof(uint32), &pushConstant, 0);
 
+        uint32 firstGeometryIndex = std::numeric_limits<uint32>::max();
+        uint32 nonNullGeometryCount = 0;
+        const uint32 geometriesCount = static_cast<uint32>(renderWork.Geometries.size());
+        for(uint32 i = 0; i < geometriesCount; ++i)
+        {
+            if(renderWork.Geometries[i] == nullptr)
+            {
+                continue;
+            }
+
+            if(firstGeometryIndex == std::numeric_limits<uint32>::max())
+            {
+                firstGeometryIndex = i;
+            }
+            ++nonNullGeometryCount;
+        }
+        if(firstGeometryIndex == std::numeric_limits<uint32>::max())
+        {
+            return;
+        }
+        if(nonNullGeometryCount > 1)
+        {
+            assert(false && "Raytracing path currently supports one geometry stream for index/vertex/color buffers.");
+        }
+
+        const std::unique_ptr<Geometry>& geometry = renderWork.Geometries[firstGeometryIndex];
+        IndexBuffer& indexBuffer = geometry->GetIndexBuffer();
+        graphicsCommandList.SetComputeRootShaderResourceView(1, gTopLevelAccelerationStructures[firstGeometryIndex]->GetGPUVirtualAddress());
+        graphicsCommandList.SetComputeRootDescriptorTable(3, indexBuffer.GetGpuDescriptor());
+
+        const auto emitUavBarrier = [&graphicsCommandList]()
+        {
+            D3D12_RESOURCE_BARRIER barrier = {};
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+            barrier.UAV.pResource = nullptr;
+            graphicsCommandList.ResourceBarrier(1, &barrier);
+        };
+
         {
             const D3D12_DISPATCH_RAYS_DESC dispatchDesc = 
             {
@@ -4062,24 +4106,9 @@ namespace cgs
                 .Depth = 1,
             };
             graphicsCommandList.SetPipelineState1(gRisPipeline->GetStateObject().Get());
-
-            const uint32 geometriesCount = static_cast<uint32>(renderWork.Geometries.size());
-            for(uint32 i = 0; i < geometriesCount; ++i)
-        {
-            const std::unique_ptr<Geometry>& geometry = renderWork.Geometries[i];
-            if(geometry == nullptr)
-            {
-                assert(false && "Geometry is null");
-                continue;
-            }
-
-            graphicsCommandList.SetComputeRootShaderResourceView(1, gTopLevelAccelerationStructures[i]->GetGPUVirtualAddress());
-
-            IndexBuffer& indexBuffer = geometry->GetIndexBuffer();
-            graphicsCommandList.SetComputeRootDescriptorTable(3, indexBuffer.GetGpuDescriptor());
             graphicsCommandList.DispatchRays(&dispatchDesc);
         }
-        }
+        emitUavBarrier();
 
         {
             const D3D12_DISPATCH_RAYS_DESC dispatchDesc = 
@@ -4106,25 +4135,36 @@ namespace cgs
                 .Depth = 1,
             };
             graphicsCommandList.SetPipelineState1(gTemporalResamplingPipeline->GetStateObject().Get());
-
-            const uint32 geometriesCount = static_cast<uint32>(renderWork.Geometries.size());
-            for(uint32 i = 0; i < geometriesCount; ++i)
-            {
-                const std::unique_ptr<Geometry>& geometry = renderWork.Geometries[i];
-                if(geometry == nullptr)
-                {
-                    assert(false && "Geometry is null");
-                    continue;
-                }
-
-                graphicsCommandList.SetComputeRootShaderResourceView(1, gTopLevelAccelerationStructures[i]->GetGPUVirtualAddress());
-
-                IndexBuffer& indexBuffer = geometry->GetIndexBuffer();
-                graphicsCommandList.SetComputeRootDescriptorTable(3, indexBuffer.GetGpuDescriptor());
-                graphicsCommandList.DispatchRays(&dispatchDesc);
-            }
+            graphicsCommandList.DispatchRays(&dispatchDesc);
         }
-        
+        emitUavBarrier();
+
+        // Snapshot temporally-resampled reservoirs for spatial reuse.
+        // Spatial pass reads gPrev* as a stable read-only source while writing g*.
+        gRaytracingPrevParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+        gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        gRaytracingPrevPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+        gRaytracingPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        gRaytracingPrevIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
+        gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
+
+        graphicsCommandList.CopyResource(
+            gRaytracingPrevParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->GetResource().Get(),
+            gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->GetResource().Get());
+        graphicsCommandList.CopyResource(
+            gRaytracingPrevPointLightReservoirs[renderWork.FrameIndex]->GetResource().Get(),
+            gRaytracingPointLightReservoirs[renderWork.FrameIndex]->GetResource().Get());
+        graphicsCommandList.CopyResource(
+            gRaytracingPrevIndirectLightReservoirs[renderWork.FrameIndex]->GetResource().Get(),
+            gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->GetResource().Get());
+
+        gRaytracingPrevParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingParallelogramAreaLightSampleReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingPrevPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingPointLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingPrevIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        gRaytracingIndirectLightReservoirs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        emitUavBarrier();
 
         {
             const D3D12_DISPATCH_RAYS_DESC dispatchDesc = 
@@ -4151,24 +4191,9 @@ namespace cgs
                 .Depth = 1,
             };
             graphicsCommandList.SetPipelineState1(gSpatialResamplingPipeline->GetStateObject().Get());
-
-            const uint32 geometriesCount = static_cast<uint32>(renderWork.Geometries.size());
-            for(uint32 i = 0; i < geometriesCount; ++i)
-            {
-                const std::unique_ptr<Geometry>& geometry = renderWork.Geometries[i];
-                if(geometry == nullptr)
-                {
-                    assert(false && "Geometry is null");
-                    continue;
-                }
-
-                graphicsCommandList.SetComputeRootShaderResourceView(1, gTopLevelAccelerationStructures[i]->GetGPUVirtualAddress());
-
-                IndexBuffer& indexBuffer = geometry->GetIndexBuffer();
-                graphicsCommandList.SetComputeRootDescriptorTable(3, indexBuffer.GetGpuDescriptor());
-                graphicsCommandList.DispatchRays(&dispatchDesc);
-            }
+            graphicsCommandList.DispatchRays(&dispatchDesc);
         }
+        emitUavBarrier();
         sceneRenderTarget.ColorBuffer.Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_DEST);
         gRaytracingOutputs[renderWork.FrameIndex]->Transition(graphicsCommandList, D3D12_RESOURCE_STATE_COPY_SOURCE);
 

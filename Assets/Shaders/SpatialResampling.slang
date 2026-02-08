@@ -41,7 +41,7 @@ void RayGenMain()
             };
 
         const float3 position = InterpolateByBarycentric(vertexPositions, barycentrics);
-        const float3 normal = InterpolateByBarycentric(vertexNormals, barycentrics);
+        const float3 normal = normalize(InterpolateByBarycentric(vertexNormals, barycentrics));
 
         float3 emissiveColor = float3(0.0f, 0.0f, 0.0f);
         if (IsEmissive(primitiveIndex) == 1)
@@ -59,6 +59,8 @@ void RayGenMain()
 #if PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT > 0
         if (IsEmissive(primitiveIndex) == 0)
         {
+            ParallelogramAreaLightReservoir combinedReservoir = gParallelogramAreaLightReservoir[bufferIndexByPixel];
+            SanitizeParallelogramAreaLightReservoir(combinedReservoir);
             // Spatial
 #if SPATIAL_NEIGHBORS_COUNT > 0
             for (uint resampleIndex = 0; resampleIndex < SPATIAL_NEIGHBORS_COUNT; ++resampleIndex)
@@ -103,13 +105,21 @@ void RayGenMain()
                     continue;
                 }
 
-                ParallelogramAreaLightReservoir reservoir = (ParallelogramAreaLightReservoir)0;
-
-                CombineParallelogramAreaLightReservoirs(reservoir, pixel, spatialNeighborPixel, bufferIndexByPixel, spatialNeighborBufferIndex, position, normal);
-
-                gParallelogramAreaLightReservoir[bufferIndexByPixel] = reservoir;
+                ParallelogramAreaLightReservoir neighborReservoir = gPrevParallelogramAreaLightReservoir[spatialNeighborBufferIndex];
+                SanitizeParallelogramAreaLightReservoir(neighborReservoir);
+                const ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[0];
+                neighborReservoir.Pdf = ParallelogramAreaLightDesiredPdf(lightInfo, neighborReservoir, position, normal);
+                UpdateParallelogramAreaLightReservoir(combinedReservoir, neighborReservoir, spatialNeighborPixel, spatialNeighborBufferIndex);
             }
 #endif // SPATIAL_NEIGHBORS_COUNT > 0
+            if (combinedReservoir.SamplesCount > 0)
+            {
+                const ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[0];
+                combinedReservoir.Pdf = ParallelogramAreaLightDesiredPdf(lightInfo, combinedReservoir, position, normal);
+                const float dividend = combinedReservoir.Pdf * combinedReservoir.SamplesCount;
+                combinedReservoir.Weight = IsFinitePositive(dividend) ? (combinedReservoir.WeightSum / dividend) : 0.0f;
+            }
+            gParallelogramAreaLightReservoir[bufferIndexByPixel] = combinedReservoir;
 
             const float3 selectedProposalPosition = gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightPositionSample;
             const float3 selectedProposalNormal = gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightNormalSample;
@@ -122,7 +132,7 @@ void RayGenMain()
             const float distance = sqrt(distanceSquared);
             const float3 worldSampleDir = normalize(parallelogramAreaLightPosition - position);
 
-            if (dot(worldSampleDir, normal) > 0.0f)
+            if (dot(worldSampleDir, normal) > 0.0f && weight > 0.0f && pdf > 0.0f)
             {
                 // Trace a ray in the sampled direction.
                 RayDesc ray;
@@ -134,7 +144,7 @@ void RayGenMain()
                 RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, primitiveIndex, 1 };
                 TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, newPayload);
 
-                if (IsEmissive(newPayload.PrimitiveIndex) == 1)
+                if (newPayload.PrimitiveIndex != 0xFFFFFFFF && IsEmissive(newPayload.PrimitiveIndex) == 1)
                 {
                     const float3 incomingRadiance = newPayload.Color.rgb;
                     const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
@@ -158,6 +168,8 @@ void RayGenMain()
         float3 pointLightMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
 #if POINT_LIGHT_SAMPLES_COUNT > 0
         {
+        PointLightReservoir combinedReservoir = gPointLightReservoir[bufferIndexByPixel];
+        SanitizePointLightReservoir(combinedReservoir);
         // Spatial
 #if SPATIAL_NEIGHBORS_COUNT > 0
             for (uint resampleIndex = 0; resampleIndex < SPATIAL_NEIGHBORS_COUNT; ++resampleIndex)
@@ -194,13 +206,19 @@ void RayGenMain()
                     continue;
                 }
 
-                PointLightReservoir reservoir = (PointLightReservoir)0;
-
-                CombinePointLightReservoirs(reservoir, pixel, spatialNeighborPixel, bufferIndexByPixel, spatialNeighborBufferIndex, position, normal);
-
-                gPointLightReservoir[bufferIndexByPixel] = reservoir;
+                PointLightReservoir neighborReservoir = gPrevPointLightReservoir[spatialNeighborBufferIndex];
+                SanitizePointLightReservoir(neighborReservoir);
+                neighborReservoir.Pdf = PointLightDesiredPdf(neighborReservoir, position, normal);
+                UpdatePointLightReservoir(combinedReservoir, neighborReservoir, spatialNeighborPixel, spatialNeighborBufferIndex);
             }
 #endif  // SPATIAL_NEIGHBORS_COUNT > 0
+            if (combinedReservoir.SamplesCount > 0)
+            {
+                combinedReservoir.Pdf = PointLightDesiredPdf(combinedReservoir, position, normal);
+                const float dividend = combinedReservoir.Pdf * combinedReservoir.SamplesCount;
+                combinedReservoir.Weight = IsFinitePositive(dividend) ? (combinedReservoir.WeightSum / dividend) : 0.0f;
+            }
+            gPointLightReservoir[bufferIndexByPixel] = combinedReservoir;
 
             const uint selectedProposalIndex = gPointLightReservoir[bufferIndexByPixel].LightIndexSample;
             const float pdf = gPointLightReservoir[bufferIndexByPixel].Pdf;
@@ -211,7 +229,7 @@ void RayGenMain()
             const float distance = sqrt(distanceSquared);
             const float3 worldSampleDir = normalize(pointLightPosition - position);
 
-            if (dot(worldSampleDir, normal) > 0.0f)
+            if (dot(worldSampleDir, normal) > 0.0f && weight > 0.0f && pdf > 0.0f)
             {
                 // Trace a ray in the sampled direction.
                 RayDesc ray;
@@ -244,6 +262,8 @@ void RayGenMain()
         float3 indirectIlluminationMonteCarloEstimate = float3(0.0f, 0.0f, 0.0f);
 #if HEMISPHERE_SAMPLES_COUNT > 0
         {
+            IndirectLightReservoir combinedReservoir = gIndirectLightReservoir[bufferIndexByPixel];
+            SanitizeIndirectLightReservoir(combinedReservoir);
             // Spatial
 #if SPATIAL_NEIGHBORS_COUNT > 0
             for (uint resampleIndex = 0; resampleIndex < SPATIAL_NEIGHBORS_COUNT; ++resampleIndex)
@@ -282,19 +302,25 @@ void RayGenMain()
                     continue;
                 }
 
-                IndirectLightReservoir reservoir = (IndirectLightReservoir)0;
-
-                CombineIndirectLightReservoirs(reservoir, pixel, spatialNeighborPixel, bufferIndexByPixel, spatialNeighborBufferIndex, position, normal);
-
-                gIndirectLightReservoir[bufferIndexByPixel] = reservoir;
+                IndirectLightReservoir neighborReservoir = gPrevIndirectLightReservoir[spatialNeighborBufferIndex];
+                SanitizeIndirectLightReservoir(neighborReservoir);
+                neighborReservoir.Pdf = IndirectLightDesiredPdf(neighborReservoir, normal);
+                UpdateIndirectLightReservoir(combinedReservoir, neighborReservoir, spatialNeighborPixel, spatialNeighborBufferIndex);
             }
 #endif // SPATIAL_NEIGHBORS_COUNT > 0
+            if (combinedReservoir.SamplesCount > 0)
+            {
+                combinedReservoir.Pdf = IndirectLightDesiredPdf(combinedReservoir, normal);
+                const float dividend = combinedReservoir.Pdf * combinedReservoir.SamplesCount;
+                combinedReservoir.Weight = IsFinitePositive(dividend) ? (combinedReservoir.WeightSum / dividend) : 0.0f;
+            }
+            gIndirectLightReservoir[bufferIndexByPixel] = combinedReservoir;
 
             const float weight = gIndirectLightReservoir[bufferIndexByPixel].Weight;
             const float3 worldSampleDir = gIndirectLightReservoir[bufferIndexByPixel].Direction;
             const float pdf = gIndirectLightReservoir[bufferIndexByPixel].Pdf;
 
-            if (dot(worldSampleDir, normal) > 0.0f)
+            if (dot(worldSampleDir, normal) > 0.0f && weight > 0.0f && pdf > 0.0f)
             {
                 // Trace a ray in the sampled direction.
                 RayDesc ray;
@@ -335,6 +361,11 @@ void RayGenMain()
 
         // Write the raytraced color to the output texture.
         sceneLinearColor = monteCarloEstimate.rgb + emissiveColor.rgb;
+        if (any(isnan(sceneLinearColor)) || any(isinf(sceneLinearColor)))
+        {
+            sceneLinearColor = float3(0.0f, 0.0f, 0.0f);
+        }
+        sceneLinearColor = max(sceneLinearColor, float3(0.0f, 0.0f, 0.0f));
     }
 
     // 1) fireflies/NaNs guard (optional but wise for path tracing)
@@ -364,7 +395,7 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
     {
         payload.Color = float4(gColors[PrimitiveIndex()] * PARALLELOGRAM_AREA_LIGHT_STRENGTH, 1.0f);
     }
-    else if (IsEmissive(payload.PrimitiveIndex) != 1)
+    else if (payload.PrimitiveIndex != 0xFFFFFFFF && IsEmissive(payload.PrimitiveIndex) != 1)
     {
         // NEE
         if (payload.Depth > 0)
@@ -413,7 +444,7 @@ void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttr
                 RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, 0, payload.Depth - 1 };
                 TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, newPayload);
 
-                if (IsEmissive(newPayload.PrimitiveIndex) == 1)
+                if (newPayload.PrimitiveIndex != 0xFFFFFFFF && IsEmissive(newPayload.PrimitiveIndex) == 1)
                 {
                     const float3 incomingRadiance = newPayload.Color.rgb;
                     const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));

@@ -3,11 +3,12 @@
 
 #define ENABLE_TEMPORAL_RESAMPLING (1)
 #define PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT (1)
-#define POINT_LIGHT_SAMPLES_COUNT (0)
+#define POINT_LIGHT_SAMPLES_COUNT (1)
 #define HEMISPHERE_SAMPLES_COUNT (1)
 #define RESAMPLE_COUNT (8)
 #define SPATIAL_NEIGHBORHOOD_RADIUS_RATE (1.0f / 128.0f)
-#define SPATIAL_NEIGHBORS_COUNT (0)
+#define SPATIAL_NEIGHBORS_COUNT (8)
+#define MAX_HISTORY_SAMPLES (16)
 #define DEBUG_SPATIAL_RESAMPLING_NEIGHBORS (0)
 
 #define DEBUG_SPATIAL_RESAMPLING_NEIGHBORS_SAME_PIXEL (1)
@@ -113,6 +114,18 @@ ConvertColorToLuminance(const float3 color)
     return dot(color, float3(0.2126, 0.7152, 0.0722));
 }
 
+bool
+IsFinitePositive(const float value)
+{
+    return !isnan(value) && !isinf(value) && value > 0.0f;
+}
+
+bool
+IsFiniteNonNegative(const float value)
+{
+    return !isnan(value) && !isinf(value) && value >= 0.0f;
+}
+
 // --- exposure (key) ---
 float3
 ApplyExposure(const float3 radiance, const float exposure)
@@ -181,8 +194,16 @@ Load3x16BitIndices(uint offsetBytes)
 uint
 IsEmissive(const uint index)
 {
-    const uint isEmissive32Data = gIsEmissive.Load(index);
-    const uint isEmissive = (isEmissive32Data & (0xFF << (index * 8))) >> (index * 8);
+    if (index == 0xFFFFFFFF)
+    {
+        return 0;
+    }
+
+    const uint byteOffset = index;
+    const uint dwordAlignedOffset = byteOffset & ~3;
+    const uint isEmissive32Data = gIsEmissive.Load(dwordAlignedOffset);
+    const uint lane = byteOffset & 3;
+    const uint isEmissive = (isEmissive32Data >> (lane * 8)) & 0xFF;
     return isEmissive;
 }
 
@@ -235,7 +256,7 @@ GetWorldNormal(const uint primitiveIndex, const float2 barycentrics)
     const uint indexSizeInBytes = 2;
     const uint indicesPerTriangle = 3;
     const uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
-    const uint baseIndex = PrimitiveIndex() * triangleIndexStride;
+    const uint baseIndex = primitiveIndex * triangleIndexStride;
 
     // Load up 3 16 bit indices for the triangle.
     const uint3 indices = Load3x16BitIndices(baseIndex);
@@ -252,7 +273,7 @@ GetWorldNormal(const uint primitiveIndex, const float2 barycentrics)
     // This is redundant and done for illustration purposes
     // as all the per-vertex normals are the same and match triangle's normal in this sample.
     const float3 triangleNormal = InterpolateByBarycentric(vertexNormals, barycentrics);
-    return triangleNormal;
+    return normalize(triangleNormal);
 }
 
 // Generate a ray in world space for a camera pixel corresponding to an index from the dispatched 2D grid.
@@ -372,7 +393,8 @@ PowerHeuristic(const uint samplesCountA, const float pdfA, const uint samplesCou
     const float a = samplesCountA * pdfA;
     const float b = samplesCountB * pdfB;
     const float c = samplesCountC * pdfC;
-    return (a * a) / (a * a + b * b + c * c);
+    const float denominator = (a * a + b * b + c * c);
+    return denominator > 0.0f ? (a * a) / denominator : 0.0f;
 }
 
 // ReSTIR paper algorithm 2: Weighted reservoir sampling.
@@ -398,17 +420,61 @@ InitializeIndirectLightReservoir(out IndirectLightReservoir reservoir)
 }
 
 void
+SanitizeParallelogramAreaLightReservoir(inout ParallelogramAreaLightReservoir reservoir)
+{
+    if (!IsFiniteNonNegative(reservoir.Weight) ||
+        !IsFiniteNonNegative(reservoir.WeightSum) ||
+        !IsFiniteNonNegative(reservoir.Pdf) ||
+        any(isnan(reservoir.ParallelogramAreaLightPositionSample)) ||
+        any(isinf(reservoir.ParallelogramAreaLightPositionSample)) ||
+        any(isnan(reservoir.ParallelogramAreaLightNormalSample)) ||
+        any(isinf(reservoir.ParallelogramAreaLightNormalSample)))
+    {
+        reservoir = (ParallelogramAreaLightReservoir)0;
+    }
+}
+
+void
+SanitizePointLightReservoir(inout PointLightReservoir reservoir)
+{
+    if (!IsFiniteNonNegative(reservoir.Weight) ||
+        !IsFiniteNonNegative(reservoir.WeightSum) ||
+        !IsFiniteNonNegative(reservoir.Pdf))
+    {
+        reservoir = (PointLightReservoir)0;
+    }
+}
+
+void
+SanitizeIndirectLightReservoir(inout IndirectLightReservoir reservoir)
+{
+    if (!IsFiniteNonNegative(reservoir.Weight) ||
+        !IsFiniteNonNegative(reservoir.WeightSum) ||
+        !IsFiniteNonNegative(reservoir.Pdf) ||
+        any(isnan(reservoir.Direction)) ||
+        any(isinf(reservoir.Direction)))
+    {
+        reservoir = (IndirectLightReservoir)0;
+    }
+}
+
+void
 UpdateParallelogramAreaLightReservoir(inout ParallelogramAreaLightReservoir inoutReservoir, const ParallelogramAreaLightReservoir reservoir, const uint2 pixel, const uint bufferIndexByPixel)
 {
+    SanitizeParallelogramAreaLightReservoir(inoutReservoir);
     const float weight = reservoir.Weight * reservoir.Pdf * reservoir.SamplesCount;
+    if (!IsFinitePositive(weight))
+    {
+        return;
+    }
     inoutReservoir.WeightSum += weight;
-    inoutReservoir.SamplesCount += reservoir.SamplesCount;
+    inoutReservoir.SamplesCount = min(MAX_HISTORY_SAMPLES, inoutReservoir.SamplesCount + reservoir.SamplesCount);
 #if SAMPLE_USING_FRAME_INDEX
     const float canonicalSample = CanonicalSample(pixel, FrameIndex + reservoir.SamplesCount * bufferIndexByPixel * 17, 4);
 #else  // NOT SAMPLE_USING_FRAME_INDEX
     const float canonicalSample = CanonicalSample(pixel, reservoir.SamplesCount * bufferIndexByPixel * 17, 4);
 #endif // NOT SAMPLE_USING_FRAME_INDEX
-    const float probability = weight / inoutReservoir.WeightSum;
+    const float probability = IsFinitePositive(inoutReservoir.WeightSum) ? (weight / inoutReservoir.WeightSum) : 0.0f;
     if (canonicalSample < probability)
     {
         inoutReservoir.ParallelogramAreaLightPositionSample = reservoir.ParallelogramAreaLightPositionSample;
@@ -421,38 +487,55 @@ UpdateParallelogramAreaLightReservoir(inout ParallelogramAreaLightReservoir inou
 void
 UpdateParallelogramAreaLightReservoir(out float3 outPosition, out float3 outNormal, inout float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const float weight, const float desiredPdf, const float3 parallelogramAreaLightPosition, const float3 triangleNormal, const uint2 pixel, const uint sampleIndex, const uint proposalIndex, const uint bufferIndexByPixel)
 {
-    // w_sum ← w_sum + w_i
-    outWeightsSum += weight;
-    // M ← M + 1
-    outSamplesCount += 1;
-#if SAMPLE_USING_FRAME_INDEX
-    const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
-#else  // NOT SAMPLE_USING_FRAME_INDEX
-    const float canonicalSample = CanonicalSample(pixel, sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
-#endif // NOT SAMPLE_USING_FRAME_INDEX
-    const float probability = weight / outWeightsSum;
-    // if rand() < (w_i / w_sum) then
-    if (canonicalSample < probability)
+    if (!IsFiniteNonNegative(outWeightsSum))
     {
-        // y ← x_i
-        outPosition = parallelogramAreaLightPosition;
-        outNormal = triangleNormal;
-        outDesiredPdf = desiredPdf;
+        outWeightsSum = 0.0f;
+        outSamplesCount = 0;
+    }
+    if (!IsFiniteNonNegative(outDesiredPdf))
+    {
+        outDesiredPdf = 0.0f;
+    }
+    if (IsFinitePositive(weight))
+    {
+        // w_sum ← w_sum + w_i
+        outWeightsSum += weight;
+        // M ← M + 1
+        outSamplesCount += 1;
+#if SAMPLE_USING_FRAME_INDEX
+        const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+        const float canonicalSample = CanonicalSample(pixel, sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+#endif // NOT SAMPLE_USING_FRAME_INDEX
+        const float probability = IsFinitePositive(outWeightsSum) ? (weight / outWeightsSum) : 0.0f;
+        // if rand() < (w_i / w_sum) then
+        if (canonicalSample < probability)
+        {
+            // y ← x_i
+            outPosition = parallelogramAreaLightPosition;
+            outNormal = triangleNormal;
+            outDesiredPdf = desiredPdf;
+        }
     }
 }
 
 void
 UpdatePointLightReservoir(inout PointLightReservoir inoutReservoir, const PointLightReservoir reservoir, const uint2 pixel, const uint bufferIndexByPixel)
 {
+    SanitizePointLightReservoir(inoutReservoir);
     const float weight = reservoir.Weight * reservoir.Pdf * reservoir.SamplesCount;
+    if (!IsFinitePositive(weight))
+    {
+        return;
+    }
     inoutReservoir.WeightSum += weight;
-    inoutReservoir.SamplesCount += reservoir.SamplesCount;
+    inoutReservoir.SamplesCount = min(MAX_HISTORY_SAMPLES, inoutReservoir.SamplesCount + reservoir.SamplesCount);
 #if SAMPLE_USING_FRAME_INDEX
     const float canonicalSample = CanonicalSample(pixel, FrameIndex + reservoir.SamplesCount * bufferIndexByPixel * 23, 4);
 #else  // NOT SAMPLE_USING_FRAME_INDEX
     const float canonicalSample = CanonicalSample(pixel, reservoir.SamplesCount * bufferIndexByPixel * 23, 4);
 #endif // NOT SAMPLE_USING_FRAME_INDEX
-    const float probability = weight / inoutReservoir.WeightSum;
+    const float probability = IsFinitePositive(inoutReservoir.WeightSum) ? (weight / inoutReservoir.WeightSum) : 0.0f;
     if (canonicalSample < probability)
     {
         inoutReservoir.LightIndexSample = reservoir.LightIndexSample;
@@ -463,15 +546,20 @@ UpdatePointLightReservoir(inout PointLightReservoir inoutReservoir, const PointL
 void
 UpdateIndirectLightReservoir(inout IndirectLightReservoir inoutReservoir, const IndirectLightReservoir reservoir, const uint2 pixel, const uint bufferIndexByPixel)
 {
+    SanitizeIndirectLightReservoir(inoutReservoir);
     const float weight = reservoir.Weight * reservoir.Pdf * reservoir.SamplesCount;
+    if (!IsFinitePositive(weight))
+    {
+        return;
+    }
     inoutReservoir.WeightSum += weight;
-    inoutReservoir.SamplesCount += reservoir.SamplesCount;
+    inoutReservoir.SamplesCount = min(MAX_HISTORY_SAMPLES, inoutReservoir.SamplesCount + reservoir.SamplesCount);
 #if SAMPLE_USING_FRAME_INDEX
     const float canonicalSample = CanonicalSample(pixel, FrameIndex + reservoir.SamplesCount * 17, 4);
 #else  // NOT SAMPLE_USING_FRAME_INDEX
     const float canonicalSample = CanonicalSample(pixel, reservoir.SamplesCount * 17, 4);
 #endif // NOT SAMPLE_USING_FRAME_INDEX
-    const float probability = weight / inoutReservoir.WeightSum;
+    const float probability = IsFinitePositive(inoutReservoir.WeightSum) ? (weight / inoutReservoir.WeightSum) : 0.0f;
     if (canonicalSample < probability)
     {
         inoutReservoir.Direction = reservoir.Direction;
@@ -487,7 +575,10 @@ ParallelogramAreaLightDesiredPdf(const ParallelogramAreaLightInfo lightInfo, con
     const float3 parallelogramAreaLightPosition = otherReservoir.ParallelogramAreaLightPositionSample;
     const float3 hitPositionToParallelogramAreaLightPosition = parallelogramAreaLightPosition - position;
     const float distanceSquared = dot(hitPositionToParallelogramAreaLightPosition, hitPositionToParallelogramAreaLightPosition);
-    const float distance = sqrt(distanceSquared);
+    if (!IsFinitePositive(distanceSquared))
+    {
+        return 0.0f;
+    }
     const float3 worldSampleDir = normalize(parallelogramAreaLightPosition - position);
     const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
     const float3 triangleNormal = otherReservoir.ParallelogramAreaLightNormalSample;
@@ -501,9 +592,12 @@ void
 CombineParallelogramAreaLightReservoirs(inout ParallelogramAreaLightReservoir inoutReservoir, const uint2 pixel0, const uint2 pixel1, const uint bufferIndexByPixel0, const uint bufferIndexByPixel1, const float3 position, const float3 normal)
 {
     InitializeParallelogramAreaLightReservoir(inoutReservoir);
-    UpdateParallelogramAreaLightReservoir(inoutReservoir, gParallelogramAreaLightReservoir[bufferIndexByPixel0], pixel0, bufferIndexByPixel0);
+    ParallelogramAreaLightReservoir currentReservoir = gParallelogramAreaLightReservoir[bufferIndexByPixel0];
+    SanitizeParallelogramAreaLightReservoir(currentReservoir);
+    UpdateParallelogramAreaLightReservoir(inoutReservoir, currentReservoir, pixel0, bufferIndexByPixel0);
 
     ParallelogramAreaLightReservoir otherReservoir = gPrevParallelogramAreaLightReservoir[bufferIndexByPixel1];
+    SanitizeParallelogramAreaLightReservoir(otherReservoir);
     ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[0];
     const float3 incomingRadiance = lightInfo.Color.rgb * PARALLELOGRAM_AREA_LIGHT_STRENGTH;
 
@@ -513,11 +607,11 @@ CombineParallelogramAreaLightReservoirs(inout ParallelogramAreaLightReservoir in
 
     inoutReservoir.Pdf = ParallelogramAreaLightDesiredPdf(lightInfo, inoutReservoir, position, normal);
     const float dividend = inoutReservoir.Pdf * inoutReservoir.SamplesCount;
-    inoutReservoir.Weight = dividend == 0.0f ? 0.0f : inoutReservoir.WeightSum / dividend;
+    inoutReservoir.Weight = IsFinitePositive(dividend) ? (inoutReservoir.WeightSum / dividend) : 0.0f;
 }
 
 float
-PointLightDesiredPdf(const PointLightInfo lightInfo, const PointLightReservoir otherReservoir, const float3 position, const float3 normal)
+PointLightDesiredPdf(const PointLightReservoir otherReservoir, const float3 position, const float3 normal)
 {
     const uint pointLightIndex = otherReservoir.LightIndexSample;
     const float3 incomingRadiance = gPointLightInfos[pointLightIndex].Color * POINT_LIGHT_STRENGTH;
@@ -525,9 +619,13 @@ PointLightDesiredPdf(const PointLightInfo lightInfo, const PointLightReservoir o
     const float3 pointLightPosition = gPointLightInfos[pointLightIndex].Positions;
     const float3 hitPositionToPointLightPosition = pointLightPosition - position;
     const float distanceSquared = dot(hitPositionToPointLightPosition, hitPositionToPointLightPosition);
+    if (!IsFinitePositive(distanceSquared))
+    {
+        return 0.0f;
+    }
     const float3 worldSampleDir = normalize(pointLightPosition - position);
 
-    const float geometryTerm = dot(worldSampleDir, normal) / distanceSquared;
+    const float geometryTerm = max(0.0f, dot(worldSampleDir, normal)) / distanceSquared;
     const float3 integrand = incomingRadiance * geometryTerm;
     const float desiredPdf = ConvertColorToLuminance(integrand);
     return desiredPdf;
@@ -537,19 +635,21 @@ void
 CombinePointLightReservoirs(inout PointLightReservoir inoutReservoir, const uint2 pixel0, const uint2 pixel1, const uint bufferIndexByPixel0, const uint bufferIndexByPixel1, const float3 position, const float3 normal)
 {
     InitializePointLightReservoir(inoutReservoir);
-    UpdatePointLightReservoir(inoutReservoir, gPointLightReservoir[bufferIndexByPixel0], pixel0, bufferIndexByPixel0);
+    PointLightReservoir currentReservoir = gPointLightReservoir[bufferIndexByPixel0];
+    SanitizePointLightReservoir(currentReservoir);
+    UpdatePointLightReservoir(inoutReservoir, currentReservoir, pixel0, bufferIndexByPixel0);
 
     PointLightReservoir otherReservoir = gPrevPointLightReservoir[bufferIndexByPixel1];
-    PointLightInfo lightInfo = gPointLightInfos[0];
-    const float3 incomingRadiance = lightInfo.Color.rgb * POINT_LIGHT_STRENGTH;
+    SanitizePointLightReservoir(otherReservoir);
+    otherReservoir.Pdf = PointLightDesiredPdf(otherReservoir, position, normal);
+    if (IsFinitePositive(otherReservoir.Pdf) && otherReservoir.SamplesCount > 0)
+    {
+        UpdatePointLightReservoir(inoutReservoir, otherReservoir, pixel1, bufferIndexByPixel1);
+    }
 
-    otherReservoir.Pdf = PointLightDesiredPdf(lightInfo, otherReservoir, position, normal);
-
-    UpdatePointLightReservoir(inoutReservoir, otherReservoir, pixel1, bufferIndexByPixel1);
-
-    inoutReservoir.Pdf = PointLightDesiredPdf(lightInfo, inoutReservoir, position, normal);
+    inoutReservoir.Pdf = PointLightDesiredPdf(inoutReservoir, position, normal);
     const float dividend = inoutReservoir.Pdf * inoutReservoir.SamplesCount;
-    inoutReservoir.Weight = dividend == 0.0f ? 0.0f : inoutReservoir.WeightSum / dividend;
+    inoutReservoir.Weight = IsFinitePositive(dividend) ? (inoutReservoir.WeightSum / dividend) : 0.0f;
 }
 
 float
@@ -566,16 +666,19 @@ void
 CombineIndirectLightReservoirs(inout IndirectLightReservoir inoutReservoir, const uint2 pixel0, const uint2 pixel1, const uint bufferIndexByPixel0, const uint bufferIndexByPixel1, const float3 position, const float3 normal)
 {
     InitializeIndirectLightReservoir(inoutReservoir);
-    UpdateIndirectLightReservoir(inoutReservoir, gIndirectLightReservoir[bufferIndexByPixel0], pixel0, bufferIndexByPixel0);
+    IndirectLightReservoir currentReservoir = gIndirectLightReservoir[bufferIndexByPixel0];
+    SanitizeIndirectLightReservoir(currentReservoir);
+    UpdateIndirectLightReservoir(inoutReservoir, currentReservoir, pixel0, bufferIndexByPixel0);
 
     IndirectLightReservoir otherReservoir = gPrevIndirectLightReservoir[bufferIndexByPixel1];
+    SanitizeIndirectLightReservoir(otherReservoir);
     otherReservoir.Pdf = IndirectLightDesiredPdf(otherReservoir, normal);
 
     UpdateIndirectLightReservoir(inoutReservoir, otherReservoir, pixel1, bufferIndexByPixel1);
 
     inoutReservoir.Pdf = IndirectLightDesiredPdf(inoutReservoir, normal);
     const float dividend = inoutReservoir.Pdf * inoutReservoir.SamplesCount;
-    inoutReservoir.Weight = dividend == 0.0f ? 0.0f : inoutReservoir.WeightSum / dividend;
+    inoutReservoir.Weight = IsFinitePositive(dividend) ? (inoutReservoir.WeightSum / dividend) : 0.0f;
 }
 
 float
@@ -600,6 +703,7 @@ RisParallelogramAreaLight(out float3 outPosition, out float3 outNormal, out floa
     const float3 p0 = baseV0;
     const float3 e1 = baseV1 - baseV0;
     const float3 e2 = baseV2 - baseV0;
+    const float3 lightNormal = normalize(cross(e1, e2));
     const float parallelogramArea = length(cross(e1, e2));
     // ReSTIR paper algorithm 3: Streaming RIS using weighted reservoir sampling.
     //  for i ← 1 to M do
@@ -616,68 +720,28 @@ RisParallelogramAreaLight(out float3 outPosition, out float3 outNormal, out floa
 #endif // NOT SAMPLE_USING_FRAME_INDEX
 
         const float3 parallelogramAreaLightPosition = SampleParallelogram(p0, e1, e2, uniformSample);
-        uint primitiveIndex = 0;
-        if (uniformSample.x > 0.5f && uniformSample.y > 0.5f)
-        {
-            primitiveIndex = lightInfo.PrimitiveIndices[1];
-        }
-        else
-        {
-            primitiveIndex = lightInfo.PrimitiveIndices[0];
-        }
         const float3 hitPositionToParallelogramAreaLightPosition = parallelogramAreaLightPosition - hitPosition;
         const float distanceSquared = dot(hitPositionToParallelogramAreaLightPosition, hitPositionToParallelogramAreaLightPosition);
-        const float distance = sqrt(distanceSquared);
+        if (!IsFinitePositive(distanceSquared))
+        {
+            continue;
+        }
         const float3 worldSampleDir = normalize(parallelogramAreaLightPosition - hitPosition);
-
-        baseIndex = primitiveIndex * triangleIndexStride;
-        const uint3 indices = Load3x16BitIndices(baseIndex);
-
-        float3 v0 = gVertices[indices[0]].Position;
-        float3 v1 = gVertices[indices[1]].Position;
-        float3 v2 = gVertices[indices[2]].Position;
-
-        // Compute barycentric coordinates of hitPoint with respect to triangle (v0, v1, v2)
-        float3 v0v1 = v1 - v0;
-        float3 v0v2 = v2 - v0;
-        float3 v0p = parallelogramAreaLightPosition - v0;
-        float d00 = dot(v0v1, v0v1);
-        float d01 = dot(v0v1, v0v2);
-        float d11 = dot(v0v2, v0v2);
-        float d20 = dot(v0p, v0v1);
-        float d21 = dot(v0p, v0v2);
-        float denom = d00 * d11 - d01 * d01;
-        float v = (d11 * d20 - d01 * d21) / denom;
-        float w = (d00 * d21 - d01 * d20) / denom;
-        float u = 1.0f - v - w;
-        float2 barycentrics = float2(v, w);
-
-        // Retrieve corresponding vertex normals for the triangle vertices.
-        const float3 vertexNormals[3] =
-            {
-                gVertices[indices[0]].Normal,
-                gVertices[indices[1]].Normal,
-                gVertices[indices[2]].Normal
-            };
-
-        // Compute the triangle's normal.
-        // This is redundant and done for illustration purposes
-        // as all the per-vertex normals are the same and match triangle's normal in this sample.
-        const float3 triangleNormal = InterpolateByBarycentric(vertexNormals, barycentrics);
 
         const float3 incomingRadiance = lightInfo.Color.rgb * PARALLELOGRAM_AREA_LIGHT_STRENGTH;
         const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
-        const float cosAtLight = max(0.0f, dot(-worldSampleDir, triangleNormal));
+        const float cosAtLight = max(0.0f, dot(-worldSampleDir, lightNormal));
         const float geometryTerm = cosAtSurface * cosAtLight / distanceSquared;
         const float desiredPdf = ConvertColorToLuminance(incomingRadiance * geometryTerm);
         const float pdf = 1.0f / parallelogramArea;
         // ReSTIR paper equation 5. Weight computation.
         //  p(z | w) = w(x_z) / Σ_i=1^M w(x_i) with w(x) = p_hat(x) / p(x)
-        const float weight = desiredPdf / pdf;
+        const float weight = IsFinitePositive(pdf) ? (desiredPdf / pdf) : 0.0f;
 
         //  r.update(x_i, p_hat_q(x_i) / p(x_i))
-        UpdateParallelogramAreaLightReservoir(outPosition, outNormal, outDesiredPdf, outWeightsSum, outSamplesCount, weight, desiredPdf, parallelogramAreaLightPosition, triangleNormal, pixel, sampleIndex, proposalIndex, bufferIndexByPixel);
+        UpdateParallelogramAreaLightReservoir(outPosition, outNormal, outDesiredPdf, outWeightsSum, outSamplesCount, weight, desiredPdf, parallelogramAreaLightPosition, lightNormal, pixel, sampleIndex, proposalIndex, bufferIndexByPixel);
     }
 
-    return outWeightsSum / (outDesiredPdf * RESAMPLE_COUNT);
+    const float divisor = outDesiredPdf * RESAMPLE_COUNT;
+    return IsFinitePositive(divisor) ? (outWeightsSum / divisor) : 0.0f;
 }

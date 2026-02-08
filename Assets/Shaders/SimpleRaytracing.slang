@@ -3,20 +3,23 @@
 #include "Common.slang"
 
 void
-UpdatePointLightReservoir(out uint outLightIndexSample, out float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const float weight, const float desiredPdf, const uint2 pixel, const uint sampleIndex, const uint proposalIndex, const uint bufferIndexByPixel)
+UpdatePointLightReservoir(out uint outLightIndexSample, out float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const float weight, const float desiredPdf, const uint pointLightIndex, const uint2 pixel, const uint sampleIndex, const uint proposalIndex, const uint bufferIndexByPixel)
 {
-    outWeightsSum += weight;
-    outSamplesCount += 1;
-#if SAMPLE_USING_FRAME_INDEX
-    const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
-#else  // NOT SAMPLE_USING_FRAME_INDEX
-    const float canonicalSample = CanonicalSample(pixel, sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
-#endif // NOT SAMPLE_USING_FRAME_INDEX
-    const float probability = weight / outWeightsSum;
-    if (canonicalSample < probability)
+    if (IsFinitePositive(weight))
     {
-        outLightIndexSample = proposalIndex;
-        outDesiredPdf = desiredPdf;
+        outWeightsSum += weight;
+        outSamplesCount += 1;
+#if SAMPLE_USING_FRAME_INDEX
+        const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+        const float canonicalSample = CanonicalSample(pixel, sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+#endif // NOT SAMPLE_USING_FRAME_INDEX
+        const float probability = IsFinitePositive(outWeightsSum) ? (weight / outWeightsSum) : 0.0f;
+        if (canonicalSample < probability)
+        {
+            outLightIndexSample = pointLightIndex;
+            outDesiredPdf = desiredPdf;
+        }
     }
 }
 
@@ -35,38 +38,46 @@ RisPointLight(out uint outLightIndexSample, out float outDesiredPdf, inout float
         const float3 pointLightPosition = gPointLightInfos[pointLightIndex].Positions;
         const float3 hitPositionToPointLightPosition = pointLightPosition - hitPosition;
         const float distanceSquared = dot(hitPositionToPointLightPosition, hitPositionToPointLightPosition);
+        if (!IsFinitePositive(distanceSquared))
+        {
+            continue;
+        }
         const float distance = sqrt(distanceSquared);
         const float3 worldSampleDir = normalize(pointLightPosition - hitPosition);
 
         const float3 incomingRadiance = gPointLightInfos[pointLightIndex].Color * POINT_LIGHT_STRENGTH;
-        const float geometryTerm = dot(worldSampleDir, normal) / distanceSquared;
+        const float geometryTerm = max(0.0f, dot(worldSampleDir, normal)) / distanceSquared;
         const float3 integrand = incomingRadiance * geometryTerm;
         const float desiredPdf = ConvertColorToLuminance(integrand);
 
         const float pdf = (1.0f / gSceneConstantBuffer.PointLightInfosCount);
-        const float weight = desiredPdf / pdf;
+        const float weight = IsFinitePositive(pdf) ? (desiredPdf / pdf) : 0.0f;
 
-        UpdatePointLightReservoir(outLightIndexSample, outDesiredPdf, outWeightsSum, outSamplesCount, weight, desiredPdf, pixel, sampleIndex, proposalIndex, bufferIndexByPixel);
+        UpdatePointLightReservoir(outLightIndexSample, outDesiredPdf, outWeightsSum, outSamplesCount, weight, desiredPdf, pointLightIndex, pixel, sampleIndex, proposalIndex, bufferIndexByPixel);
     }
 
-    return outWeightsSum / (outDesiredPdf * RESAMPLE_COUNT);
+    const float divisor = outDesiredPdf * RESAMPLE_COUNT;
+    return IsFinitePositive(divisor) ? (outWeightsSum / divisor) : 0.0f;
 }
 
 void
 UpdateIndirectLightReservoir(out float3 outDirection, out float outDesiredPdf, inout float outWeightsSum, inout uint outSamplesCount, const float weight, const float desiredPdf, const float3 worldSampleDir, const uint2 pixel, const uint sampleIndex, const uint proposalIndex, const uint bufferIndexByPixel)
 {
-    outWeightsSum += weight;
-    outSamplesCount += 1;
-#if SAMPLE_USING_FRAME_INDEX
-    const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
-#else  // NOT SAMPLE_USING_FRAME_INDEX
-    const float canonicalSample = CanonicalSample(pixel, sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
-#endif // NOT SAMPLE_USING_FRAME_INDEX
-    const float probability = weight / outWeightsSum;
-    if (canonicalSample < probability)
+    if (IsFinitePositive(weight))
     {
-        outDirection = worldSampleDir;
-        outDesiredPdf = desiredPdf;
+        outWeightsSum += weight;
+        outSamplesCount += 1;
+#if SAMPLE_USING_FRAME_INDEX
+        const float canonicalSample = CanonicalSample(pixel, FrameIndex + sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+#else  // NOT SAMPLE_USING_FRAME_INDEX
+        const float canonicalSample = CanonicalSample(pixel, sampleIndex * RESAMPLE_COUNT + proposalIndex, 4);
+#endif // NOT SAMPLE_USING_FRAME_INDEX
+        const float probability = IsFinitePositive(outWeightsSum) ? (weight / outWeightsSum) : 0.0f;
+        if (canonicalSample < probability)
+        {
+            outDirection = worldSampleDir;
+            outDesiredPdf = desiredPdf;
+        }
     }
 }
 
@@ -104,17 +115,19 @@ RisIndirectLight(out float3 outDirection, out float outDesiredPdf, inout float o
         const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
         const float desiredPdf = cosAtSurface;
         const float pdf = dot(worldSampleDir, normal) / PI;
-        const float weight = desiredPdf / pdf;
+        const float weight = IsFinitePositive(pdf) ? (desiredPdf / pdf) : 0.0f;
 
         UpdateIndirectLightReservoir(outDirection, outDesiredPdf, outWeightsSum, outSamplesCount, weight, desiredPdf, worldSampleDir, pixel, sampleIndex, proposalIndex, bufferIndexByPixel);
     }
 
-    return outWeightsSum / (outDesiredPdf * RESAMPLE_COUNT);
+    const float divisor = outDesiredPdf * RESAMPLE_COUNT;
+    return IsFinitePositive(divisor) ? (outWeightsSum / divisor) : 0.0f;
 }
 
 float4 
 ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, const float3 normal)
 {
+    const float3 shadingNormal = normalize(normal);
     const uint2 pixel = DispatchRaysIndex().xy;
 
     // Emissive radiance
@@ -146,7 +159,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             float3 sampleNormal = float3(0.0f);
             float desiredPdf = 0.0f;
 
-            const float weight = RisParallelogramAreaLight(samplePosition, sampleNormal, desiredPdf, weightsSum, samplesCount, pixel, sampleIndex, hitPosition, normal, bufferIndexByPixel);
+            const float weight = RisParallelogramAreaLight(samplePosition, sampleNormal, desiredPdf, weightsSum, samplesCount, pixel, sampleIndex, hitPosition, shadingNormal, bufferIndexByPixel);
             if(payload.Depth == BounceDepth)
             {
                 gParallelogramAreaLightReservoir[bufferIndexByPixel].ParallelogramAreaLightPositionSample = samplePosition;
@@ -171,10 +184,10 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             RayPayload newPayload = { float4(0, 0, 0, 0), 0.0f, 0, 0 };
             TraceRay(gScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, newPayload);
 
-            if (IsEmissive(newPayload.PrimitiveIndex) == 1)
+            if (newPayload.PrimitiveIndex != 0xFFFFFFFF && IsEmissive(newPayload.PrimitiveIndex) == 1)
             {
                 const float3 incomingRadiance = newPayload.Color.rgb;
-                const float cosAtSurface = max(0.0f, dot(worldSampleDir, normal));
+                const float cosAtSurface = max(0.0f, dot(worldSampleDir, shadingNormal));
                 const float cosAtLight = max(0.0f, dot(-worldSampleDir, sampleNormal));
                 const float geometryTerm = cosAtSurface * cosAtLight / distanceSquared;
 
@@ -239,7 +252,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             uint selectedProposalIndex = 0;
             if (RESAMPLE_COUNT <= gSceneConstantBuffer.PointLightInfosCount)
             {
-                weight = RisPointLight(selectedProposalIndex, desiredPdf, weightsSum, samplesCount, pixel, sampleIndex, hitPosition, normal, bufferIndexByPixel);
+                weight = RisPointLight(selectedProposalIndex, desiredPdf, weightsSum, samplesCount, pixel, sampleIndex, hitPosition, shadingNormal, bufferIndexByPixel);
                 if (payload.Depth == BounceDepth)
                 {
                     gPointLightReservoir[bufferIndexByPixel].Weight = weight;
@@ -278,7 +291,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             if (newPayload.RayT > distance)
             {
                 const float3 incomingRadiance = gPointLightInfos[selectedProposalIndex].Color * POINT_LIGHT_STRENGTH;
-                const float geometryTerm = dot(worldSampleDir, normal) / distanceSquared;
+                const float geometryTerm = dot(worldSampleDir, shadingNormal) / distanceSquared;
 
                 // These are 0 because no parallelogram area light sampling nor hemisphere sampling can sample point lights
                 float parallelogramAreaLightPdf = 0.0f;
@@ -324,7 +337,7 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
         {
             float3 worldSampleDir = float3(0.0f);
             float desiredPdf = 0.0f;
-            const float weight = RisIndirectLight(worldSampleDir, desiredPdf, weightsSum, samplesCount, pixel, sampleIndex, hitPosition, normal, bufferIndexByPixel);
+            const float weight = RisIndirectLight(worldSampleDir, desiredPdf, weightsSum, samplesCount, pixel, sampleIndex, hitPosition, shadingNormal, bufferIndexByPixel);
             if(payload.Depth == BounceDepth)
             {
                 gIndirectLightReservoir[bufferIndexByPixel].Direction = worldSampleDir;
@@ -350,19 +363,20 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
             // 5. Integrand
             const float pointLightPdf = 0.0f;                   // assume that the sampled direction doesn't hit a point light
             float parallelogramAreaLightPdf = 0.0f;
-            if (newPayload.PrimitiveIndex != 0xFFFFFFFF && IsEmissive(newPayload.PrimitiveIndex) != 1)
+            if (newPayload.PrimitiveIndex != 0xFFFFFFFF && IsEmissive(newPayload.PrimitiveIndex) == 1)
             {
-                // const ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[0];
-                // const float3 e1 = lightInfo.Positions[1] - lightInfo.Positions[0];
-                // const float3 e2 = lightInfo.Positions[2] - lightInfo.Positions[0];
-                // const float parallelogramArea = length(cross(e1, e2));
-                // parallelogramAreaLightPdf = 1.0f / parallelogramArea;
-                const float misWeight = PowerHeuristic(HEMISPHERE_SAMPLES_COUNT, desiredPdf, POINT_LIGHT_SAMPLES_COUNT, pointLightPdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
-
-                const float3 f = brdf * incomingRadiance;
-                monteCarloIntegrandSum += f * misWeight * weight;
+                const ParallelogramAreaLightInfo lightInfo = gParallelogramAreaLightInfos[0];
+                const float3 e1 = lightInfo.Positions[1] - lightInfo.Positions[0];
+                const float3 e2 = lightInfo.Positions[2] - lightInfo.Positions[0];
+                const float parallelogramArea = length(cross(e1, e2));
+                parallelogramAreaLightPdf = 1.0f / parallelogramArea;
             }
-            else if (payload.Depth == BounceDepth)
+
+            const float misWeight = PowerHeuristic(HEMISPHERE_SAMPLES_COUNT, desiredPdf, POINT_LIGHT_SAMPLES_COUNT, pointLightPdf, PARALLELOGRAM_AREA_LIGHT_SAMPLES_COUNT, parallelogramAreaLightPdf);
+            const float3 f = brdf * incomingRadiance;
+            monteCarloIntegrandSum += f * misWeight * weight;
+
+            if (newPayload.PrimitiveIndex == 0xFFFFFFFF && payload.Depth == BounceDepth)
             {
                 gIndirectLightReservoir[bufferIndexByPixel].Weight = 0.0f;
             }
@@ -381,7 +395,13 @@ ComputeRenderingEquation(inout RayPayload payload, const float3 hitPosition, con
     monteCarloEstimate += indirectIlluminationMonteCarloEstimate;
 
     // 5) write
-    return float4(emissiveRadiance + monteCarloEstimate, 1.0f);
+    float3 finalColor = emissiveRadiance + monteCarloEstimate;
+    if (any(isnan(finalColor)) || any(isinf(finalColor)))
+    {
+        finalColor = float3(0.0f, 0.0f, 0.0f);
+    }
+    finalColor = max(finalColor, float3(0.0f, 0.0f, 0.0f));
+    return float4(finalColor, 1.0f);
 }
 
 [shader("raygeneration")]
